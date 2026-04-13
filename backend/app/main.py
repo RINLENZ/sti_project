@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import Base, engine
 from .routers import auth
 from .routers import interactions
+from .models import cours
 
 # Crée les tables au démarrage (en dev ; en prod on utilise Alembic)
 Base.metadata.create_all(bind=engine)
