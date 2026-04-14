@@ -58,6 +58,37 @@ export default function Session() {
     init()
   }, [uaId, user.id])
 
+  useEffect(() => {
+  if (!sessionId) return
+
+  let inactivityTimer = null
+
+  function resetTimer() {
+    clearTimeout(inactivityTimer)
+    inactivityTimer = setTimeout(() => {
+      // Utilise directement la ref pour éviter la dépendance à sendEvent
+      const sid = sessionIdRef.current
+      if (!sid) return
+      api.post('/api/interaction', {
+        session_id: sid,
+        user_id: user.id,
+        type: 'idle',
+        data: { duration_seconds: 120 }
+      }).catch(() => {})
+    }, 120000)
+  }
+
+  const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'click']
+  events.forEach(e => window.addEventListener(e, resetTimer))
+  resetTimer()
+
+  return () => {
+    clearTimeout(inactivityTimer)
+    events.forEach(e => window.removeEventListener(e, resetTimer))
+  }
+}, [sessionId, user.id])  // sendEvent retiré des dépendances
+
+
   // ── Envoie un événement — NE met PAS à jour engagementScore ────
   const sendEvent = useCallback(async (type, data = {}) => {
     const sid = sessionIdRef.current
@@ -76,6 +107,7 @@ export default function Session() {
       console.error('sendEvent error:', e)
     }
   }, [user.id])
+  
 
   // ── Initialise MediaPipe ────────────────────────────────────────
   async function startCamera() {
