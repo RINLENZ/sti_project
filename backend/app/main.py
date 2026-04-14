@@ -5,6 +5,7 @@ from .routers import auth
 from .routers import interactions
 from .models import cours
 from .routers import cours 
+from .routers import bkt 
 
 # Crée les tables au démarrage (en dev ; en prod on utilise Alembic)
 Base.metadata.create_all(bind=engine)
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(interactions.router)
 app.include_router(cours.router) 
+app.include_router(bkt.router)
 
 @app.get("/health")
 def health_check():

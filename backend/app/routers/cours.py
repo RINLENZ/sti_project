@@ -170,12 +170,50 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
 
     db.commit()
 
+    # ── Mise à jour BKT automatique ──────────────
+    from ..models.cours import BKTMastery
+    from ..services.bkt_service import update_knowledge, interpret_mastery
+
+    bkt_result = None
+    if exercice.competence_evaluee:
+        mastery = db.query(BKTMastery).filter(
+            BKTMastery.user_id == body.user_id,
+            BKTMastery.competence == exercice.competence_evaluee
+        ).first()
+
+        if not mastery:
+            mastery = BKTMastery(
+                user_id=body.user_id,
+                competence=exercice.competence_evaluee,
+                ua_id=exercice.ua_id,
+                p_mastery=0.1,
+                nb_tentatives=0,
+                nb_correct=0
+            )
+            db.add(mastery)
+
+        mastery.p_mastery     = update_knowledge(mastery.p_mastery, correct)
+        mastery.nb_tentatives += 1
+        if correct:
+            mastery.nb_correct += 1
+        db.commit()
+
+        interp = interpret_mastery(mastery.p_mastery)
+        bkt_result = {
+            "competence":  exercice.competence_evaluee,
+            "p_mastery":   mastery.p_mastery,
+            "pourcentage": round(mastery.p_mastery * 100),
+            "label":       interp["label"],
+            "color":       interp["color"]
+        }
+
     return {
-        "correct": correct,
+        "correct":          correct,
         "reponse_correcte": exercice.reponse_correcte,
-        "explication": exercice.explication,
-        "points_gagnes": exercice.points if correct else 0,
-        "tentatives": prog.tentatives
+        "explication":      exercice.explication,
+        "points_gagnes":    exercice.points if correct else 0,
+        "tentatives":       prog.tentatives,
+        "bkt":              bkt_result
     }
 
 
@@ -338,3 +376,4 @@ def dashboard_enseignant(db: Session = Depends(get_db)):
         },
         "exercices_difficiles": stats_exercices[:3]
     }
+
