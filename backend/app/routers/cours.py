@@ -221,3 +221,120 @@ def creer_session(body: SessionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(session)
     return {"session_id": str(session.id)}
+
+@router.get("/dashboard/enseignant")
+def dashboard_enseignant(db: Session = Depends(get_db)):
+    """
+    Retourne une vue globale pour l'enseignant :
+    - Liste des apprenants avec leur score d'engagement actuel
+    - Statistiques globales de la classe
+    - Exercices les plus difficiles
+    """
+    from ..models.interaction import Interaction
+    from ..models.session import LearningSession
+    import json
+
+    # Récupère tous les apprenants
+    apprenants = db.query(User).filter(User.role == "apprenant").all()
+
+    result = []
+    for apprenant in apprenants:
+        # Dernière session de cet apprenant
+        derniere_session = db.query(LearningSession).filter(
+            LearningSession.user_id == apprenant.id
+        ).order_by(LearningSession.started_at.desc()).first()
+
+        # Score d'engagement actuel depuis Redis
+        score_actuel = 0.5
+        niveau = "modere"
+        nb_events = 0
+
+        if derniere_session:
+            import redis as redis_lib
+            import json as json_lib
+            try:
+                r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+                cache_key = f"session_events:{derniere_session.id}"
+                cached = r.get(cache_key)
+                if cached:
+                    events = json_lib.loads(cached)
+                    nb_events = len(events)
+                    # Calcule le score depuis les événements
+                    from ..services.engagement_service import compute_behavioral_score
+                    res = compute_behavioral_score(events)
+                    score_actuel = res["score"]
+                    niveau = res["level"]
+            except Exception:
+                pass
+
+        # Progression de cet apprenant
+        progressions = db.query(ProgressionApprenant).filter(
+            ProgressionApprenant.user_id == apprenant.id
+        ).all()
+        exercices_reussis = len([p for p in progressions if p.correct])
+        total_exercices   = db.query(Exercice).count()
+        score_total       = sum(p.score for p in progressions if p.correct)
+
+        result.append({
+            "user_id":    str(apprenant.id),
+            "nom":        apprenant.nom,
+            "prenom":     apprenant.prenom,
+            "email":      apprenant.email,
+            "engagement": {
+                "score":    score_actuel,
+                "niveau":   niveau,
+                "nb_events": nb_events,
+            },
+            "progression": {
+                "exercices_reussis": exercices_reussis,
+                "total_exercices":   total_exercices,
+                "score_total":       score_total,
+                "pourcentage":       round(exercices_reussis / total_exercices * 100)
+                                     if total_exercices > 0 else 0
+            },
+            "derniere_session": str(derniere_session.started_at)
+                                if derniere_session else None
+        })
+
+    # Statistiques globales classe
+    tous_scores = [r["engagement"]["score"] for r in result]
+    score_moyen = round(sum(tous_scores) / len(tous_scores), 2) if tous_scores else 0
+    decrocheurs = [r for r in result if r["engagement"]["score"] < 0.4]
+
+    # Exercices les plus difficiles (plus d'échecs)
+    exercices_difficiles = db.query(
+        Exercice.titre,
+        Exercice.id
+    ).all()
+
+    stats_exercices = []
+    for ex in exercices_difficiles:
+        total_tentatives = db.query(ProgressionApprenant).filter(
+            ProgressionApprenant.exercice_id == ex.id
+        ).count()
+        echecs = db.query(ProgressionApprenant).filter(
+            ProgressionApprenant.exercice_id == ex.id,
+            ProgressionApprenant.correct == False
+        ).count()
+        if total_tentatives > 0:
+            stats_exercices.append({
+                "titre":            ex.titre,
+                "total_tentatives": total_tentatives,
+                "echecs":           echecs,
+                "taux_echec":       round(echecs / total_tentatives * 100)
+            })
+
+    stats_exercices.sort(key=lambda x: x["taux_echec"], reverse=True)
+
+    return {
+        "apprenants":    result,
+        "stats_classe": {
+            "nb_apprenants":  len(result),
+            "score_moyen":    score_moyen,
+            "nb_decrocheurs": len(decrocheurs),
+            "niveau_global":  "eleve" if score_moyen >= 0.7
+                              else "modere" if score_moyen >= 0.4
+                              else "faible"
+        },
+        "exercices_difficiles": stats_exercices[:3]
+    }
