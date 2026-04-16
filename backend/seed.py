@@ -27,14 +27,42 @@ db.query(User).delete()
 db.commit()
 
 users = [
-    User(email="prof@sti.cm",   nom="Nkounga", prenom="Jean",   role="enseignant",
-         password=hash_password("prof1234")),
-    User(email="alice@sti.cm",  nom="Mballa",  prenom="Alice",  role="apprenant",
-         password=hash_password("alice1234")),
-    User(email="bob@sti.cm",    nom="Tchoufa", prenom="Bob",    role="apprenant",
-         password=hash_password("bob1234")),
-    User(email="carole@sti.cm", nom="Eyinga",  prenom="Carole", role="apprenant",
-         password=hash_password("carole1234")),
+    User(
+        email="admin@sti.cm",
+        nom="Admin", prenom="Super",
+        role="super_admin",
+        password=hash_password("admin1234")
+    ),
+    User(
+        email="prof@sti.cm",
+        nom="Djiomo", prenom="Serge",
+        role="enseignant",
+        password=hash_password("prof1234")
+    ),
+    User(
+        email="alice@sti.cm",
+        nom="Mballa", prenom="Alice",
+        role="apprenant",
+        niveau="Première",
+        pays="Cameroun",
+        password=hash_password("alice1234")
+    ),
+    User(
+        email="bob@sti.cm",
+        nom="Tchoufa", prenom="Bob",
+        role="apprenant",
+        niveau="Première",
+        pays="Cameroun",
+        password=hash_password("bob1234")
+    ),
+    User(
+        email="carole@sti.cm",
+        nom="Eyinga", prenom="Carole",
+        role="apprenant",
+        niveau="Terminale",
+        pays="Cameroun",
+        password=hash_password("carole1234")
+    ),
 ]
 
 for u in users:

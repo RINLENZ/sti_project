@@ -14,6 +14,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app.database import SessionLocal, Base, engine
+from app.models.user import User, TuteurSuivi
 from app.models.cours import (
     Matiere, Module, FamilleSituation,
     UniteApprentissage, RessourcePedagogique,

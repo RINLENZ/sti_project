@@ -17,24 +17,32 @@ router = APIRouter(prefix="/api/cours", tags=["cours"])
 
 
 @router.get("/matieres")
-def get_matieres(db: Session = Depends(get_db)):
-    """Retourne toutes les matières actives avec leurs modules."""
-    matieres = db.query(Matiere).filter(Matiere.actif == True).all()
+def get_matieres(niveau: str = None, db: Session = Depends(get_db)):
+    """
+    Retourne toutes les matières.
+    Si niveau fourni, filtre par niveau (choisi par l'apprenant).
+    Les cours sont universels — visibles par tous.
+    """
+    query = db.query(Matiere).filter(Matiere.actif == True)
+    if niveau:
+        query = query.filter(Matiere.niveau.ilike(f"%{niveau}%"))
+
+    matieres = query.all()
     result = []
     for m in matieres:
         modules = db.query(Module).filter(
             Module.matiere_id == m.id,
-            Module.actif == True
+            Module.actif      == True
         ).order_by(Module.ordre).all()
         result.append({
-            "id": str(m.id),
-            "nom": m.nom,
-            "niveau": m.niveau,
+            "id":          str(m.id),
+            "nom":         m.nom,
+            "niveau":      m.niveau,
             "description": m.description,
             "modules": [{
-                "id": str(mod.id),
-                "numero": mod.numero,
-                "titre": mod.titre,
+                "id":          str(mod.id),
+                "numero":      mod.numero,
+                "titre":       mod.titre,
                 "description": mod.description
             } for mod in modules]
         })
