@@ -21,10 +21,18 @@ export default function Login() {
 
       const { data } = await api.post('/auth/login', params)
 
-      dispatch(loginSuccess({
-        token: data.access_token,
-        user:  { id: data.user_id, role: data.role, email: form.email }
-      }))
+dispatch(loginSuccess({
+  token: data.access_token,
+  user: {
+    id:              data.user_id,
+    role:            data.role,
+    email:           form.email,
+    nom:             data.nom,
+    prenom:          data.prenom,
+    niveau:          data.niveau,
+    code_invitation: data.code_invitation
+  }
+}))
 
       toast.success('Connexion réussie !')
       navigate(data.role === 'enseignant' ? '/prof' : '/dashboard')

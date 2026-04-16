@@ -1,84 +1,110 @@
-from ..models.user import User, Inscription
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+from ..database import get_db
+from ..models.user import User, TuteurSuivi
+from ..models.cours import (
+    Matiere, Module, FamilleSituation,
+    UniteApprentissage, RessourcePedagogique, Exercice
+)
 
-class InscriptionCreate(BaseModel):
-    user_id:    UUID
-    matiere_id: UUID
+router = APIRouter(prefix="/api/admin", tags=["administration"])
+
+
+# ── Schemas ────────────────────────────────────────────────────────
 
 class UserUpdate(BaseModel):
-    classe:        Optional[str] = None
     niveau:        Optional[str] = None
-    etablissement: Optional[str] = None
+    pays:          Optional[str] = None
     actif:         Optional[bool] = None
 
+class UACreate(BaseModel):
+    famille_id:        UUID
+    titre:             str
+    reference_ue:      Optional[str] = None
+    competences:       Optional[list] = []
+    situation_probleme: Optional[str] = None
+    prerequis:         Optional[list] = []
+    duree_estimee:     Optional[int] = 60
+    ordre:             Optional[int] = 1
+
+class UAUpdate(BaseModel):
+    titre:             Optional[str] = None
+    reference_ue:      Optional[str] = None
+    competences:       Optional[list] = None
+    situation_probleme: Optional[str] = None
+    prerequis:         Optional[list] = None
+    duree_estimee:     Optional[int] = None
+    actif:             Optional[bool] = None
+
+class ExerciceCreate(BaseModel):
+    ua_id:              UUID
+    titre:              str
+    type:               str
+    enonce:             str
+    options:            Optional[list] = None
+    reponse_correcte:   str
+    explication:        Optional[str] = None
+    indice_1:           Optional[str] = None
+    indice_2:           Optional[str] = None
+    competence_evaluee: Optional[str] = None
+    difficulte:         Optional[int] = 1
+    points:             Optional[int] = 10
+    ordre:              Optional[int] = 1
+
+class ExerciceUpdate(BaseModel):
+    titre:              Optional[str] = None
+    enonce:             Optional[str] = None
+    options:            Optional[list] = None
+    reponse_correcte:   Optional[str] = None
+    explication:        Optional[str] = None
+    indice_1:           Optional[str] = None
+    indice_2:           Optional[str] = None
+    competence_evaluee: Optional[str] = None
+    difficulte:         Optional[int] = None
+    points:             Optional[int] = None
+
+class RessourceCreate(BaseModel):
+    ua_id:      UUID
+    titre:      str
+    type:       str = "lecon"
+    contenu:    str
+    points_cles: Optional[list] = []
+    ordre:      Optional[int] = 1
+
+class FamilleCreate(BaseModel):
+    module_id:   UUID
+    titre:       str
+    description: Optional[str] = None
+    ordre:       Optional[int] = 1
+
+
+# ── Gestion des apprenants ─────────────────────────────────────────
 
 @router.get("/apprenants")
 def get_apprenants(db: Session = Depends(get_db)):
-    """Liste tous les apprenants avec leurs inscriptions."""
+    """Liste tous les apprenants."""
     apprenants = db.query(User).filter(User.role == "apprenant").all()
     result = []
     for a in apprenants:
-        inscriptions = db.query(Inscription).filter(
-            Inscription.user_id == a.id
-        ).all()
-        matiere_ids = [str(i.matiere_id) for i in inscriptions]
         result.append({
-            "id":            str(a.id),
-            "nom":           a.nom,
-            "prenom":        a.prenom,
-            "email":         a.email,
-            "classe":        a.classe,
-            "niveau":        a.niveau,
-            "etablissement": a.etablissement,
-            "actif":         a.actif,
-            "inscriptions":  matiere_ids
+            "id":     str(a.id),
+            "nom":    a.nom,
+            "prenom": a.prenom,
+            "email":  a.email,
+            "niveau": a.niveau,
+            "pays":   a.pays,
+            "actif":  a.actif,
         })
     return result
-
-
-@router.post("/inscription", status_code=201)
-def inscrire_apprenant(body: InscriptionCreate,
-                       db: Session = Depends(get_db)):
-    """Inscrit un apprenant à une matière."""
-    # Vérifie que l'inscription n'existe pas déjà
-    existing = db.query(Inscription).filter(
-        Inscription.user_id    == body.user_id,
-        Inscription.matiere_id == body.matiere_id
-    ).first()
-    if existing:
-        if not existing.actif:
-            existing.actif = True
-            db.commit()
-            return {"message": "Inscription réactivée"}
-        raise HTTPException(400, "Apprenant déjà inscrit à cette matière")
-
-    inscription = Inscription(
-        user_id=body.user_id,
-        matiere_id=body.matiere_id
-    )
-    db.add(inscription)
-    db.commit()
-    return {"message": "Apprenant inscrit avec succès"}
-
-
-@router.delete("/inscription/{user_id}/{matiere_id}")
-def desinscrire_apprenant(user_id: UUID, matiere_id: UUID,
-                          db: Session = Depends(get_db)):
-    """Désinscrit un apprenant d'une matière."""
-    inscription = db.query(Inscription).filter(
-        Inscription.user_id    == user_id,
-        Inscription.matiere_id == matiere_id
-    ).first()
-    if not inscription:
-        raise HTTPException(404, "Inscription introuvable")
-    inscription.actif = False
-    db.commit()
-    return {"message": "Apprenant désinscrit"}
 
 
 @router.put("/apprenant/{user_id}")
 def update_apprenant(user_id: UUID, body: UserUpdate,
                      db: Session = Depends(get_db)):
-    """Met à jour le profil scolaire d'un apprenant."""
+    """Met à jour le profil d'un apprenant (niveau, pays)."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Utilisateur introuvable")
@@ -86,3 +112,321 @@ def update_apprenant(user_id: UUID, body: UserUpdate,
         setattr(user, field, value)
     db.commit()
     return {"message": "Profil mis à jour"}
+
+
+# ── Structure pédagogique complète ────────────────────────────────
+
+@router.get("/structure")
+def get_structure_complete(db: Session = Depends(get_db)):
+    """Retourne toute la structure pédagogique pour l'interface admin."""
+    matieres = db.query(Matiere).all()
+    result = []
+    for mat in matieres:
+        modules = db.query(Module).filter(Module.matiere_id == mat.id).all()
+        mods = []
+        for mod in modules:
+            familles = db.query(FamilleSituation).filter(
+                FamilleSituation.module_id == mod.id
+            ).all()
+            fams = []
+            for fam in familles:
+                uas = db.query(UniteApprentissage).filter(
+                    UniteApprentissage.famille_id == fam.id
+                ).order_by(UniteApprentissage.ordre).all()
+                ua_list = []
+                for ua in uas:
+                    nb_ex  = db.query(Exercice).filter(Exercice.ua_id == ua.id).count()
+                    nb_res = db.query(RessourcePedagogique).filter(
+                        RessourcePedagogique.ua_id == ua.id
+                    ).count()
+                    ua_list.append({
+                        "id":               str(ua.id),
+                        "titre":            ua.titre,
+                        "reference_ue":     ua.reference_ue,
+                        "competences":      ua.competences or [],
+                        "situation_probleme": ua.situation_probleme,
+                        "prerequis":        ua.prerequis or [],
+                        "duree_estimee":    ua.duree_estimee,
+                        "ordre":            ua.ordre,
+                        "actif":            ua.actif,
+                        "nb_exercices":     nb_ex,
+                        "nb_ressources":    nb_res
+                    })
+                fams.append({
+                    "id":      str(fam.id),
+                    "titre":   fam.titre,
+                    "description": fam.description,
+                    "unites":  ua_list
+                })
+            mods.append({
+                "id":       str(mod.id),
+                "numero":   mod.numero,
+                "titre":    mod.titre,
+                "familles": fams
+            })
+        result.append({
+            "id":      str(mat.id),
+            "nom":     mat.nom,
+            "niveau":  mat.niveau,
+            "modules": mods
+        })
+    return result
+
+
+# ── CRUD Famille de situations ────────────────────────────────────
+
+@router.post("/famille", status_code=201)
+def create_famille(body: FamilleCreate, db: Session = Depends(get_db)):
+    famille = FamilleSituation(**body.dict())
+    db.add(famille)
+    db.commit()
+    db.refresh(famille)
+    return {"id": str(famille.id), "titre": famille.titre}
+
+
+# ── CRUD Unités d'Apprentissage ───────────────────────────────────
+
+@router.post("/ua", status_code=201)
+def create_ua(body: UACreate, db: Session = Depends(get_db)):
+    ua = UniteApprentissage(**body.dict())
+    db.add(ua)
+    db.commit()
+    db.refresh(ua)
+    return {"id": str(ua.id), "titre": ua.titre, "message": "UA créée"}
+
+@router.put("/ua/{ua_id}")
+def update_ua(ua_id: UUID, body: UAUpdate, db: Session = Depends(get_db)):
+    ua = db.query(UniteApprentissage).filter(
+        UniteApprentissage.id == ua_id
+    ).first()
+    if not ua:
+        raise HTTPException(404, "UA introuvable")
+    for field, value in body.dict(exclude_none=True).items():
+        setattr(ua, field, value)
+    db.commit()
+    return {"message": "UA mise à jour"}
+
+@router.delete("/ua/{ua_id}")
+def delete_ua(ua_id: UUID, db: Session = Depends(get_db)):
+    ua = db.query(UniteApprentissage).filter(
+        UniteApprentissage.id == ua_id
+    ).first()
+    if not ua:
+        raise HTTPException(404, "UA introuvable")
+    ua.actif = False
+    db.commit()
+    return {"message": "UA désactivée"}
+
+
+# ── CRUD Exercices ────────────────────────────────────────────────
+
+@router.get("/ua/{ua_id}/exercices")
+def get_exercices(ua_id: UUID, db: Session = Depends(get_db)):
+    exercices = db.query(Exercice).filter(
+        Exercice.ua_id == ua_id
+    ).order_by(Exercice.ordre).all()
+    return [{
+        "id":               str(e.id),
+        "titre":            e.titre,
+        "type":             e.type,
+        "enonce":           e.enonce,
+        "options":          e.options,
+        "reponse_correcte": e.reponse_correcte,
+        "explication":      e.explication,
+        "indice_1":         e.indice_1,
+        "indice_2":         e.indice_2,
+        "competence_evaluee": e.competence_evaluee,
+        "difficulte":       e.difficulte,
+        "points":           e.points,
+        "ordre":            e.ordre
+    } for e in exercices]
+
+@router.post("/exercice", status_code=201)
+def create_exercice(body: ExerciceCreate, db: Session = Depends(get_db)):
+    ex = Exercice(**body.dict())
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+    return {"id": str(ex.id), "titre": ex.titre, "message": "Exercice créé"}
+
+@router.put("/exercice/{exercice_id}")
+def update_exercice(exercice_id: UUID, body: ExerciceUpdate,
+                    db: Session = Depends(get_db)):
+    ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
+    if not ex:
+        raise HTTPException(404, "Exercice introuvable")
+    for field, value in body.dict(exclude_none=True).items():
+        setattr(ex, field, value)
+    db.commit()
+    return {"message": "Exercice mis à jour"}
+
+@router.delete("/exercice/{exercice_id}")
+def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
+    ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
+    if not ex:
+        raise HTTPException(404, "Exercice introuvable")
+    db.delete(ex)
+    db.commit()
+    return {"message": "Exercice supprimé"}
+
+
+# ── CRUD Ressources pédagogiques ──────────────────────────────────
+
+@router.post("/ressource", status_code=201)
+def create_ressource(body: RessourceCreate, db: Session = Depends(get_db)):
+    res = RessourcePedagogique(**body.dict())
+    db.add(res)
+    db.commit()
+    db.refresh(res)
+    return {"id": str(res.id), "titre": res.titre, "message": "Ressource créée"}
+
+@router.put("/ressource/{ressource_id}")
+def update_ressource(ressource_id: UUID, body: RessourceCreate,
+                     db: Session = Depends(get_db)):
+    res = db.query(RessourcePedagogique).filter(
+        RessourcePedagogique.id == ressource_id
+    ).first()
+    if not res:
+        raise HTTPException(404, "Ressource introuvable")
+    for field, value in body.dict(exclude_none=True).items():
+        setattr(res, field, value)
+    db.commit()
+    return {"message": "Ressource mise à jour"}
+
+@router.delete("/ressource/{ressource_id}")
+def delete_ressource(ressource_id: UUID, db: Session = Depends(get_db)):
+    res = db.query(RessourcePedagogique).filter(
+        RessourcePedagogique.id == ressource_id
+    ).first()
+    if not res:
+        raise HTTPException(404, "Ressource introuvable")
+    db.delete(res)
+    db.commit()
+    return {"message": "Ressource supprimée"}
+
+
+# ── Import PDF via IA ─────────────────────────────────────────────
+
+@router.post("/import/pdf")
+async def import_from_pdf(
+    famille_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Importe une fiche de préparation PDF via l'API Claude."""
+    import anthropic, base64, json
+
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(400, "Seuls les fichiers PDF sont acceptés")
+
+    pdf_bytes = await file.read()
+    pdf_b64   = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+
+    client = anthropic.Anthropic()
+    message = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=4000,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "document",
+                    "source": {
+                        "type":       "base64",
+                        "media_type": "application/pdf",
+                        "data":       pdf_b64
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": """Analyse cette fiche de préparation et extrais le contenu.
+Retourne UNIQUEMENT un JSON valide :
+{
+  "titre": "titre de la leçon",
+  "reference_ue": "UE XX",
+  "competences": ["compétence 1", "compétence 2"],
+  "situation_probleme": "texte",
+  "prerequis": ["prérequis 1"],
+  "duree_estimee": 60,
+  "contenu_lecon": "contenu Markdown complet",
+  "points_cles": ["point 1", "point 2"],
+  "exercices": [
+    {
+      "titre": "titre",
+      "type": "qcm",
+      "enonce": "énoncé",
+      "options": ["A", "B", "C", "D"],
+      "reponse_correcte": "A",
+      "explication": "explication",
+      "indice_1": "indice 1",
+      "indice_2": "indice 2",
+      "competence_evaluee": "compétence",
+      "difficulte": 1,
+      "points": 10
+    }
+  ]
+}"""
+                }
+            ]
+        }]
+    )
+
+    try:
+        content = message.content[0].text
+        content = content.replace("```json", "").replace("```", "").strip()
+        extracted = json.loads(content)
+    except Exception as e:
+        raise HTTPException(500, f"Erreur d'extraction : {str(e)}")
+
+    ua = UniteApprentissage(
+        famille_id=UUID(famille_id),
+        titre=extracted.get("titre", "Nouvelle UA"),
+        reference_ue=extracted.get("reference_ue"),
+        competences=extracted.get("competences", []),
+        situation_probleme=extracted.get("situation_probleme"),
+        prerequis=extracted.get("prerequis", []),
+        duree_estimee=extracted.get("duree_estimee", 60),
+        ordre=1
+    )
+    db.add(ua)
+    db.flush()
+
+    if extracted.get("contenu_lecon"):
+        ressource = RessourcePedagogique(
+            ua_id=ua.id,
+            titre=f"Leçon — {ua.titre}",
+            type="lecon",
+            contenu=extracted["contenu_lecon"],
+            points_cles=extracted.get("points_cles", []),
+            ordre=1
+        )
+        db.add(ressource)
+
+    exercices_crees = 0
+    for i, ex_data in enumerate(extracted.get("exercices", [])):
+        ex = Exercice(
+            ua_id=ua.id,
+            titre=ex_data.get("titre", f"Exercice {i+1}"),
+            type=ex_data.get("type", "qcm"),
+            enonce=ex_data.get("enonce", ""),
+            options=ex_data.get("options"),
+            reponse_correcte=ex_data.get("reponse_correcte", ""),
+            explication=ex_data.get("explication"),
+            indice_1=ex_data.get("indice_1"),
+            indice_2=ex_data.get("indice_2"),
+            competence_evaluee=ex_data.get("competence_evaluee"),
+            difficulte=ex_data.get("difficulte", 1),
+            points=ex_data.get("points", 10),
+            ordre=i + 1
+        )
+        db.add(ex)
+        exercices_crees += 1
+
+    db.commit()
+    return {
+        "message":           "Import réussi",
+        "ua_id":             str(ua.id),
+        "titre":             ua.titre,
+        "nb_exercices_crees": exercices_crees,
+        "competences":       ua.competences
+    }
