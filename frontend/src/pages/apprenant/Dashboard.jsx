@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
+import BKTRadar from '../../components/BKTRadar'
 
 export default function Dashboard() {
   const { user }    = useSelector(s => s.auth)
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [moduleId,  setModuleId]  = useState(null)
   const [progression, setProgression] = useState(null)
   const [loading,   setLoading]   = useState(true)
+  const [bktData, setBktData] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -32,6 +34,8 @@ export default function Dashboard() {
           `/api/cours/progression/${user.id}`
         )
         setProgression(prog)
+        const { data: bkt } = await api.get(`/api/bkt/apprenant/${user.id}`)
+setBktData(bkt)
       } catch {
         toast.error('Erreur de chargement')
       } finally {
@@ -148,6 +152,29 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Section BKT — Maîtrise par compétence */}
+{bktData && Object.keys(bktData.competences).length > 0 && (
+  <div className="card" style={{ marginBottom: 32 }}>
+    <div style={{
+      display: 'flex', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: 16
+    }}>
+      <div>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+          Maîtrise par compétence
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Algorithme BKT — Corbett & Anderson (1994)
+        </p>
+      </div>
+      <span className="badge badge-info">
+        {bktData.nb_competences_maitrisees} maîtrisée(s)
+      </span>
+    </div>
+    <BKTRadar competences={bktData.competences} />
+  </div>
+)}
 
         {/* Liste des familles et UA */}
         {familles.map(famille => (
