@@ -1,21 +1,131 @@
+import { useSelector } from 'react-redux'
 import { useEffect, useState } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { logout } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import BKTRadar from '../../components/BKTRadar'
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  PolarRadiusAxis, ResponsiveContainer, Tooltip
+} from 'recharts'
+import {
+  BookOpen, Clock, Target, Award, Flame,
+  Copy, CheckCircle, ChevronRight, Brain
+} from 'lucide-react'
 
+// ── Thème ─────────────────────────────────────────────────────────
+const C = {
+  brown:       '#6B3A2A',
+  brownLight:  '#C4865A',
+  emerald:     '#0D9373',
+  bg:          '#FAF7F4',
+  surface:     '#FFFFFF',
+  text:        '#1A1207',
+  textSec:     '#6B5744',
+  brownPale:   '#F5EDE5',
+  emeraldPale: '#E6F5F0',
+  red:         '#DC2626',
+  orange:      '#F59E0B',
+  gold:        '#D4A853',
+}
+
+// ── Composants utilitaires ────────────────────────────────────────
+const ProgressBar = ({ value, color = C.emerald, h = 6 }) => (
+  <div style={{ height: h, backgroundColor: '#E5E7EB', borderRadius: h, overflow: 'hidden' }}>
+    <div style={{
+      height: '100%', width: `${Math.min(100, value)}%`,
+      backgroundColor: color, borderRadius: h, transition: 'width .6s ease'
+    }}/>
+  </div>
+)
+
+const StatCard = ({ label, value, subtitle, color, Icon }) => (
+  <div style={{
+    backgroundColor: C.surface, borderRadius: 16, padding: '20px 22px',
+    boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`,
+    display: 'flex', flexDirection: 'column', gap: 8,
+    position: 'relative', overflow: 'hidden', transition: 'all .2s ease',
+  }}>
+    <div style={{
+      position: 'absolute', top: -20, right: -20,
+      width: 80, height: 80, borderRadius: '50%',
+      backgroundColor: `${color}12`
+    }}/>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{
+        fontSize: 11, color: C.textSec, fontWeight: 700,
+        textTransform: 'uppercase', letterSpacing: .5
+      }}>{label}</span>
+      {Icon && (
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          backgroundColor: `${color}15`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Icon size={18} color={color}/>
+        </div>
+      )}
+    </div>
+    <span style={{ fontSize: 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>
+      {value}
+    </span>
+    {subtitle && (
+      <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>
+        {subtitle}
+      </span>
+    )}
+  </div>
+)
+
+const BKTLevel = (p) => {
+  if (p >= 95) return { label: 'Maîtrisé',      color: C.emerald }
+  if (p >= 70) return { label: 'En bonne voie', color: '#2563eb' }
+  if (p >= 40) return { label: 'En progrès',    color: C.orange  }
+  return              { label: 'À renforcer',    color: C.red     }
+}
+
+// ── Radar BKT ────────────────────────────────────────────────────
+const BKTRadarChart = ({ competences }) => {
+  const data = Object.entries(competences).map(([comp, val]) => ({
+    subject: comp.length > 22 ? comp.substring(0, 22) + '…' : comp,
+    A: val.pourcentage,
+    fullName: comp
+  }))
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <RadarChart data={data}>
+        <PolarGrid stroke="#E5E7EB"/>
+        <PolarAngleAxis
+          dataKey="subject"
+          tick={{ fill: C.textSec, fontSize: 11, fontWeight: 700 }}
+        />
+        <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false}/>
+        <Radar
+          name="Maîtrise" dataKey="A"
+          stroke={C.brown} fill={C.brown} fillOpacity={0.22}
+          strokeWidth={2} dot={{ r: 4, fill: C.brown }}
+        />
+        <Tooltip
+          formatter={(v, _, props) => [`${v}%`, props.payload.fullName]}
+          contentStyle={{
+            backgroundColor: C.surface, border: `1px solid ${C.brownPale}`,
+            borderRadius: 8, fontSize: 12
+          }}
+        />
+      </RadarChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Dashboard principal ───────────────────────────────────────────
 export default function Dashboard() {
   const { user }    = useSelector(s => s.auth)
-  const dispatch    = useDispatch()
   const navigate    = useNavigate()
-  const [matieres,  setMatieres]  = useState([])
-  const [familles,  setFamilles]  = useState([])
-  const [moduleId,  setModuleId]  = useState(null)
+  const [matieres,    setMatieres]    = useState([])
+  const [familles,    setFamilles]    = useState([])
   const [progression, setProgression] = useState(null)
-  const [loading,   setLoading]   = useState(true)
-  const [bktData, setBktData] = useState(null)
+  const [bktData,     setBktData]     = useState(null)
+  const [loading,     setLoading]     = useState(true)
+  const [copied,      setCopied]      = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -24,18 +134,13 @@ export default function Dashboard() {
         setMatieres(data)
         if (data[0]?.modules[0]) {
           const mid = data[0].modules[0].id
-          setModuleId(mid)
-          const { data: fam } = await api.get(
-            `/api/cours/modules/${mid}/familles`
-          )
+          const { data: fam } = await api.get(`/api/cours/modules/${mid}/familles`)
           setFamilles(fam)
         }
-        const { data: prog } = await api.get(
-          `/api/cours/progression/${user.id}`
-        )
+        const { data: prog } = await api.get(`/api/cours/progression/${user.id}`)
         setProgression(prog)
-        const { data: bkt } = await api.get(`/api/bkt/apprenant/${user.id}`)
-setBktData(bkt)
+        const { data: bkt }  = await api.get(`/api/bkt/apprenant/${user.id}`)
+        setBktData(bkt)
       } catch {
         toast.error('Erreur de chargement')
       } finally {
@@ -45,234 +150,499 @@ setBktData(bkt)
     load()
   }, [user.id])
 
-  function handleLogout() {
-    dispatch(logout())
-    navigate('/login')
+  function copyCode() {
+    navigator.clipboard.writeText(user?.code_invitation || '')
+    setCopied(true)
+    toast.success('Code copié !')
+    setTimeout(() => setCopied(false), 2000)
   }
 
   if (loading) return (
     <div style={{
-      minHeight: '100vh', display: 'flex',
-      alignItems: 'center', justifyContent: 'center'
+      flex: 1, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', minHeight: '100vh', background: C.bg
     }}>
-      <p style={{ color: 'var(--text-muted)' }}>Chargement...</p>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: '50%',
+          border: `3px solid ${C.brownPale}`,
+          borderTopColor: C.brown, margin: '0 auto 16px',
+          animation: 'spin 1s linear infinite'
+        }}/>
+        <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>
+          Chargement de ton espace…
+        </p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 
   const matiere = matieres[0]
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: '28px 28px' }}>
 
-      {/* Navbar */}
-      <nav style={{
-        background: '#1e40af', padding: '0 24px',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', height: 60,
-        boxShadow: '0 2px 8px rgba(0,0,0,.15)'
+      {/* ── En-tête personnalisé ── */}
+      <div style={{
+        background: `linear-gradient(135deg, ${C.brown} 0%, ${C.brownLight} 100%)`,
+        borderRadius: 20, padding: '28px 32px', marginBottom: 28,
+        position: 'relative', overflow: 'hidden', color: 'white'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 22 }}>🎓</span>
-          <span style={{
-            color: 'white', fontWeight: 700, fontSize: 16
-          }}>STI Adaptatif</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ color: '#bfdbfe', fontSize: 14 }}>
-            {user?.email}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="btn btn-outline"
-            style={{
-              color: 'white', borderColor: 'white',
-              padding: '6px 14px', fontSize: 13
-            }}
-          >
-            Déconnexion
-          </button>
-        </div>
-      </nav>
+        {/* Motif adinkra en fond */}
+        <svg width="100%" height="100%" style={{
+          position: 'absolute', inset: 0, opacity: 0.06, pointerEvents: 'none'
+        }}>
+          <defs>
+            <pattern id="adinkra-dash" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+              <circle cx="30" cy="30" r="12" fill="none" stroke="white" strokeWidth="1.5"/>
+              <circle cx="30" cy="30" r="6"  fill="none" stroke="white" strokeWidth="1.5"/>
+              <line x1="30" y1="18" x2="30" y2="12" stroke="white" strokeWidth="1.5"/>
+              <line x1="18" y1="30" x2="12" y2="30" stroke="white" strokeWidth="1.5"/>
+              <line x1="42" y1="30" x2="48" y2="30" stroke="white" strokeWidth="1.5"/>
+              <line x1="30" y1="42" x2="30" y2="48" stroke="white" strokeWidth="1.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#adinkra-dash)"/>
+        </svg>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'flex-start', flexWrap: 'wrap', gap: 16,
+          position: 'relative'
+        }}>
+          <div>
+            <p style={{ opacity: .75, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+              Bon retour,
+            </p>
+            <h1 style={{ fontSize: 26, fontWeight: 900, marginBottom: 6, lineHeight: 1.1 }}>
+              {user?.prenom} {user?.nom} 👋
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{
+                background: 'rgba(255,255,255,0.2)', padding: '4px 12px',
+                borderRadius: 20, fontSize: 12, fontWeight: 700
+              }}>
+                🎓 {user?.niveau || 'Niveau non défini'}
+              </span>
+              {matiere && (
+                <span style={{
+                  background: 'rgba(255,255,255,0.15)', padding: '4px 12px',
+                  borderRadius: 20, fontSize: 12, fontWeight: 600
+                }}>
+                  {matiere.nom}
+                </span>
+              )}
+            </div>
+          </div>
 
-        {/* En-tête */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
-            Bonjour 👋
-          </h1>
-          <p style={{ color: 'var(--text-muted)' }}>
-            {matiere?.nom} — {matiere?.niveau}
-          </p>
+          {/* Code invitation */}
+          {user?.code_invitation && (
+            <div style={{
+              background: 'rgba(255,255,255,0.15)',
+              borderRadius: 14, padding: '14px 18px',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              minWidth: 200
+            }}>
+              <p style={{ fontSize: 10, fontWeight: 700, opacity: .7, marginBottom: 6, textTransform: 'uppercase', letterSpacing: .8 }}>
+                Ton code tuteur
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: 3 }}>
+                  {user.code_invitation}
+                </span>
+                <button onClick={copyCode} style={{
+                  background: 'rgba(255,255,255,0.25)', border: 'none',
+                  borderRadius: 8, padding: '6px 8px', cursor: 'pointer',
+                  color: 'white', display: 'flex', alignItems: 'center'
+                }}>
+                  {copied ? <CheckCircle size={14}/> : <Copy size={14}/>}
+                </button>
+              </div>
+              <p style={{ fontSize: 10, opacity: .6, marginTop: 6 }}>
+                Partage ce code à ton enseignant
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Carte progression globale */}
+        {/* Barre progression globale */}
         {progression && (
-          <div className="card" style={{
-            marginBottom: 32,
-            background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
-            border: 'none', color: 'white'
-          }}>
+          <div style={{ marginTop: 24, position: 'relative' }}>
             <div style={{
               display: 'flex', justifyContent: 'space-between',
-              alignItems: 'center', flexWrap: 'wrap', gap: 16
+              fontSize: 12, fontWeight: 700, marginBottom: 8, opacity: .85
             }}>
-              <div>
-                <p style={{ opacity: .8, fontSize: 13, marginBottom: 4 }}>
-                  Progression globale
-                </p>
-                <p style={{ fontSize: 32, fontWeight: 700 }}>
-                  {progression.pourcentage}%
-                </p>
-                <p style={{ opacity: .8, fontSize: 13 }}>
-                  {progression.exercices_reussis} / {progression.total_exercices} exercices réussis
-                </p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ opacity: .8, fontSize: 13, marginBottom: 4 }}>
-                  Score total
-                </p>
-                <p style={{ fontSize: 32, fontWeight: 700 }}>
-                  {progression.score_total} pts
-                </p>
-              </div>
+              <span>Progression globale</span>
+              <span>{progression.pourcentage}%</span>
             </div>
-            {/* Barre de progression */}
             <div style={{
-              marginTop: 16, height: 8,
-              background: 'rgba(255,255,255,.3)',
+              height: 8, background: 'rgba(255,255,255,.25)',
               borderRadius: 4, overflow: 'hidden'
             }}>
               <div style={{
-                height: '100%', borderRadius: 4,
-                background: 'white',
-                width: `${progression.pourcentage}%`,
-                transition: 'width .5s'
+                height: '100%', borderRadius: 4, background: 'white',
+                width: `${progression.pourcentage}%`, transition: 'width .8s ease'
               }}/>
             </div>
+            <p style={{ fontSize: 11, opacity: .65, marginTop: 6 }}>
+              {progression.exercices_reussis} / {progression.total_exercices} exercices réussis
+              · {progression.score_total} points
+            </p>
           </div>
         )}
-
-        {/* Section BKT — Maîtrise par compétence */}
-{bktData && Object.keys(bktData.competences).length > 0 && (
-  <div className="card" style={{ marginBottom: 32 }}>
-    <div style={{
-      display: 'flex', justifyContent: 'space-between',
-      alignItems: 'center', marginBottom: 16
-    }}>
-      <div>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-          Maîtrise par compétence
-        </h2>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Algorithme BKT — Corbett & Anderson (1994)
-        </p>
       </div>
-      <span className="badge badge-info">
-        {bktData.nb_competences_maitrisees} maîtrisée(s)
-      </span>
-    </div>
-    <BKTRadar competences={bktData.competences} />
-  </div>
-)}
 
-        {/* Liste des familles et UA */}
-        {familles.map(famille => (
-          <div key={famille.id} style={{ marginBottom: 32 }}>
-            <h2 style={{
-              fontSize: 16, fontWeight: 600,
-              color: 'var(--text-muted)', marginBottom: 16,
-              textTransform: 'uppercase', letterSpacing: '.05em'
-            }}>
-              {famille.titre}
-            </h2>
+      {/* ── Stat cards ── */}
+      {progression && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 14, marginBottom: 28
+        }}>
+          <StatCard
+            label="Score total"
+            value={`${progression.score_total} pts`}
+            subtitle="Points accumulés"
+            color={C.brown}
+            Icon={Award}
+          />
+          <StatCard
+            label="Exercices réussis"
+            value={progression.exercices_reussis}
+            subtitle={`sur ${progression.total_exercices} au total`}
+            color={C.emerald}
+            Icon={Target}
+          />
+          <StatCard
+            label="Compétences"
+            value={bktData?.nb_competences_maitrisees || 0}
+            subtitle="maîtrisées (≥95%)"
+            color={C.gold}
+            Icon={Brain}
+          />
+          <StatCard
+            label="Cours disponibles"
+            value={familles.reduce((acc, f) => acc + f.unites.length, 0)}
+            subtitle={`niveau ${user?.niveau || ''}`}
+            color={C.brownLight}
+            Icon={BookOpen}
+          />
+        </div>
+      )}
 
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+
+        {/* ── Colonne principale ── */}
+        <div style={{ flex: 1, minWidth: 300 }}>
+
+          {/* BKT Radar */}
+          {bktData && Object.keys(bktData.competences).length > 0 && (
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 16
+              backgroundColor: C.surface, borderRadius: 20, padding: '22px 24px',
+              boxShadow: '0 2px 12px rgba(107,58,42,0.08)',
+              border: `1px solid ${C.brownPale}`, marginBottom: 24
             }}>
-              {famille.unites.map((ua, idx) => {
-                // Calcule la progression pour cette UA
-                const exReussis = progression?.details?.filter(
-                  d => d.correct
-                ).length || 0
-                const pct = ua.nb_exercices > 0
-                  ? Math.round(exReussis / ua.nb_exercices * 100)
-                  : 0
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginBottom: 16
+              }}>
+                <div>
+                  <h2 style={{ fontSize: 15, fontWeight: 800, color: C.brown, marginBottom: 2 }}>
+                    Maîtrise par compétence
+                  </h2>
+                  <p style={{ fontSize: 12, color: C.textSec }}>
+                    Algorithme BKT — Corbett & Anderson (1994)
+                  </p>
+                </div>
+                <span style={{
+                  background: C.brownPale, color: C.brown,
+                  padding: '4px 12px', borderRadius: 20,
+                  fontSize: 11, fontWeight: 700
+                }}>
+                  {bktData.nb_competences_maitrisees} maîtrisée(s)
+                </span>
+              </div>
+              <BKTRadarChart competences={bktData.competences}/>
 
+              {/* Légende détaillée */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 8, marginTop: 16
+              }}>
+                {Object.entries(bktData.competences).map(([comp, val]) => {
+                  const lvl = BKTLevel(val.pourcentage)
+                  return (
+                    <div key={comp} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 10px', background: C.brownPale,
+                      borderRadius: 8, borderLeft: `3px solid ${lvl.color}`
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{
+                          fontSize: 11, fontWeight: 700, color: C.text,
+                          whiteSpace: 'nowrap', overflow: 'hidden',
+                          textOverflow: 'ellipsis', marginBottom: 2
+                        }}>
+                          {comp}
+                        </p>
+                        <p style={{ fontSize: 11, color: lvl.color, fontWeight: 700 }}>
+                          {val.pourcentage}% — {lvl.label}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Liste des cours */}
+          {familles.map(famille => (
+            <div key={famille.id} style={{ marginBottom: 24 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14
+              }}>
+                <div style={{
+                  height: 2, flex: 1,
+                  background: `linear-gradient(90deg, ${C.brownLight}, transparent)`
+                }}/>
+                <h2 style={{
+                  fontSize: 11, fontWeight: 800, color: C.brownLight,
+                  textTransform: 'uppercase', letterSpacing: 1.2, whiteSpace: 'nowrap'
+                }}>
+                  {famille.titre}
+                </h2>
+                <div style={{
+                  height: 2, flex: 1,
+                  background: `linear-gradient(90deg, transparent, ${C.brownLight})`
+                }}/>
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 14
+              }}>
+                {famille.unites.map(ua => {
+                  const exReussis = progression?.details?.filter(d => d.correct).length || 0
+                  const pct = ua.nb_exercices > 0
+                    ? Math.round(exReussis / ua.nb_exercices * 100) : 0
+                  const statut = pct === 100 ? 'Terminé'
+                    : pct > 0 ? 'En cours' : 'Non commencé'
+                  const statutColor = pct === 100 ? C.emerald
+                    : pct > 0 ? C.orange : C.textSec
+
+                  return (
+                    <div key={ua.id}
+                      className="course-card"
+                      onClick={() => navigate(`/cours/${ua.id}`)}
+                      style={{
+                        backgroundColor: C.surface, borderRadius: 16,
+                        padding: '18px 20px', cursor: 'pointer',
+                        boxShadow: '0 2px 10px rgba(107,58,42,0.07)',
+                        border: `1px solid ${C.brownPale}`,
+                        transition: 'all .2s ease'
+                      }}
+                    >
+                      {/* Header */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'flex-start', marginBottom: 10
+                      }}>
+                        <span style={{
+                          background: C.brownPale, color: C.brown,
+                          padding: '3px 10px', borderRadius: 20,
+                          fontSize: 10, fontWeight: 700
+                        }}>
+                          {ua.reference_ue}
+                        </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, color: statutColor
+                        }}>
+                          {statut}
+                        </span>
+                      </div>
+
+                      {/* Titre */}
+                      <h3 style={{
+                        fontSize: 14, fontWeight: 800, color: C.text,
+                        marginBottom: 10, lineHeight: 1.4
+                      }}>
+                        {ua.titre}
+                      </h3>
+
+                      {/* Compétences */}
+                      <div style={{ marginBottom: 14 }}>
+                        {ua.competences?.slice(0, 2).map((c, i) => (
+                          <p key={i} style={{
+                            fontSize: 11, color: C.textSec,
+                            paddingLeft: 10,
+                            borderLeft: `2px solid ${C.brownLight}60`,
+                            marginBottom: 4, lineHeight: 1.4
+                          }}>
+                            {c}
+                          </p>
+                        ))}
+                      </div>
+
+                      {/* Infos + progression */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontSize: 11, color: C.textSec, marginBottom: 10
+                      }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Clock size={11}/> {ua.duree_estimee} min
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <BookOpen size={11}/> {ua.nb_exercices} exercices
+                        </span>
+                      </div>
+
+                      <ProgressBar
+                        value={pct}
+                        color={pct === 100 ? C.emerald : C.brown}
+                      />
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'center', marginTop: 8
+                      }}>
+                        <span style={{ fontSize: 10, color: C.textSec }}>
+                          {pct === 100 ? '✓ Terminé' : pct > 0 ? `${pct}% complété` : 'Non commencé'}
+                        </span>
+                        <ChevronRight size={14} color={C.brownLight}/>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Sidebar droite ── */}
+        <div style={{ width: 260, flexShrink: 0 }}>
+
+          {/* Streak / Motivation */}
+          <div style={{
+            background: `linear-gradient(135deg, ${C.gold}20, ${C.brownPale})`,
+            borderRadius: 16, padding: '18px 20px', marginBottom: 16,
+            border: `1px solid ${C.gold}40`
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <Flame size={20} color={C.gold}/>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: C.brown }}>
+                Continue comme ça !
+              </h3>
+            </div>
+            <p style={{ fontSize: 12, color: C.textSec, lineHeight: 1.6 }}>
+              Tu as réussi{' '}
+              <strong style={{ color: C.brown }}>
+                {progression?.exercices_reussis || 0} exercice(s)
+              </strong>{' '}
+              sur {progression?.total_exercices || 0}. Continue pour maîtriser toutes les compétences.
+            </p>
+          </div>
+
+          {/* BKT — détail compétences */}
+          {bktData && Object.keys(bktData.competences).length > 0 && (
+            <div style={{
+              backgroundColor: C.surface, borderRadius: 16,
+              padding: '18px 20px', marginBottom: 16,
+              boxShadow: '0 2px 10px rgba(107,58,42,0.07)',
+              border: `1px solid ${C.brownPale}`
+            }}>
+              <h3 style={{
+                fontSize: 13, fontWeight: 800, color: C.brown, marginBottom: 14
+              }}>
+                Détail des compétences
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {Object.entries(bktData.competences).map(([comp, val]) => {
+                  const lvl = BKTLevel(val.pourcentage)
+                  return (
+                    <div key={comp}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        marginBottom: 4, fontSize: 11
+                      }}>
+                        <span style={{
+                          color: C.text, fontWeight: 600,
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', maxWidth: '70%'
+                        }}>
+                          {comp}
+                        </span>
+                        <span style={{ color: lvl.color, fontWeight: 700, flexShrink: 0 }}>
+                          {val.pourcentage}%
+                        </span>
+                      </div>
+                      <ProgressBar value={val.pourcentage} color={lvl.color} h={5}/>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Prochain cours recommandé */}
+          {familles[0]?.unites[0] && (
+            <div style={{
+              backgroundColor: C.surface, borderRadius: 16,
+              padding: '18px 20px',
+              boxShadow: '0 2px 10px rgba(107,58,42,0.07)',
+              border: `1px solid ${C.brownPale}`
+            }}>
+              <h3 style={{
+                fontSize: 13, fontWeight: 800, color: C.brown, marginBottom: 12
+              }}>
+                Prochain cours
+              </h3>
+              {(() => {
+                const ua = familles[0].unites[0]
                 return (
-                  <div key={ua.id} className="card"
-                    style={{ cursor: 'pointer', transition: 'transform .2s' }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                    onClick={() => navigate(`/cours/${ua.id}`)}
-                  >
-                    {/* Badge UE */}
-                    <span className="badge badge-info" style={{ marginBottom: 12 }}>
+                  <div>
+                    <span style={{
+                      background: C.brownPale, color: C.brown,
+                      padding: '2px 8px', borderRadius: 20,
+                      fontSize: 10, fontWeight: 700, marginBottom: 8,
+                      display: 'inline-block'
+                    }}>
                       {ua.reference_ue}
                     </span>
-
-                    <h3 style={{
-                      fontSize: 15, fontWeight: 600,
+                    <p style={{
+                      fontSize: 13, fontWeight: 700, color: C.text,
                       marginBottom: 8, lineHeight: 1.4
                     }}>
                       {ua.titre}
-                    </h3>
-
-                    {/* Compétences */}
-                    <div style={{ marginBottom: 16 }}>
-                      {ua.competences?.slice(0, 2).map((c, i) => (
-                        <p key={i} style={{
-                          fontSize: 12, color: 'var(--text-muted)',
-                          paddingLeft: 12, borderLeft: '2px solid #bfdbfe',
-                          marginBottom: 4, lineHeight: 1.4
-                        }}>
-                          {c}
-                        </p>
-                      ))}
-                    </div>
-
-                    {/* Infos bas */}
-                    <div style={{
-                      display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'center', marginBottom: 12
-                    }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        ⏱ {ua.duree_estimee} min
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        📝 {ua.nb_exercices} exercices
-                      </span>
-                    </div>
-
-                    {/* Barre progression UA */}
-                    <div style={{
-                      height: 6, background: '#e2e8f0',
-                      borderRadius: 3, overflow: 'hidden'
-                    }}>
-                      <div style={{
-                        height: '100%', borderRadius: 3,
-                        background: pct === 100 ? '#16a34a' : '#3b82f6',
-                        width: `${pct}%`, transition: 'width .5s'
-                      }}/>
-                    </div>
-                    <p style={{
-                      fontSize: 11, color: 'var(--text-muted)',
-                      marginTop: 4, textAlign: 'right'
-                    }}>
-                      {pct === 100
-                        ? '✓ Terminé'
-                        : pct > 0
-                        ? `${pct}% complété`
-                        : 'Non commencé'}
                     </p>
+                    <div style={{
+                      display: 'flex', gap: 12, fontSize: 11,
+                      color: C.textSec, marginBottom: 14
+                    }}>
+                      <span><Clock size={11}/> {ua.duree_estimee} min</span>
+                      <span><BookOpen size={11}/> {ua.nb_exercices} exos</span>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/cours/${ua.id}`)}
+                      style={{
+                        width: '100%', padding: '10px',
+                        background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+                        color: 'white', border: 'none', borderRadius: 10,
+                        fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: 6
+                      }}
+                    >
+                      Commencer <ChevronRight size={14}/>
+                    </button>
                   </div>
                 )
-              })}
+              })()}
             </div>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
     </div>
   )

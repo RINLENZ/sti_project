@@ -7,8 +7,9 @@ import Dashboard     from './pages/apprenant/Dashboard'
 import CoursDetail   from './pages/apprenant/CoursDetail'
 import Session       from './pages/apprenant/Session'
 import DashboardProf from './pages/enseignant/DashboardProf'
+import AdminCours    from './pages/enseignant/AdminCours'
+import AppLayout     from './components/layout/AppLayout'
 
-// Route protégée — redirige vers /login si non connecté
 function PrivateRoute({ children, role }) {
   const { user, token } = useSelector(s => s.auth)
   if (!token || !user) return <Navigate to="/login" replace />
@@ -16,7 +17,6 @@ function PrivateRoute({ children, role }) {
   return children
 }
 
-// Route apprenant — redirige vers onboarding si niveau non choisi
 function ApprenantRoute({ children }) {
   const { user, token } = useSelector(s => s.auth)
   if (!token || !user) return <Navigate to="/login" replace />
@@ -29,40 +29,42 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Pages publiques */}
-      <Route path="/login" element={<Login />} />
+      <Route path="/login"      element={<Login />} />
+      <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>}/>
 
-      {/* Onboarding — connecté mais niveau pas encore choisi */}
-      <Route path="/onboarding" element={
-        <PrivateRoute><Onboarding /></PrivateRoute>
-      }/>
-
-      {/* Redirection racine selon le rôle */}
       <Route path="/" element={
         <PrivateRoute>
-          {user?.role === 'enseignant'
+          {user?.role === 'enseignant' || user?.role === 'super_admin'
             ? <Navigate to="/prof" replace />
             : <Navigate to="/dashboard" replace />}
         </PrivateRoute>
       }/>
 
-      {/* Routes apprenant */}
+      {/* Routes avec sidebar */}
       <Route path="/dashboard" element={
-        <ApprenantRoute><Dashboard /></ApprenantRoute>
+        <ApprenantRoute>
+          <AppLayout><Dashboard /></AppLayout>
+        </ApprenantRoute>
       }/>
       <Route path="/cours/:uaId" element={
-        <ApprenantRoute><CoursDetail /></ApprenantRoute>
+        <ApprenantRoute>
+          <AppLayout><CoursDetail /></AppLayout>
+        </ApprenantRoute>
       }/>
       <Route path="/session/:uaId" element={
         <ApprenantRoute><Session /></ApprenantRoute>
       }/>
-
-      {/* Routes enseignant */}
       <Route path="/prof" element={
-        <PrivateRoute role="enseignant"><DashboardProf /></PrivateRoute>
+        <PrivateRoute role="enseignant">
+          <AppLayout><DashboardProf /></AppLayout>
+        </PrivateRoute>
+      }/>
+      <Route path="/admin" element={
+        <PrivateRoute>
+          <AppLayout><AdminCours /></AppLayout>
+        </PrivateRoute>
       }/>
 
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -1,0 +1,17 @@
+export const C = {
+  brown:        "#6B3A2A",
+  brownLight:   "#C4865A",
+  emerald:      "#0D9373",
+  bg:           "#FAF7F4",
+  surface:      "#FFFFFF",
+  text:         "#1A1207",
+  textSec:      "#6B5744",
+  brownPale:    "#F5EDE5",
+  emeraldPale:  "#E6F5F0",
+  red:          "#DC2626",
+  orange:       "#F59E0B",
+  sidebarBg:    "#1E0E07",
+  sidebarAccent:"#2E1810",
+  sidebarBorder:"#3D2015",
+  gold:         "#D4A853",
+}
