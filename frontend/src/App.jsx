@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 
+import LandingPage   from './pages/LandingPage'
 import Login         from './pages/auth/Login'
 import Onboarding    from './pages/auth/Onboarding'
 import Dashboard     from './pages/apprenant/Dashboard'
@@ -25,14 +26,21 @@ function ApprenantRoute({ children }) {
 }
 
 export default function App() {
-  const { user } = useSelector(s => s.auth)
+  const { user, token } = useSelector(s => s.auth)
 
   return (
     <Routes>
-      <Route path="/login"      element={<Login />} />
-      <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>}/>
+      {/* Page publique */}
+      <Route path="/"        element={token ? <Navigate to="/app" replace/> : <LandingPage />}/>
+      <Route path="/login"   element={token ? <Navigate to="/app" replace/> : <Login />}/>
 
-      <Route path="/" element={
+      {/* Onboarding */}
+      <Route path="/onboarding" element={
+        <PrivateRoute><Onboarding /></PrivateRoute>
+      }/>
+
+      {/* Redirection selon rôle */}
+      <Route path="/app" element={
         <PrivateRoute>
           {user?.role === 'enseignant' || user?.role === 'super_admin'
             ? <Navigate to="/prof" replace />
@@ -40,7 +48,7 @@ export default function App() {
         </PrivateRoute>
       }/>
 
-      {/* Routes avec sidebar */}
+      {/* Routes apprenant avec sidebar */}
       <Route path="/dashboard" element={
         <ApprenantRoute>
           <AppLayout><Dashboard /></AppLayout>
@@ -54,6 +62,8 @@ export default function App() {
       <Route path="/session/:uaId" element={
         <ApprenantRoute><Session /></ApprenantRoute>
       }/>
+
+      {/* Routes enseignant */}
       <Route path="/prof" element={
         <PrivateRoute role="enseignant">
           <AppLayout><DashboardProf /></AppLayout>
@@ -65,7 +75,7 @@ export default function App() {
         </PrivateRoute>
       }/>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />}/>
     </Routes>
   )
 }
