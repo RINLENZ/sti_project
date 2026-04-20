@@ -8,16 +8,17 @@ from ..database import Base
 
 class Matiere(Base):
     """
-    Niveau 1 — La discipline enseignée.
-    Ex : Informatique, classe 1ère F6/F4, lycée classique Ebolowa
+    Matière scolaire universelle.
+    Le lien avec filière/niveau/coefficient est dans MatiereFiliere.
     """
     __tablename__ = "matieres"
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    nom         = Column(String, nullable=False)
-    niveau      = Column(String, nullable=False)
+    nom         = Column(String, nullable=False)       # "Informatique"
+    code        = Column(String, nullable=True)        # "INFO"
     description = Column(Text, nullable=True)
     actif       = Column(Boolean, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class Module(Base):

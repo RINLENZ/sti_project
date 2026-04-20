@@ -1,3 +1,5 @@
+from ..dependencies import require_super_admin
+from ..models.user import User as UserModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -9,6 +11,7 @@ from ..models.cours import (
     Matiere, Module, FamilleSituation,
     UniteApprentissage, RessourcePedagogique, Exercice
 )
+from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
 
@@ -81,6 +84,19 @@ class FamilleCreate(BaseModel):
     ordre:       Optional[int] = 1
 
 
+class FiliereCreate(BaseModel):       
+    ordre_id:    UUID
+    nom:         str
+    code:        str
+    description: Optional[str] = None
+    ordre:       Optional[int] = 1
+class NiveauCreate(BaseModel):
+    cycle_id: UUID
+    nom:      str
+    code:     str
+    ordre:    Optional[int] = 1
+
+
 # ── Gestion des apprenants ─────────────────────────────────────────
 
 @router.get("/apprenants")
@@ -94,7 +110,7 @@ def get_apprenants(db: Session = Depends(get_db)):
             "nom":    a.nom,
             "prenom": a.prenom,
             "email":  a.email,
-            "niveau": a.niveau,
+            "niveau": a.niveau_label,
             "pays":   a.pays,
             "actif":  a.actif,
         })
@@ -103,7 +119,8 @@ def get_apprenants(db: Session = Depends(get_db)):
 
 @router.put("/apprenant/{user_id}")
 def update_apprenant(user_id: UUID, body: UserUpdate,
-                     db: Session = Depends(get_db)):
+                     db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     """Met à jour le profil d'un apprenant (niveau, pays)."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -117,7 +134,8 @@ def update_apprenant(user_id: UUID, body: UserUpdate,
 # ── Structure pédagogique complète ────────────────────────────────
 
 @router.get("/structure")
-def get_structure_complete(db: Session = Depends(get_db)):
+def get_structure_complete(db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     """Retourne toute la structure pédagogique pour l'interface admin."""
     matieres = db.query(Matiere).all()
     result = []
@@ -167,7 +185,7 @@ def get_structure_complete(db: Session = Depends(get_db)):
         result.append({
             "id":      str(mat.id),
             "nom":     mat.nom,
-            "niveau":  mat.niveau,
+            "niveau":  None,  # champ supprimé — voir référentiel
             "modules": mods
         })
     return result
@@ -176,7 +194,8 @@ def get_structure_complete(db: Session = Depends(get_db)):
 # ── CRUD Famille de situations ────────────────────────────────────
 
 @router.post("/famille", status_code=201)
-def create_famille(body: FamilleCreate, db: Session = Depends(get_db)):
+def create_famille(body: FamilleCreate, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     famille = FamilleSituation(**body.dict())
     db.add(famille)
     db.commit()
@@ -187,7 +206,8 @@ def create_famille(body: FamilleCreate, db: Session = Depends(get_db)):
 # ── CRUD Unités d'Apprentissage ───────────────────────────────────
 
 @router.post("/ua", status_code=201)
-def create_ua(body: UACreate, db: Session = Depends(get_db)):
+def create_ua(body: UACreate, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     ua = UniteApprentissage(**body.dict())
     db.add(ua)
     db.commit()
@@ -195,7 +215,8 @@ def create_ua(body: UACreate, db: Session = Depends(get_db)):
     return {"id": str(ua.id), "titre": ua.titre, "message": "UA créée"}
 
 @router.put("/ua/{ua_id}")
-def update_ua(ua_id: UUID, body: UAUpdate, db: Session = Depends(get_db)):
+def update_ua(ua_id: UUID, body: UAUpdate, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     ua = db.query(UniteApprentissage).filter(
         UniteApprentissage.id == ua_id
     ).first()
@@ -207,7 +228,8 @@ def update_ua(ua_id: UUID, body: UAUpdate, db: Session = Depends(get_db)):
     return {"message": "UA mise à jour"}
 
 @router.delete("/ua/{ua_id}")
-def delete_ua(ua_id: UUID, db: Session = Depends(get_db)):
+def delete_ua(ua_id: UUID, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     ua = db.query(UniteApprentissage).filter(
         UniteApprentissage.id == ua_id
     ).first()
@@ -221,7 +243,8 @@ def delete_ua(ua_id: UUID, db: Session = Depends(get_db)):
 # ── CRUD Exercices ────────────────────────────────────────────────
 
 @router.get("/ua/{ua_id}/exercices")
-def get_exercices(ua_id: UUID, db: Session = Depends(get_db)):
+def get_exercices(ua_id: UUID, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     exercices = db.query(Exercice).filter(
         Exercice.ua_id == ua_id
     ).order_by(Exercice.ordre).all()
@@ -242,7 +265,8 @@ def get_exercices(ua_id: UUID, db: Session = Depends(get_db)):
     } for e in exercices]
 
 @router.post("/exercice", status_code=201)
-def create_exercice(body: ExerciceCreate, db: Session = Depends(get_db)):
+def create_exercice(body: ExerciceCreate, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     ex = Exercice(**body.dict())
     db.add(ex)
     db.commit()
@@ -251,7 +275,8 @@ def create_exercice(body: ExerciceCreate, db: Session = Depends(get_db)):
 
 @router.put("/exercice/{exercice_id}")
 def update_exercice(exercice_id: UUID, body: ExerciceUpdate,
-                    db: Session = Depends(get_db)):
+                    db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
     if not ex:
         raise HTTPException(404, "Exercice introuvable")
@@ -261,7 +286,8 @@ def update_exercice(exercice_id: UUID, body: ExerciceUpdate,
     return {"message": "Exercice mis à jour"}
 
 @router.delete("/exercice/{exercice_id}")
-def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
+def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
     if not ex:
         raise HTTPException(404, "Exercice introuvable")
@@ -273,7 +299,8 @@ def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
 # ── CRUD Ressources pédagogiques ──────────────────────────────────
 
 @router.post("/ressource", status_code=201)
-def create_ressource(body: RessourceCreate, db: Session = Depends(get_db)):
+def create_ressource(body: RessourceCreate, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     res = RessourcePedagogique(**body.dict())
     db.add(res)
     db.commit()
@@ -282,7 +309,8 @@ def create_ressource(body: RessourceCreate, db: Session = Depends(get_db)):
 
 @router.put("/ressource/{ressource_id}")
 def update_ressource(ressource_id: UUID, body: RessourceCreate,
-                     db: Session = Depends(get_db)):
+                     db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     res = db.query(RessourcePedagogique).filter(
         RessourcePedagogique.id == ressource_id
     ).first()
@@ -294,7 +322,8 @@ def update_ressource(ressource_id: UUID, body: RessourceCreate,
     return {"message": "Ressource mise à jour"}
 
 @router.delete("/ressource/{ressource_id}")
-def delete_ressource(ressource_id: UUID, db: Session = Depends(get_db)):
+def delete_ressource(ressource_id: UUID, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
     res = db.query(RessourcePedagogique).filter(
         RessourcePedagogique.id == ressource_id
     ).first()
@@ -305,13 +334,73 @@ def delete_ressource(ressource_id: UUID, db: Session = Depends(get_db)):
     return {"message": "Ressource supprimée"}
 
 
+
+
+
+
+
+
+
+@router.get("/referentiel")
+def get_referentiel(db: Session = Depends(get_db),
+                    _: UserModel = Depends(require_super_admin)):
+    """Retourne toute la structure éducative — cycles, ordres, filières, niveaux."""
+    cycles = db.query(Cycle).filter(Cycle.actif == True).order_by(Cycle.ordre).all()
+    result = []
+    for cycle in cycles:
+        ordres = db.query(Ordre).filter(Ordre.cycle_id == cycle.id, Ordre.actif == True).all()
+        niveaux = db.query(Niveau).filter(Niveau.cycle_id == cycle.id, Niveau.actif == True).order_by(Niveau.ordre).all()
+        ordres_data = []
+        for ordre in ordres:
+            filieres = db.query(Filiere).filter(Filiere.ordre_id == ordre.id, Filiere.actif == True).order_by(Filiere.ordre).all()
+            ordres_data.append({
+                "id": str(ordre.id), "nom": ordre.nom, "code": ordre.code,
+                "filieres": [{"id": str(f.id), "nom": f.nom, "code": f.code, "description": f.description} for f in filieres]
+            })
+        result.append({
+            "id": str(cycle.id), "nom": cycle.nom, "code": cycle.code,
+            "ordres": ordres_data,
+            "niveaux": [{"id": str(n.id), "nom": n.nom, "code": n.code, "ordre": n.ordre} for n in niveaux]
+        })
+    return result
+
+
+@router.post("/filiere", status_code=201)
+def create_filiere(body: FiliereCreate, db: Session = Depends(get_db),
+                   _: UserModel = Depends(require_super_admin)):
+    """Crée une nouvelle filière — accessible uniquement au super admin."""
+    filiere = Filiere(**body.dict())
+    db.add(filiere); db.commit(); db.refresh(filiere)
+    return {"id": str(filiere.id), "nom": filiere.nom, "message": "Filière créée"}
+
+
+@router.delete("/filiere/{filiere_id}")
+def delete_filiere(filiere_id: UUID, db: Session = Depends(get_db),
+                   _: UserModel = Depends(require_super_admin)):
+    """Désactive une filière."""
+    f = db.query(Filiere).filter(Filiere.id == filiere_id).first()
+    if not f: raise HTTPException(404, "Filière introuvable")
+    f.actif = False; db.commit()
+    return {"message": "Filière désactivée"}
+
+
+@router.post("/niveau", status_code=201)
+def create_niveau(body: NiveauCreate, db: Session = Depends(get_db),
+                  _: UserModel = Depends(require_super_admin)):
+    """Crée un nouveau niveau — accessible uniquement au super admin."""
+    niveau = Niveau(**body.dict())
+    db.add(niveau); db.commit(); db.refresh(niveau)
+    return {"id": str(niveau.id), "nom": niveau.nom, "message": "Niveau créé"}
+
+
 # ── Import PDF via IA ─────────────────────────────────────────────
 
 @router.post("/import/pdf")
 async def import_from_pdf(
     famille_id: str,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)
 ):
     """Importe une fiche de préparation PDF via l'API Claude."""
     import anthropic, base64, json

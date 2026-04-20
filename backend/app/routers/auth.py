@@ -52,7 +52,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         prenom=user_data.prenom,
         password=hash_password(user_data.password),
         role=user_data.role,
-        niveau=user_data.niveau,
+        niveau_label=user_data.niveau,
         pays=user_data.pays,
     )
     db.add(user)
@@ -81,7 +81,7 @@ def login(
         "role":           user.role,
         "nom":            user.nom,
         "prenom":         user.prenom,
-        "niveau":         user.niveau,
+        "niveau": user.niveau_label,
         "code_invitation": user.code_invitation,
     }
 
@@ -98,7 +98,7 @@ def get_profil(user_id: str, db: Session = Depends(get_db)):
         "nom":             user.nom,
         "prenom":          user.prenom,
         "role":            user.role,
-        "niveau":          user.niveau,
+        "niveau":          user.niveau_label,
         "pays":            user.pays,
         "code_invitation": user.code_invitation,
         "created_at":      str(user.created_at)
@@ -172,7 +172,7 @@ def get_apprenants_du_tuteur(tuteur_id: str, db: Session = Depends(get_db)):
                 "nom":    apprenant.nom,
                 "prenom": apprenant.prenom,
                 "email":  apprenant.email,
-                "niveau": apprenant.niveau,
+                "niveau": apprenant.niveau_label,
             })
     return result
 

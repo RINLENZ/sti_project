@@ -24,13 +24,14 @@ export default function Sidebar({ collapsed, setCollapsed }) {
     { path: '/admin', label: 'Gestion cours',   icon: BookOpen },
   ]
 
-  const linksAdmin = [
-    { path: '/admin', label: 'Administration', icon: Shield },
-  ]
+ const linksAdmin = [
+  { path: '/admin',     label: 'Administration', icon: Shield },
+  { path: '/dashboard', label: 'Vue apprenant',  icon: GraduationCap },
+]
 
-  const links = user?.role === 'enseignant' ? linksEnseignant
-    : user?.role === 'super_admin' ? linksAdmin
-    : linksApprenant
+  const links = user?.role === 'super_admin'    ? linksAdmin
+  : user?.role === 'enseignant' ? linksEnseignant
+  : linksApprenant
 
   return (
     <div style={{

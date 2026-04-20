@@ -385,3 +385,86 @@ def dashboard_enseignant(db: Session = Depends(get_db)):
         "exercices_difficiles": stats_exercices[:3]
     }
 
+@router.get("/ua/recommandee/{user_id}")
+def get_ua_recommandee(user_id: UUID, db: Session = Depends(get_db)):
+    """
+    Recommande la prochaine UA à étudier selon :
+    1. Les UA non commencées en priorité
+    2. Les UA dont les compétences ont le BKT le plus faible
+    3. Respecte l'ordre des UA dans la famille
+    """
+    from ..models.cours import BKTMastery
+    from ..services.bkt_service import interpret_mastery
+
+    # Récupère toutes les UA actives
+    uas = db.query(UniteApprentissage).filter(
+        UniteApprentissage.actif == True
+    ).order_by(UniteApprentissage.ordre).all()
+
+    # Récupère les maîtrises BKT de cet apprenant
+    masteries = db.query(BKTMastery).filter(
+        BKTMastery.user_id == user_id
+    ).all()
+    mastery_map = {m.competence: m.p_mastery for m in masteries}
+
+    # Score chaque UA
+    scored = []
+    for ua in uas:
+        competences = ua.competences or []
+        if not competences:
+            score_bkt = 0.0
+        else:
+            scores = [mastery_map.get(c, 0.1) for c in competences]
+            score_bkt = sum(scores) / len(scores)
+
+        # Vérifie si des exercices ont été faits
+        nb_tentatives = db.query(ProgressionApprenant).filter(
+            ProgressionApprenant.user_id == user_id,
+            ProgressionApprenant.ua_id   == ua.id
+        ).count()
+
+        scored.append({
+            "ua_id":        str(ua.id),
+            "titre":        ua.titre,
+            "reference_ue": ua.reference_ue,
+            "score_bkt":    round(score_bkt, 3),
+            "nb_tentatives": nb_tentatives,
+            "priorite":     0 if nb_tentatives == 0 else score_bkt
+        })
+
+    # Trie : d'abord les UA non commencées, puis par BKT croissant
+    scored.sort(key=lambda x: (1 if x["nb_tentatives"] > 0 else 0, x["score_bkt"]))
+
+    recommandee = scored[0] if scored else None
+
+    return {
+        "recommandee": recommandee,
+        "toutes":      scored
+    }
+
+
+@router.get("/referentiel/public")
+def get_referentiel_public(db: Session = Depends(get_db)):
+    """
+    Retourne la structure éducative pour l'onboarding apprenant.
+    Public — pas d'authentification requise.
+    """
+    from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
+    cycles = db.query(Cycle).filter(Cycle.actif == True).order_by(Cycle.ordre).all()
+    result = []
+    for cycle in cycles:
+        ordres = db.query(Ordre).filter(Ordre.cycle_id == cycle.id, Ordre.actif == True).all()
+        niveaux = db.query(Niveau).filter(Niveau.cycle_id == cycle.id, Niveau.actif == True).order_by(Niveau.ordre).all()
+        ordres_data = []
+        for ordre in ordres:
+            filieres = db.query(Filiere).filter(Filiere.ordre_id == ordre.id, Filiere.actif == True).order_by(Filiere.ordre).all()
+            ordres_data.append({
+                "id": str(ordre.id), "nom": ordre.nom, "code": ordre.code,
+                "filieres": [{"id": str(f.id), "nom": f.nom, "code": f.code} for f in filieres]
+            })
+        result.append({
+            "id": str(cycle.id), "nom": cycle.nom, "code": cycle.code,
+            "ordres": ordres_data,
+            "niveaux": [{"id": str(n.id), "nom": n.nom, "code": n.code} for n in niveaux]
+        })
+    return result

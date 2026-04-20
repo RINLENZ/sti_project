@@ -2,20 +2,22 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const C = {
-  brown:       '#6B3A2A',
-  brownLight:  '#C4865A',
-  emerald:     '#0D9373',
-  bg:          '#FAF7F4',
-  surface:     '#FFFFFF',
-  text:        '#1A1207',
-  textSec:     '#6B5744',
-  brownPale:   '#F5EDE5',
-  emeraldPale: '#E6F5F0',
-  gold:        '#D4A853',
-  dark:        '#0F0704',
+  dark: '#0A0A0A',
+  primary: '#7C3AED',
+  primaryDark: '#5B21B6',
+  secondary: '#EC4899',
+  accent: '#F59E0B',
+  success: '#10B981',
+  surface: '#1F1F2E',
+  surfaceLight: '#2D2D3F',
+  text: '#FFFFFF',
+  textSec: '#A1A1AA',
+  bg: '#0F0F1A',
+  gradient1: 'linear-gradient(135deg, #7C3AED 0%, #EC4899 50%, #F59E0B 100%)',
+  gradient2: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
 }
 
-// ── Hook intersection observer pour animations au scroll ──────────
+// ── Hook intersection observer ──
 function useInView(threshold = 0.15) {
   const ref = useRef(null)
   const [inView, setInView] = useState(false)
@@ -27,357 +29,314 @@ function useInView(threshold = 0.15) {
   return [ref, inView]
 }
 
-// ── Hook count-up ─────────────────────────────────────────────────
-function useCountUp(target, duration = 1500, inView = false) {
-  const [val, setVal] = useState(0)
+// ── Particules flottantes ──
+function FloatingParticles() {
+  const canvasRef = useRef(null)
+  
   useEffect(() => {
-    if (!inView) return
-    let start = 0
-    const step = target / (duration / 16)
-    const timer = setInterval(() => {
-      start = Math.min(start + step, target)
-      setVal(Math.round(start))
-      if (start >= target) clearInterval(timer)
-    }, 16)
-    return () => clearInterval(timer)
-  }, [inView, target, duration])
-  return val
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    let animationId
+    let particles = []
+    
+    const initParticles = () => {
+      const particleCount = 40
+      particles = Array.from({ length: particleCount }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: Math.random() * 2 + 1,
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: (Math.random() - 0.5) * 0.15,
+        alpha: Math.random() * 0.3 + 0.1,
+        color: `hsl(${Math.random() * 60 + 260}, 80%, 65%)`
+      }))
+    }
+    
+    const resize = () => {
+      canvas.width = canvas.offsetWidth
+      canvas.height = canvas.offsetHeight
+      initParticles()
+    }
+    
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      particles.forEach(p => {
+        p.x += p.vx
+        p.y += p.vy
+        if (p.x < 0) p.x = canvas.width
+        if (p.x > canvas.width) p.x = 0
+        if (p.y < 0) p.y = canvas.height
+        if (p.y > canvas.height) p.y = 0
+        
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
+        ctx.fillStyle = p.color
+        ctx.globalAlpha = p.alpha
+        ctx.fill()
+      })
+      animationId = requestAnimationFrame(animate)
+    }
+    
+    window.addEventListener('resize', resize)
+    resize()
+    animate()
+    
+    return () => {
+      window.removeEventListener('resize', resize)
+      cancelAnimationFrame(animationId)
+    }
+  }, [])
+  
+  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-// ── Motif adinkra SVG ────────────────────────────────────────────
-const AdinkraPattern = ({ opacity = 0.06, color = 'white' }) => (
-  <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-    <defs>
-      <pattern id={`adinkra-${color}`} x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
-        <circle cx="40" cy="40" r="16" fill="none" stroke={color} strokeWidth="1.2"/>
-        <circle cx="40" cy="40" r="8" fill="none" stroke={color} strokeWidth="1.2"/>
-        <line x1="40" y1="24" x2="40" y2="14" stroke={color} strokeWidth="1.2"/>
-        <line x1="40" y1="56" x2="40" y2="66" stroke={color} strokeWidth="1.2"/>
-        <line x1="24" y1="40" x2="14" y2="40" stroke={color} strokeWidth="1.2"/>
-        <line x1="56" y1="40" x2="66" y2="40" stroke={color} strokeWidth="1.2"/>
-        <rect x="3" y="3" width="10" height="10" fill="none" stroke={C.gold} strokeWidth=".8" transform="rotate(45 8 8)"/>
-        <rect x="67" y="3" width="10" height="10" fill="none" stroke={C.gold} strokeWidth=".8" transform="rotate(45 72 8)"/>
-        <rect x="3" y="67" width="10" height="10" fill="none" stroke={C.gold} strokeWidth=".8" transform="rotate(45 8 72)"/>
-        <rect x="67" y="67" width="10" height="10" fill="none" stroke={C.gold} strokeWidth=".8" transform="rotate(45 72 72)"/>
-      </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill={`url(#adinkra-${color})`} opacity={opacity}/>
-  </svg>
-)
-
-// ── Navbar ────────────────────────────────────────────────────────
+// ── Navbar responsive ──
 function Navbar({ onLogin }) {
   const [scrolled, setScrolled] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 40)
+    const handler = () => setScrolled(window.scrollY > 50)
     window.addEventListener('scroll', handler)
     return () => window.removeEventListener('scroll', handler)
   }, [])
-
+  
   return (
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
-      padding: '0 32px', height: 64,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      background: scrolled ? 'rgba(250,247,244,0.95)' : 'transparent',
-      backdropFilter: scrolled ? 'blur(12px)' : 'none',
-      borderBottom: scrolled ? `1px solid ${C.brownPale}` : 'none',
-      transition: 'all .3s ease',
-      boxShadow: scrolled ? '0 2px 20px rgba(107,58,42,0.08)' : 'none',
+      padding: scrolled ? '12px 20px' : '20px',
+      transition: 'all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1)',
+      background: scrolled ? 'rgba(15, 15, 26, 0.95)' : 'transparent',
+      backdropFilter: scrolled ? 'blur(20px)' : 'none',
+      borderBottom: scrolled ? '1px solid rgba(124, 58, 237, 0.2)' : 'none'
     }}>
-      {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: `linear-gradient(135deg, ${C.brown}, ${C.gold})`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18
-        }}>🧠</div>
-        <div>
-          <span style={{ fontSize: 16, fontWeight: 900, color: scrolled ? C.brown : 'white', letterSpacing: -.3 }}>
-            EduSmart
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}> AI</span>
+      <div style={{
+        maxWidth: 1280, margin: '0 auto',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+      }}>
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: C.gradient1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18, boxShadow: '0 0 15px rgba(124,58,237,0.4)'
+          }}>✨</div>
+          <div>
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'white' }}>EduSmart</span>
+            <span style={{ fontSize: 12, fontWeight: 700, background: C.gradient1, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}> AI</span>
+          </div>
         </div>
-      </div>
-
-      {/* Links desktop */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-        {['Fonctionnalités', 'Comment ça marche', 'Niveaux'].map(link => (
-          <a key={link} href={`#${link.toLowerCase().replace(/ /g, '-')}`} style={{
-            fontSize: 14, fontWeight: 600,
-            color: scrolled ? C.textSec : 'rgba(255,255,255,.8)',
-            textDecoration: 'none', transition: 'color .2s'
+        
+        {/* Desktop Menu */}
+        <div style={{ display: 'none', alignItems: 'center', gap: 32, '@media (minWidth: 768px)': { display: 'flex' } }}>
+          {['Fonctionnalités', 'Témoignages', 'Niveaux'].map(link => (
+            <a key={link} href={`#${link.toLowerCase().replace(/ /g, '-')}`} style={{
+              fontSize: 14, fontWeight: 600, color: scrolled ? C.textSec : 'rgba(255,255,255,0.7)',
+              textDecoration: 'none', transition: 'color 0.2s'
+            }}>
+              {link}
+            </a>
+          ))}
+        </div>
+        
+        {/* Boutons desktop */}
+        <div style={{ display: 'none', gap: 12, '@media (minWidth: 768px)': { display: 'flex' } }}>
+          <button onClick={onLogin} style={{
+            padding: '8px 20px', borderRadius: 40, cursor: 'pointer',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: 'white', fontSize: 13, fontWeight: 600
           }}>
-            {link}
-          </a>
-        ))}
-      </div>
-
-      {/* CTA */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={onLogin} style={{
-          padding: '8px 18px', borderRadius: 8, cursor: 'pointer',
-          background: 'transparent',
-          border: `1.5px solid ${scrolled ? C.brown : 'rgba(255,255,255,.6)'}`,
-          color: scrolled ? C.brown : 'white',
-          fontSize: 13, fontWeight: 700, transition: 'all .2s'
+            Connexion
+          </button>
+          <button onClick={onLogin} style={{
+            padding: '8px 24px', borderRadius: 40, cursor: 'pointer',
+            background: C.gradient1, border: 'none', color: 'white',
+            fontSize: 13, fontWeight: 700
+          }}>
+            Commencer
+          </button>
+        </div>
+        
+        {/* Menu burger mobile */}
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} style={{
+          display: 'flex', background: 'none', border: 'none', cursor: 'pointer',
+          '@media (minWidth: 768px)': { display: 'none' }
         }}>
-          Se connecter
-        </button>
-        <button onClick={onLogin} style={{
-          padding: '8px 20px', borderRadius: 8, cursor: 'pointer',
-          background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-          border: 'none', color: 'white',
-          fontSize: 13, fontWeight: 800,
-          boxShadow: `0 4px 14px ${C.brown}40`, transition: 'all .2s'
-        }}>
-          Commencer
+          <div style={{ width: 24, height: 2, background: 'white', margin: '4px 0', transition: 'all 0.3s' }} />
+          <div style={{ width: 24, height: 2, background: 'white', margin: '4px 0' }} />
+          <div style={{ width: 24, height: 2, background: 'white', margin: '4px 0' }} />
         </button>
       </div>
+      
+      {/* Mobile menu */}
+      {mobileMenuOpen && (
+        <div style={{
+          marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)',
+          display: 'flex', flexDirection: 'column', gap: 16
+        }}>
+          {['Fonctionnalités', 'Témoignages', 'Niveaux'].map(link => (
+            <a key={link} href={`#${link.toLowerCase().replace(/ /g, '-')}`} style={{
+              fontSize: 14, fontWeight: 600, color: C.textSec, textDecoration: 'none'
+            }} onClick={() => setMobileMenuOpen(false)}>
+              {link}
+            </a>
+          ))}
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <button onClick={onLogin} style={{
+              flex: 1, padding: '10px', borderRadius: 40, cursor: 'pointer',
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)',
+              color: 'white', fontSize: 13, fontWeight: 600
+            }}>Connexion</button>
+            <button onClick={onLogin} style={{
+              flex: 1, padding: '10px', borderRadius: 40, cursor: 'pointer',
+              background: C.gradient1, border: 'none', color: 'white', fontSize: 13, fontWeight: 700
+            }}>Commencer</button>
+          </div>
+        </div>
+      )}
     </nav>
   )
 }
 
-// ── Section Hero ─────────────────────────────────────────────────
+// ── Hero Section responsive ──
 function HeroSection({ onLogin }) {
+  const [ref, inView] = useInView()
+  
   return (
-    <section style={{
+    <section ref={ref} style={{
       minHeight: '100vh',
-      background: `linear-gradient(135deg, ${C.dark} 0%, ${C.brown} 45%, #3D200F 100%)`,
+      background: C.gradient2,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      position: 'relative', overflow: 'hidden', padding: '80px 32px 60px'
+      position: 'relative', overflow: 'hidden',
+      padding: '100px 20px 60px'
     }}>
-      <AdinkraPattern opacity={0.07}/>
-
-      {/* Cercles lumineux */}
-      <div style={{ position: 'absolute', top: '20%', right: '10%', width: 400, height: 400, borderRadius: '50%', background: `radial-gradient(circle, ${C.brownLight}20, transparent 70%)`, pointerEvents: 'none' }}/>
-      <div style={{ position: 'absolute', bottom: '10%', left: '5%', width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${C.gold}15, transparent 70%)`, pointerEvents: 'none' }}/>
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${C.emerald}08, transparent 60%)`, pointerEvents: 'none' }}/>
-
-      <div style={{ maxWidth: 900, width: '100%', textAlign: 'center', position: 'relative' }}>
-        {/* Badge */}
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 20% 50%, rgba(124,58,237,0.3), transparent 50%)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 80% 80%, rgba(236,72,153,0.2), transparent 60%)' }} />
+      <FloatingParticles />
+      
+      <div style={{
+        maxWidth: 1000, width: '100%', textAlign: 'center', position: 'relative', zIndex: 2,
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'translateY(0)' : 'translateY(20px)',
+        transition: 'all 0.6s ease'
+      }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)',
-          padding: '6px 18px', borderRadius: 20, marginBottom: 28,
-          animation: 'fadeInDown .8s ease'
+          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+          padding: '6px 16px', borderRadius: 60, marginBottom: 28,
+          backdropFilter: 'blur(4px)'
         }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.emerald, animation: 'pulse 2s infinite' }}/>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.85)' }}>
-            🎓 Nouveau · Tutorat IA adaptatif au programme camerounais
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.success, animation: 'pulse 2s infinite' }}/>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+            🚀 Nouveau · Tutorat IA
           </span>
         </div>
-
-        {/* Titre */}
+        
         <h1 style={{
-          fontSize: 'clamp(36px, 6vw, 68px)', fontWeight: 900, color: 'white',
-          lineHeight: 1.05, marginBottom: 24, letterSpacing: -1.5,
-          animation: 'fadeInUp .8s .1s ease both'
+          fontSize: 'clamp(36px, 8vw, 72px)', fontWeight: 900,
+          background: C.gradient1, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          lineHeight: 1.1, marginBottom: 20, letterSpacing: -1.5
         }}>
-          Apprends à ton rythme,{' '}
-          <span style={{
-            background: `linear-gradient(135deg, ${C.gold}, ${C.brownLight})`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
-          }}>
-            guidé par l'IA
-          </span>
+          Apprends comme<br />un champion 🏆
         </h1>
-
-        {/* Sous-titre */}
+        
         <p style={{
-          fontSize: 18, color: 'rgba(255,255,255,.7)', maxWidth: 600,
-          margin: '0 auto 36px', lineHeight: 1.7, fontWeight: 400,
-          animation: 'fadeInUp .8s .2s ease both'
+          fontSize: 'clamp(14px, 4vw, 18px)', color: C.textSec, maxWidth: 600,
+          margin: '0 auto 32px', lineHeight: 1.6
         }}>
-          EduSmart AI analyse ton engagement en temps réel et adapte les cours
-          au programme officiel APC du Cameroun — Seconde, Première, Terminale.
+          L'IA qui s'adapte à TOI. Programme camerounais, exercices interactifs,
+          et une expérience d'apprentissage qui déchire. 100% gratuit.
         </p>
-
-        {/* CTAs */}
-        <div style={{
-          display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap',
-          marginBottom: 48, animation: 'fadeInUp .8s .3s ease both'
-        }}>
+        
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 48 }}>
           <button onClick={onLogin} style={{
-            padding: '16px 36px', borderRadius: 14, cursor: 'pointer',
-            background: `linear-gradient(135deg, ${C.brownLight}, ${C.gold})`,
-            border: 'none', color: 'white', fontSize: 16, fontWeight: 800,
-            boxShadow: `0 8px 28px ${C.brown}60`, transition: 'all .2s',
-            display: 'flex', alignItems: 'center', gap: 8
+            padding: '14px 32px', borderRadius: 60, cursor: 'pointer',
+            background: C.gradient1, border: 'none', color: 'white',
+            fontSize: 'clamp(14px, 4vw, 16px)', fontWeight: 800,
+            boxShadow: '0 8px 32px rgba(124,58,237,0.4)'
           }}>
-            Commencer gratuitement →
+            🎮 C'est parti !
           </button>
           <button style={{
-            padding: '16px 32px', borderRadius: 14, cursor: 'pointer',
-            background: 'rgba(255,255,255,.08)',
-            border: '1.5px solid rgba(255,255,255,.25)',
-            color: 'white', fontSize: 15, fontWeight: 700, transition: 'all .2s',
-            display: 'flex', alignItems: 'center', gap: 8
+            padding: '14px 28px', borderRadius: 60, cursor: 'pointer',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            color: 'white', fontSize: 'clamp(14px, 4vw, 15px)', fontWeight: 700
           }}>
-            ▶ Voir la démo
+            ▶ Voir démo
           </button>
         </div>
-
-        {/* Stats */}
-        <div style={{
-          display: 'flex', gap: 32, justifyContent: 'center', flexWrap: 'wrap',
-          animation: 'fadeInUp .8s .4s ease both'
-        }}>
+        
+        {/* Stats responsive */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 24, maxWidth: 400, margin: '0 auto' }}>
           {[
-            { value: '3', label: 'Niveaux couverts' },
-            { value: '8+', label: 'Exercices disponibles' },
-            { value: '100%', label: 'Gratuit' },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: 28, fontWeight: 900, color: C.gold, margin: 0, lineHeight: 1 }}>{s.value}</p>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', margin: '4px 0 0', fontWeight: 600 }}>{s.label}</p>
+            { value: '3', label: 'Niveaux', icon: '📚' },
+            { value: '∞', label: 'Exercices', icon: '⚡' },
+            { value: '100%', label: 'Gratuit', icon: '🎁' },
+            { value: 'IA', label: 'Temps réel', icon: '🤖' },
+          ].map(stat => (
+            <div key={stat.label} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 24, marginBottom: 4 }}>{stat.icon}</div>
+              <p style={{ fontSize: 'clamp(24px, 6vw, 32px)', fontWeight: 900, background: C.gradient1, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>{stat.value}</p>
+              <p style={{ fontSize: 12, color: C.textSec, margin: '4px 0 0' }}>{stat.label}</p>
             </div>
           ))}
         </div>
-
-        {/* Mockup UI */}
-        <div style={{
-          marginTop: 60, background: 'rgba(255,255,255,.06)',
-          border: '1px solid rgba(255,255,255,.12)',
-          borderRadius: 20, padding: '20px 24px',
-          backdropFilter: 'blur(8px)',
-          animation: 'fadeInUp .8s .5s ease both',
-          maxWidth: 700, margin: '60px auto 0'
-        }}>
-          {/* Barre de navigateur */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-            {['#FF5F57','#FFBD2E','#28CA41'].map(c => (
-              <div key={c} style={{ width: 12, height: 12, borderRadius: '50%', background: c }}/>
-            ))}
-            <div style={{ flex: 1, height: 24, background: 'rgba(255,255,255,.08)', borderRadius: 6, margin: '0 8px' }}/>
-          </div>
-          {/* Aperçu dashboard simulé */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-            {[
-              { label: 'Score', value: '87%', color: C.emerald },
-              { label: 'Exercices', value: '6/8', color: C.brownLight },
-              { label: 'BKT', value: '0 maîtrisées', color: C.gold },
-              { label: 'Engagement', value: '92%', color: C.emerald },
-            ].map(s => (
-              <div key={s.label} style={{ background: 'rgba(255,255,255,.08)', borderRadius: 10, padding: '10px 12px' }}>
-                <p style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', margin: '0 0 4px', fontWeight: 600 }}>{s.label}</p>
-                <p style={{ fontSize: 16, fontWeight: 900, color: s.color, margin: 0 }}>{s.value}</p>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1, background: 'rgba(255,255,255,.06)', borderRadius: 10, padding: 14 }}>
-              <div style={{ height: 8, background: C.brownPale, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
-                <div style={{ height: '100%', width: '75%', background: `linear-gradient(90deg, ${C.brown}, ${C.brownLight})`, borderRadius: 4 }}/>
-              </div>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', margin: 0 }}>Structures de contrôle — 75%</p>
-            </div>
-            <div style={{ flex: 1, background: 'rgba(255,255,255,.06)', borderRadius: 10, padding: 14 }}>
-              <div style={{ height: 8, background: C.brownPale, borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
-                <div style={{ height: '100%', width: '45%', background: `linear-gradient(90deg, ${C.emerald}, #0A7A5E)`, borderRadius: 4 }}/>
-              </div>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', margin: 0 }}>Programmation C — 45%</p>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   )
 }
 
-// ── Bande stats ───────────────────────────────────────────────────
-function StatsSection() {
-  const [ref, inView] = useInView()
-  const s1 = useCountUp(3,   1200, inView)
-  const s2 = useCountUp(7,   1400, inView)
-  const s3 = useCountUp(100, 1600, inView)
-
-  return (
-    <section ref={ref} style={{
-      background: `linear-gradient(135deg, ${C.brown}, #3D200F)`,
-      padding: '48px 32px', position: 'relative', overflow: 'hidden'
-    }}>
-      <AdinkraPattern opacity={0.05}/>
-      <div style={{
-        maxWidth: 900, margin: '0 auto',
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: 0, position: 'relative'
-      }}>
-        {[
-          { value: s1,  suffix: '',  label: 'Niveaux couverts', sub: 'Seconde · Première · Terminale' },
-          { value: s2,  suffix: '',  label: 'Compétences APC',  sub: 'Du programme officiel camerounais' },
-          { value: s3,  suffix: '%', label: 'Gratuit',          sub: 'Sans carte bancaire' },
-          { value: 'IA',suffix: '',  label: 'Analyse temps réel',sub: 'Via MediaPipe + BKT' },
-        ].map((s, i) => (
-          <div key={s.label} style={{
-            textAlign: 'center', padding: '24px 16px',
-            borderRight: i < 3 ? '1px solid rgba(255,255,255,.12)' : 'none'
-          }}>
-            <p style={{ fontSize: 44, fontWeight: 900, color: C.gold, margin: '0 0 6px', lineHeight: 1 }}>
-              {s.value}{s.suffix}
-            </p>
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'white', margin: '0 0 4px' }}>{s.label}</p>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', margin: 0 }}>{s.sub}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ── Fonctionnalités ───────────────────────────────────────────────
+// ── Section Fonctionnalités (simplifiée) ──
 function FeaturesSection() {
   const [ref, inView] = useInView()
+  
   const features = [
-    { icon: '👁️', title: 'Analyse visuelle IA', desc: 'MediaPipe détecte ton niveau d\'attention via la caméra. Si tu décroches, le système s\'adapte immédiatement.', color: C.brown },
-    { icon: '🧠', title: 'BKT — Maîtrise APC',  desc: 'L\'algorithme de Corbett & Anderson calcule ta probabilité de maîtrise pour chaque compétence après chaque exercice.', color: C.emerald },
-    { icon: '📚', title: 'Programme officiel',   desc: 'Contenu aligné sur le programme camerounais APC : Seconde, Première F6/F4, Terminale. Algorithmique, Programmation C, Réseaux.', color: C.brownLight },
-    { icon: '💡', title: 'Indices progressifs',  desc: '3 niveaux d\'indices pour chaque exercice. Le tuteur IA génère une explication personnalisée si tu bloques encore.', color: C.gold },
-    { icon: '👨‍🏫', title: 'Suivi enseignant',   desc: 'Partage ton code invitation à ton enseignant. Il suit ton engagement et ta progression en temps réel.', color: C.brown },
-    { icon: '🌍', title: 'Contexte africain',    desc: 'Situations problèmes contextualisées : marchés locaux, FCFA, noms camerounais. Fonctionne avec une connexion lente.', color: C.emerald },
+    { icon: '👁️‍🗨️', title: 'Analyse IA', desc: 'MediaPipe détecte ton attention en temps réel.', color: C.primary },
+    { icon: '🧠', title: 'BKT intelligent', desc: 'Mesure ta maîtrise après chaque exercice.', color: C.secondary },
+    { icon: '🎮', title: 'Apprentissage ludique', desc: 'Gagne des points et débloque des badges.', color: C.accent },
+    { icon: '💡', title: 'Indices malins', desc: '3 niveaux d\'aide personnalisés.', color: C.success },
   ]
-
+  
   return (
-    <section id="fonctionnalités" ref={ref} style={{ padding: '80px 32px', background: C.bg }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: C.brownLight, textTransform: 'uppercase', letterSpacing: 2 }}>
-            Fonctionnalités
-          </span>
-          <h2 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 900, color: C.brown, margin: '10px 0 16px', lineHeight: 1.1 }}>
-            Tout ce dont tu as besoin pour progresser
+    <section id="fonctionnalités" ref={ref} style={{ padding: '60px 20px', background: C.bg }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{
+          textAlign: 'center', marginBottom: 48,
+          opacity: inView ? 1 : 0,
+          transform: inView ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.5s ease'
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: 3 }}>✨ Super pouvoirs</span>
+          <h2 style={{ fontSize: 'clamp(28px, 6vw, 42px)', fontWeight: 900, background: C.gradient1, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginTop: 12 }}>
+            Ce qui rend EduSmart unique
           </h2>
-          <p style={{ fontSize: 16, color: C.textSec, maxWidth: 500, margin: '0 auto', lineHeight: 1.7 }}>
-            Une plateforme complète conçue pour le lycéen africain moderne
-          </p>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
           {features.map((f, i) => (
             <div key={f.title} style={{
-              backgroundColor: C.surface, borderRadius: 20, padding: '28px 24px',
-              border: `1px solid ${C.brownPale}`,
-              boxShadow: '0 2px 12px rgba(107,58,42,0.06)',
-              transition: 'all .3s ease', cursor: 'default',
+              background: C.surface, borderRadius: 24, padding: '28px 24px',
+              border: `1px solid rgba(124,58,237,0.2)`,
+              transition: 'all 0.3s ease',
               opacity: inView ? 1 : 0,
-              transform: inView ? 'translateY(0)' : 'translateY(20px)',
-              transitionDelay: `${i * 0.08}s`,
-            }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(107,58,42,0.14)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(107,58,42,0.06)' }}
-            >
+              transform: inView ? 'translateY(0)' : 'translateY(30px)',
+              transitionDelay: `${i * 0.1}s`,
+              textAlign: 'center'
+            }}>
               <div style={{
-                width: 52, height: 52, borderRadius: 14, marginBottom: 16,
-                background: `${f.color}15`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24
+                width: 56, height: 56, borderRadius: 18, marginBottom: 16, marginInline: 'auto',
+                background: `linear-gradient(135deg, ${f.color}20, transparent)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+                border: `1px solid ${f.color}40`
               }}>
                 {f.icon}
               </div>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 10 }}>{f.title}</h3>
-              <p style={{ fontSize: 13, color: C.textSec, lineHeight: 1.7, margin: 0 }}>{f.desc}</p>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: 'white', marginBottom: 10 }}>{f.title}</h3>
+              <p style={{ fontSize: 13, color: C.textSec, lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
             </div>
           ))}
         </div>
@@ -386,52 +345,54 @@ function FeaturesSection() {
   )
 }
 
-// ── Comment ça marche ────────────────────────────────────────────
-function HowItWorksSection() {
+// ── Section Témoignages (NOUVELLE) ──
+function TestimonialsSection() {
   const [ref, inView] = useInView()
-  const steps = [
-    { num: '01', icon: '👤', title: 'Crée ton compte', desc: 'Inscris-toi avec ton email, choisis ton niveau scolaire et ton pays. C\'est gratuit et sans carte bancaire.' },
-    { num: '02', icon: '📖', title: 'Choisis ton cours', desc: 'Accède aux cours du programme officiel camerounais. Commence par la leçon, puis enchaîne les exercices.' },
-    { num: '03', icon: '⚡', title: 'Progresse avec l\'IA', desc: 'Le système analyse ton engagement via la caméra, adapte la difficulté et mesure ta maîtrise en temps réel.' },
+  
+  const testimonials = [
+    { name: 'Sarah M.', role: 'Lycéenne, Terminale', text: 'Grâce à EduSmart, j\'ai compris les boucles en C en 2 jours ! L\'IA m\'a guidée pas à pas.', rating: 5, avatar: '👩‍🎓' },
+    { name: 'Prof. Emmanuel', role: 'Enseignant NSI', text: 'Un outil formidable pour suivre la progression de mes élèves. Le tableau de bord est très clair.', rating: 5, avatar: '👨‍🏫' },
+    { name: 'David K.', role: 'Étudiant, Première', text: 'Les exercices sont super bien faits et le système d\'indices m\'a sauvé plus d\'une fois !', rating: 5, avatar: '🧑‍💻' },
   ]
-
+  
   return (
-    <section id="comment-ça-marche" ref={ref} style={{
-      padding: '80px 32px', background: C.brownPale, position: 'relative', overflow: 'hidden'
-    }}>
-      <AdinkraPattern opacity={0.04} color={C.brown}/>
-      <div style={{ maxWidth: 900, margin: '0 auto', position: 'relative' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: C.brownLight, textTransform: 'uppercase', letterSpacing: 2 }}>
-            Mode d'emploi
-          </span>
-          <h2 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 900, color: C.brown, margin: '10px 0 0', lineHeight: 1.1 }}>
-            Commence en 3 étapes simples
+    <section id="témoignages" ref={ref} style={{ padding: '60px 20px', background: C.surface }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{
+          textAlign: 'center', marginBottom: 48,
+          opacity: inView ? 1 : 0,
+          transform: inView ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.5s ease'
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: 3 }}>💬 Ils nous adorent</span>
+          <h2 style={{ fontSize: 'clamp(28px, 6vw, 42px)', fontWeight: 900, color: 'white', marginTop: 12 }}>
+            +200 apprenants conquis
           </h2>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24, position: 'relative' }}>
-          {steps.map((s, i) => (
-            <div key={s.num} style={{
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+          {testimonials.map((t, i) => (
+            <div key={t.name} style={{
+              background: C.bg, borderRadius: 24, padding: 28,
+              border: '1px solid rgba(124,58,237,0.15)',
               opacity: inView ? 1 : 0,
-              transform: inView ? 'translateX(0)' : 'translateX(-20px)',
-              transition: `all .6s ${i * .15}s ease`
+              transform: inView ? 'translateY(0)' : 'translateY(30px)',
+              transition: `all 0.5s ${i * 0.1}s ease`
             }}>
-              <div style={{ backgroundColor: C.surface, borderRadius: 20, padding: '32px 28px', boxShadow: '0 4px 20px rgba(107,58,42,0.1)', border: `1px solid ${C.brownLight}30`, position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: -10, right: -10, fontSize: 80, fontWeight: 900, color: `${C.brown}06`, lineHeight: 1, userSelect: 'none' }}>
-                  {s.num}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 24, background: C.gradient1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24
+                }}>{t.avatar}</div>
+                <div>
+                  <h4 style={{ fontSize: 15, fontWeight: 800, color: 'white' }}>{t.name}</h4>
+                  <p style={{ fontSize: 11, color: C.accent }}>{t.role}</p>
                 </div>
-                <div style={{ width: 56, height: 56, borderRadius: 16, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, marginBottom: 18, boxShadow: `0 6px 20px ${C.brown}30` }}>
-                  {s.icon}
-                </div>
-                <h3 style={{ fontSize: 17, fontWeight: 800, color: C.text, marginBottom: 10 }}>{s.title}</h3>
-                <p style={{ fontSize: 13, color: C.textSec, lineHeight: 1.7, margin: 0 }}>{s.desc}</p>
               </div>
-              {i < steps.length - 1 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: -12, marginTop: 12 }}>
-                  <span style={{ fontSize: 24, color: C.brownLight, display: 'none' }}>→</span>
-                </div>
-              )}
+              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 12 }}>"{t.text}"</p>
+              <div style={{ display: 'flex', gap: 2 }}>
+                {[...Array(t.rating)].map((_, i) => <span key={i}>⭐</span>)}
+              </div>
             </div>
           ))}
         </div>
@@ -440,96 +401,66 @@ function HowItWorksSection() {
   )
 }
 
-// ── Niveaux ──────────────────────────────────────────────────────
+// ── Section Niveaux ──
 function NiveauxSection({ onLogin }) {
   const [ref, inView] = useInView()
+  
   const niveaux = [
-    {
-      label: 'Seconde', icon: '🌱', badge: 'Niveau 1',
-      modules: ['Introduction à l\'algorithmique', 'Variables et types', 'Instructions séquentielles'],
-      exercices: 'En cours d\'ajout', popular: false,
-      color: C.emerald
-    },
-    {
-      label: 'Première', icon: '📗', badge: 'Niveau 2',
-      modules: ['Structures de contrôle (UE 15&16)', 'Programmation C (UE 19)', 'Réseaux & Internet'],
-      exercices: '8 exercices disponibles', popular: true,
-      color: C.brown
-    },
-    {
-      label: 'Terminale', icon: '🎓', badge: 'Niveau 3',
-      modules: ['Bases de données SQL', 'Modèle relationnel', 'Algorithmes avancés'],
-      exercices: 'En cours d\'ajout', popular: false,
-      color: C.brownLight
-    },
+    { name: 'Seconde', icon: '🌱', color: '#10B981', modules: ['Algorithmique', 'Variables', 'Instructions'], badge: 'Débutant', popular: false },
+    { name: 'Première', icon: '⚡', color: '#EC4899', modules: ['Structures', 'Programmation C', 'Réseaux'], badge: 'Populaire', popular: true },
+    { name: 'Terminale', icon: '🏆', color: '#F59E0B', modules: ['SQL', 'Modèle relationnel', 'Algorithmes avancés'], badge: 'Expert', popular: false },
   ]
-
+  
   return (
-    <section id="niveaux" ref={ref} style={{ padding: '80px 32px', background: C.bg }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: C.brownLight, textTransform: 'uppercase', letterSpacing: 2 }}>
-            Niveaux & Programmes
-          </span>
-          <h2 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 900, color: C.brown, margin: '10px 0 0', lineHeight: 1.1 }}>
-            Couvre tout le programme lycée
+    <section id="niveaux" ref={ref} style={{ padding: '60px 20px', background: C.bg }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{
+          textAlign: 'center', marginBottom: 48,
+          opacity: inView ? 1 : 0,
+          transform: inView ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.5s ease'
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: 3 }}>📖 Parcours</span>
+          <h2 style={{ fontSize: 'clamp(28px, 6vw, 42px)', fontWeight: 900, background: C.gradient1, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginTop: 12 }}>
+            Choisis ton niveau
           </h2>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
           {niveaux.map((n, i) => (
-            <div key={n.label} style={{
-              backgroundColor: n.popular ? C.brown : C.surface,
-              borderRadius: 24, padding: '32px 28px',
-              border: n.popular ? 'none' : `1px solid ${C.brownPale}`,
-              boxShadow: n.popular ? `0 16px 48px ${C.brown}40` : '0 2px 12px rgba(107,58,42,0.06)',
-              position: 'relative', overflow: 'hidden',
+            <div key={n.name} style={{
+              background: n.popular ? `linear-gradient(135deg, ${C.primaryDark}, ${C.surface})` : C.surface,
+              borderRadius: 28, padding: '28px 24px',
+              border: n.popular ? `1px solid ${C.primary}` : '1px solid rgba(255,255,255,0.05)',
+              position: 'relative',
               opacity: inView ? 1 : 0,
-              transform: inView ? 'translateY(0)' : 'translateY(24px)',
-              transition: `all .6s ${i * .12}s ease`
+              transform: inView ? 'translateY(0)' : 'translateY(40px)',
+              transition: `all 0.5s ${i * 0.1}s ease`
             }}>
-              {n.popular && <AdinkraPattern opacity={0.08}/>}
-
               {n.popular && (
-                <div style={{ position: 'absolute', top: 16, right: 16, background: C.gold, color: C.dark, fontSize: 10, fontWeight: 900, padding: '3px 10px', borderRadius: 20, letterSpacing: .5 }}>
-                  ★ POPULAIRE
+                <div style={{ position: 'absolute', top: 16, right: 16, background: C.accent, color: C.dark, fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 40 }}>
+                  🔥 POP
                 </div>
               )}
-
-              <div style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                  <span style={{ fontSize: 32 }}>{n.icon}</span>
-                  <div>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: n.popular ? 'rgba(255,255,255,.6)' : C.textSec, textTransform: 'uppercase', letterSpacing: .8 }}>
-                      {n.badge}
-                    </span>
-                    <h3 style={{ fontSize: 22, fontWeight: 900, color: n.popular ? 'white' : C.text, margin: 0 }}>{n.label}</h3>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>{n.icon}</div>
+              <h3 style={{ fontSize: 24, fontWeight: 800, color: 'white', marginBottom: 4 }}>{n.name}</h3>
+              <p style={{ fontSize: 11, fontWeight: 600, color: n.color, marginBottom: 20 }}>{n.badge}</p>
+              <div style={{ marginBottom: 24 }}>
+                {n.modules.map(m => (
+                  <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ color: n.color, fontSize: 12 }}>✓</span>
+                    <span style={{ fontSize: 13, color: C.textSec }}>{m}</span>
                   </div>
-                </div>
-
-                <div style={{ marginBottom: 20 }}>
-                  {n.modules.map(m => (
-                    <div key={m} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
-                      <span style={{ color: n.popular ? C.gold : C.brownLight, fontWeight: 900, flexShrink: 0, fontSize: 13 }}>✓</span>
-                      <p style={{ fontSize: 13, color: n.popular ? 'rgba(255,255,255,.8)' : C.textSec, margin: 0, lineHeight: 1.5 }}>{m}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <p style={{ fontSize: 12, color: n.popular ? 'rgba(255,255,255,.5)' : C.textSec, marginBottom: 20, fontWeight: 600 }}>
-                  📝 {n.exercices}
-                </p>
-
-                <button onClick={onLogin} style={{
-                  width: '100%', padding: '12px',
-                  background: n.popular ? `linear-gradient(135deg, ${C.brownLight}, ${C.gold})` : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-                  color: 'white', border: 'none', borderRadius: 12,
-                  fontSize: 13, fontWeight: 800, cursor: 'pointer',
-                  boxShadow: `0 4px 14px ${n.color}40`
-                }}>
-                  {n.popular ? 'Commencer →' : 'Voir les cours →'}
-                </button>
+                ))}
               </div>
+              <button onClick={onLogin} style={{
+                width: '100%', padding: '12px',
+                background: n.popular ? C.gradient1 : `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                border: 'none', borderRadius: 40, color: 'white',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer'
+              }}>
+                {n.popular ? '🔥 Je commence' : 'Explorer →'}
+              </button>
             </div>
           ))}
         </div>
@@ -538,102 +469,168 @@ function NiveauxSection({ onLogin }) {
   )
 }
 
-// ── CTA final ────────────────────────────────────────────────────
-function CTASection({ onLogin }) {
+// ── Section FAQ (NOUVELLE) ──
+function FAQSection() {
+  const [ref, inView] = useInView()
+  const [openIndex, setOpenIndex] = useState(null)
+  
+  const faqs = [
+    { q: 'C\'est vraiment gratuit ?', a: 'Oui, 100% gratuit ! Pas de carte bancaire, pas d\'essai limité. L\'éducation doit être accessible à tous.' },
+    { q: 'Quels sont les prérequis techniques ?', a: 'Un navigateur récent (Chrome, Firefox, Edge) et une connexion internet. La caméra est optionnelle pour l\'analyse d\'attention.' },
+    { q: 'Le contenu suit-il vraiment le programme camerounais ?', a: 'Absolument ! Nous avons travaillé avec des enseignants camerounais pour aligner chaque chapitre sur le programme APC officiel.' },
+    { q: 'Puis-je l\'utiliser sur mon téléphone ?', a: 'Oui ! EduSmart est entièrement responsive et fonctionne parfaitement sur mobile et tablette.' },
+  ]
+  
   return (
-    <section style={{
-      padding: '80px 32px',
-      background: `linear-gradient(135deg, ${C.brown} 0%, #2D1208 100%)`,
+    <section ref={ref} style={{ padding: '60px 20px', background: C.surface }}>
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{
+          textAlign: 'center', marginBottom: 48,
+          opacity: inView ? 1 : 0,
+          transform: inView ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.5s ease'
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: 3 }}>❓ Questions fréquentes</span>
+          <h2 style={{ fontSize: 'clamp(28px, 6vw, 42px)', fontWeight: 900, color: 'white', marginTop: 12 }}>
+            On répond à tout
+          </h2>
+        </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {faqs.map((faq, i) => (
+            <div key={i} style={{
+              background: C.bg, borderRadius: 20, overflow: 'hidden',
+              opacity: inView ? 1 : 0,
+              transform: inView ? 'translateY(0)' : 'translateY(20px)',
+              transition: `all 0.5s ${i * 0.05}s ease`
+            }}>
+              <button onClick={() => setOpenIndex(openIndex === i ? null : i)} style={{
+                width: '100%', padding: '18px 20px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer'
+              }}>
+                <span style={{ fontSize: 'clamp(14px, 4vw, 16px)', fontWeight: 600, color: 'white', textAlign: 'left' }}>{faq.q}</span>
+                <span style={{ fontSize: 20, color: C.accent }}>{openIndex === i ? '−' : '+'}</span>
+              </button>
+              {openIndex === i && (
+                <div style={{ padding: '0 20px 20px 20px' }}>
+                  <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6 }}>{faq.a}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── CTA final ──
+function CTASection({ onLogin }) {
+  const [ref, inView] = useInView()
+  
+  return (
+    <section ref={ref} style={{
+      padding: '60px 20px',
+      background: C.gradient2,
       position: 'relative', overflow: 'hidden', textAlign: 'center'
     }}>
-      <AdinkraPattern opacity={0.07}/>
-      <div style={{ maxWidth: 600, margin: '0 auto', position: 'relative' }}>
-        <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 900, color: 'white', marginBottom: 16, lineHeight: 1.1 }}>
-          Prêt à transformer ta façon d'apprendre ?
+      <FloatingParticles />
+      <div style={{
+        maxWidth: 600, margin: '0 auto', position: 'relative', zIndex: 2,
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'scale(1)' : 'scale(0.95)',
+        transition: 'all 0.6s ease'
+      }}>
+        <h2 style={{ fontSize: 'clamp(28px, 6vw, 44px)', fontWeight: 900, color: 'white', marginBottom: 16 }}>
+          Prêt à commencer ? 🚀
         </h2>
-        <p style={{ fontSize: 16, color: 'rgba(255,255,255,.65)', marginBottom: 36, lineHeight: 1.7 }}>
-          Rejoins les premiers apprenants sur EduSmart AI. Gratuit, sans carte bancaire, adapté au programme camerounais.
+        <p style={{ fontSize: 'clamp(14px, 4vw, 16px)', color: C.textSec, marginBottom: 32, lineHeight: 1.6 }}>
+          Rejoins les pionniers d'EduSmart AI. Gratuit, sans carte, 100% adapté au programme camerounais.
         </p>
         <button onClick={onLogin} style={{
-          padding: '16px 40px', borderRadius: 14, cursor: 'pointer',
-          background: 'white', border: 'none', color: C.brown,
-          fontSize: 16, fontWeight: 900,
-          boxShadow: '0 8px 32px rgba(0,0,0,.3)', transition: 'all .2s',
-          display: 'inline-flex', alignItems: 'center', gap: 10
+          padding: '14px 40px', borderRadius: 60, cursor: 'pointer',
+          background: 'white', border: 'none', color: C.primary,
+          fontSize: 'clamp(14px, 4vw, 16px)', fontWeight: 900,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
         }}>
-          🎓 Créer mon compte gratuitement →
+          ✨ Créer mon compte ✨
         </button>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', marginTop: 16 }}>
-          Aucune carte bancaire requise · Accès immédiat · 100% gratuit
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 20 }}>
+          Aucune carte · Accès immédiat · 100% gratuit
         </p>
       </div>
     </section>
   )
 }
 
-// ── Footer ────────────────────────────────────────────────────────
+// ── Footer ──
 function Footer() {
   return (
-    <footer style={{ background: C.dark, padding: '48px 32px 32px', color: 'rgba(255,255,255,.45)' }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 40, marginBottom: 40, flexWrap: 'wrap' }}>
+    <footer style={{ background: C.dark, padding: '48px 20px 32px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 32, marginBottom: 40, textAlign: 'center'
+        }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${C.brown}, ${C.gold})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🧠</div>
-              <span style={{ fontSize: 16, fontWeight: 900, color: 'white' }}>EduSmart AI</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: C.gradient1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✨</div>
+              <span style={{ fontSize: 16, fontWeight: 800, color: 'white' }}>EduSmart AI</span>
             </div>
-            <p style={{ fontSize: 13, lineHeight: 1.7, maxWidth: 280, color: 'rgba(255,255,255,.4)' }}>
-              L'intelligence artificielle au service de l'éducation africaine. Système de tutorat intelligent adaptatif pour les lycéens camerounais.
+            <p style={{ fontSize: 12, color: C.textSec, maxWidth: 250, margin: '0 auto' }}>
+              L'IA au service de l'éducation africaine.
             </p>
           </div>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.6)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>Produit</p>
-            {['Fonctionnalités', 'Niveaux', 'Comment ça marche', 'Se connecter'].map(l => (
-              <p key={l} style={{ fontSize: 13, color: 'rgba(255,255,255,.4)', marginBottom: 8, cursor: 'pointer' }}>{l}</p>
-            ))}
-          </div>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.6)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>Académique</p>
-            {['Programme APC', 'Méthode BKT', 'Analyse multimodale', 'ENSET Ebolowa'].map(l => (
-              <p key={l} style={{ fontSize: 13, color: 'rgba(255,255,255,.4)', marginBottom: 8, cursor: 'pointer' }}>{l}</p>
-            ))}
-          </div>
+          {[
+            { title: 'Produit', links: ['Fonctionnalités', 'Niveaux', 'Témoignages'] },
+            { title: 'Support', links: ['FAQ', 'Contact', 'Mentions légales'] },
+            { title: 'Académique', links: ['Programme APC', 'BKT', 'ENSET Ebolowa'] },
+          ].map(section => (
+            <div key={section.title}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 16 }}>{section.title}</p>
+              {section.links.map(link => (
+                <p key={link} style={{ fontSize: 12, color: C.textSec, marginBottom: 10, cursor: 'pointer' }}>{link}</p>
+              ))}
+            </div>
+          ))}
         </div>
-        <div style={{ paddingTop: 24, borderTop: '1px solid rgba(255,255,255,.06)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <p style={{ fontSize: 12, margin: 0 }}>© 2025 EduSmart AI · ENSET Ebolowa · Mémoire de Master en Informatique</p>
-          <p style={{ fontSize: 12, margin: 0 }}>Conçu avec ❤️ pour l'éducation africaine</p>
+        <div style={{ paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
+          <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>© 2025 EduSmart AI · ENSET Ebolowa · Master Informatique</p>
         </div>
       </div>
     </footer>
   )
 }
 
-// ── Page principale ───────────────────────────────────────────────
+// ── Page principale ──
 export default function LandingPage() {
   const navigate = useNavigate()
-
-  function goLogin() { navigate('/login') }
-
+  
   return (
-    <div style={{ fontFamily: "'Nunito', 'Segoe UI', sans-serif" }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", background: C.bg }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
-        @keyframes fadeInDown{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { scroll-behavior: smooth; }
-        a { text-decoration: none; }
-        button { font-family: inherit; }
+        body { background: #0F0F1A; }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        button { cursor: pointer; transition: transform 0.2s, opacity 0.2s; }
+        button:hover { transform: scale(1.03); }
+        @media (max-width: 768px) {
+          button:active { transform: scale(0.98); }
+        }
       `}</style>
-      <Navbar onLogin={goLogin}/>
-      <HeroSection onLogin={goLogin}/>
-      <StatsSection/>
-      <FeaturesSection/>
-      <HowItWorksSection/>
-      <NiveauxSection onLogin={goLogin}/>
-      <CTASection onLogin={goLogin}/>
-      <Footer/>
+      <Navbar onLogin={() => navigate('/login')} />
+      <HeroSection onLogin={() => navigate('/login')} />
+      <FeaturesSection />
+      <TestimonialsSection />
+      <NiveauxSection onLogin={() => navigate('/login')} />
+      <FAQSection />
+      <CTASection onLogin={() => navigate('/login')} />
+      <Footer />
     </div>
   )
 }

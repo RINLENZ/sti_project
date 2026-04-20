@@ -14,22 +14,44 @@ const C = {
   emeraldPale: '#E6F5F0', gold:        '#D4A853',
 }
 
-const NIVEAUX = [
-  { id: 'Seconde',   label: 'Seconde',   desc: '2nde A, B, C, D, TI…', icon: '🌱' },
-  { id: 'Première',  label: 'Première',  desc: '1ère A, C, D, F, TI…', icon: '📗' },
-  { id: 'Terminale', label: 'Terminale', desc: 'Tle A, C, D, E, TI…',  icon: '🎓' },
+const ORDRES = [
+  {
+    id: 'general',
+    label: 'Enseignement Général',
+    icon: '🎓',
+    filieres: [
+      { id: 'A',  label: 'Série A',  desc: 'Lettres & Sciences Humaines' },
+      { id: 'C',  label: 'Série C',  desc: 'Maths & Sciences Physiques' },
+      { id: 'D',  label: 'Série D',  desc: 'Maths & Sciences de la Vie' },
+      { id: 'TI', label: 'Série TI', desc: 'Technologies de l\'Information' },
+    ]
+  },
+  {
+    id: 'technique_ind',
+    label: 'Technique Industriel',
+    icon: '⚙️',
+    filieres: [
+      { id: 'F1', label: 'F1', desc: 'Construction Mécanique' },
+      { id: 'F2', label: 'F2', desc: 'Électronique' },
+      { id: 'F3', label: 'F3', desc: 'Électrotechnique' },
+      { id: 'F4', label: 'F4', desc: 'Génie Civil / BTP' },
+      { id: 'F6', label: 'F6', desc: 'BIPE — Informatique' },
+    ]
+  },
+  {
+    id: 'technique_com',
+    label: 'Technique Commercial',
+    icon: '💼',
+    filieres: [
+      { id: 'G1', label: 'G1', desc: 'Secrétariat' },
+      { id: 'G2', label: 'G2', desc: 'Comptabilité' },
+      { id: 'G3', label: 'G3', desc: 'Action Commerciale' },
+      { id: 'H',  label: 'H',  desc: 'Hôtellerie & Restauration' },
+    ]
+  },
 ]
 
-const PAYS = [
-  { code: 'CM', name: 'Cameroun',      flag: '🇨🇲' },
-  { code: 'CI', name: "Côte d'Ivoire", flag: '🇨🇮' },
-  { code: 'SN', name: 'Sénégal',       flag: '🇸🇳' },
-  { code: 'ML', name: 'Mali',          flag: '🇲🇱' },
-  { code: 'BF', name: 'Burkina Faso',  flag: '🇧🇫' },
-  { code: 'CG', name: 'Congo',         flag: '🇨🇬' },
-  { code: 'GA', name: 'Gabon',         flag: '🇬🇦' },
-  { code: 'XX', name: 'Autre',         flag: '🌍' },
-]
+const NIVEAUX = ['Seconde', 'Première', 'Terminale']
 
 export default function Onboarding() {
   const { user, token } = useSelector(s => s.auth)

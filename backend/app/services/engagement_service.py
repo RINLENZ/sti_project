@@ -1,117 +1,191 @@
-from datetime import datetime, timedelta
-from typing import Optional
+"""
+Module d'analyse d'engagement multimodal — STI Adaptatif
+Formule de fusion : S = α·S_visuel + β·S_comportemental
+Contexte africain : dégradation gracieuse si modalité absente
 
-# Seuils de détection (issus de la littérature — ton mémoire §III-3)
-IDLE_THRESHOLD_SECONDS = 120      # inactivité > 2 min = décrochage
-RESPONSE_TIME_AVG_MULTIPLIER = 2  # temps réponse > 2× la moyenne = difficulté
-REPEATED_CLICKS_THRESHOLD = 5     # > 5 clics répétés = frustration
+Référence : Chapitre 3 du mémoire — Section III-4
+"""
 
-def compute_behavioral_score(events: list[dict]) -> dict:
+# ── Poids de fusion par défaut ──────────────────────────────────────
+# α + β = 1.0
+# Si une modalité est absente, les poids sont renormalisés automatiquement
+FUSION_WEIGHTS = {
+    "alpha": 0.55,   # poids modalité visuelle (MediaPipe)
+    "beta":  0.45,   # poids modalité comportementale
+}
+
+# ── Seuils d'engagement ─────────────────────────────────────────────
+THRESHOLDS = {
+    "eleve":  0.70,   # score ≥ 0.70 → engagé
+    "modere": 0.40,   # score ≥ 0.40 → modéré
+    # score < 0.40  → décroché
+}
+
+
+def compute_behavioral_score(events: list) -> dict:
     """
     Calcule le score d'engagement comportemental à partir
-    d'une liste d'événements de la session.
-    Retourne un score entre 0.0 (désengagé) et 1.0 (très engagé).
+    des événements d'interaction enregistrés.
+
+    Événements pris en compte :
+    - idle         : inactivité prolongée (pénalité forte)
+    - response     : réponse à un exercice (bonus si correct, pénalité si lent)
+    - help_requested : demande d'indice (pénalité légère)
+    - facial_analysis : score visuel MediaPipe (si disponible)
+
+    Returns:
+        dict avec score, level, details, fusion_info
     """
     if not events:
-        return {"score": 0.5, "flags": [], "level": "modere"}
+        return {
+            "score": 0.5, "level": "modere",
+            "behavioral_score": 0.5, "visual_score": None,
+            "fusion": "comportemental uniquement (pas d'événements)"
+        }
 
-    flags = []
-    penalties = 0.0
-    bonuses = 0.0
+    score_comportemental = 1.0
+    score_visuel_list    = []
+    nb_idles             = 0
+    nb_responses         = 0
+    nb_correct           = 0
+    nb_help              = 0
+    temps_reponse_total  = 0
 
-    # --- Analyse de l'inactivité ---
-    idle_events = [e for e in events if e.get("type") == "idle"]
-    for e in idle_events:
-        duration = e.get("data", {}).get("duration_seconds", 0)
-        if duration > IDLE_THRESHOLD_SECONDS:
-            penalties += 0.3
-            flags.append("inactivite_prolongee")
+    for event in events:
+        t    = event.get("type", "")
+        data = event.get("data", {})
 
-    # --- Analyse du temps de réponse ---
-    response_events = [e for e in events if e.get("type") == "response"]
-    if response_events:
-        times = [e.get("data", {}).get("time_seconds", 0) for e in response_events]
-        avg_time = sum(times) / len(times)
-        slow_responses = [t for t in times if t > avg_time * RESPONSE_TIME_AVG_MULTIPLIER]
-        if len(slow_responses) > len(times) * 0.5:
-            penalties += 0.2
-            flags.append("reponses_lentes")
+        if t == "idle":
+            nb_idles += 1
+            score_comportemental -= 0.20  # inactivité = signal fort de décrochage
 
-    # --- Analyse des clics répétés (frustration) ---
-    click_events = [e for e in events if e.get("type") == "click"]
-    if len(click_events) > REPEATED_CLICKS_THRESHOLD:
-        targets = [e.get("data", {}).get("target", "") for e in click_events]
-        if len(targets) != len(set(targets)):  # clics répétés sur le même élément
-            penalties += 0.2
-            flags.append("clics_repetes")
+        elif t == "response":
+            nb_responses += 1
+            correct = data.get("correct", False)
+            temps   = data.get("time_seconds", 30)
+            temps_reponse_total += temps
 
-    # --- Bonus pour interactions actives ---
-    help_events = [e for e in events if e.get("type") == "help_requested"]
-    correct_responses = [
-        e for e in response_events
-        if e.get("data", {}).get("correct") is True
-    ]
-    if correct_responses:
-        bonuses += 0.1 * min(len(correct_responses), 3)
-    if help_events:
-        bonuses += 0.05  # chercher de l'aide = engagement actif
+            if correct:
+                nb_correct += 1
+                score_comportemental += 0.05  # bonus légère pour bonne réponse
+            else:
+                score_comportemental -= 0.05  # mauvaise réponse = léger signal
 
-    # --- Calcul final ---
-    raw_score = 1.0 - penalties + bonuses
-    score = max(0.0, min(1.0, raw_score))  # clamp entre 0 et 1
+            # Pénalité si temps de réponse très long (> 120s)
+            if temps > 120:
+                score_comportemental -= 0.10
 
-    # --- Niveau d'engagement ---
-    if score >= 0.7:
+        elif t == "help_requested":
+            nb_help += 1
+            level = data.get("level", 1)
+            score_comportemental -= (0.05 * level)  # plus d'indices = moins d'autonomie
+
+        elif t == "facial_analysis":
+            # Score visuel envoyé par MediaPipe
+            visual = data.get("visual_score")
+            if visual is not None:
+                score_visuel_list.append(float(visual))
+
+    # Clamp score comportemental
+    score_comportemental = max(0.0, min(1.0, score_comportemental))
+
+    # ── Fusion trimodale ────────────────────────────────────────────
+    alpha = FUSION_WEIGHTS["alpha"]
+    beta  = FUSION_WEIGHTS["beta"]
+
+    if score_visuel_list:
+        # Moyenne glissante sur les 5 derniers scores visuels
+        recent_visual = score_visuel_list[-5:]
+        score_visuel  = sum(recent_visual) / len(recent_visual)
+
+        # Fusion pondérée : S = α·S_visuel + β·S_comportemental
+        score_fusionne = alpha * score_visuel + beta * score_comportemental
+        fusion_info    = f"fusion trimodale α={alpha}·visuel({score_visuel:.2f}) + β={beta}·comport.({score_comportemental:.2f})"
+    else:
+        # Pas de données visuelles → score comportemental seul (renormalisé)
+        score_visuel   = None
+        score_fusionne = score_comportemental
+        fusion_info    = "comportemental uniquement (caméra inactive)"
+
+    score_fusionne = round(max(0.0, min(1.0, score_fusionne)), 3)
+
+    # ── Niveau d'engagement ─────────────────────────────────────────
+    if score_fusionne >= THRESHOLDS["eleve"]:
         level = "eleve"
-    elif score >= 0.4:
+    elif score_fusionne >= THRESHOLDS["modere"]:
         level = "modere"
     else:
         level = "faible"
 
+    # ── Décision d'adaptation pédagogique ───────────────────────────
+    adaptation = decide_adaptation(
+        score=score_fusionne,
+        level=level,
+        nb_idles=nb_idles,
+        nb_help=nb_help,
+        nb_responses=nb_responses,
+        nb_correct=nb_correct,
+    )
+
     return {
-        "score": round(score, 2),
-        "flags": flags,
-        "level": level,
-        "details": {
-            "nb_events": len(events),
-            "penalties": round(penalties, 2),
-            "bonuses": round(bonuses, 2)
+        "score":               score_fusionne,
+        "level":               level,
+        "behavioral_score":    round(score_comportemental, 3),
+        "visual_score":        round(score_visuel, 3) if score_visuel is not None else None,
+        "fusion_info":         fusion_info,
+        "adaptation":          adaptation,
+        "stats": {
+            "nb_idles":     nb_idles,
+            "nb_responses": nb_responses,
+            "nb_correct":   nb_correct,
+            "nb_help":      nb_help,
+            "taux_reussite": round(nb_correct / nb_responses * 100) if nb_responses > 0 else None,
         }
     }
 
 
-def decide_adaptation(score: float, flags: list[str]) -> Optional[dict]:
+def decide_adaptation(score, level, nb_idles, nb_help,
+                      nb_responses, nb_correct) -> dict | None:
     """
-    Décide d'une action pédagogique selon le score et les signaux détectés.
-    Retourne None si aucune intervention n'est nécessaire.
+    Règles expertes IF-THEN pour l'adaptation pédagogique.
+    Retourne un message d'adaptation ou None si aucune action requise.
     """
-    # Règles expertes — directement issues de ton mémoire Chapitre 2
-    if score < 0.3 and "inactivite_prolongee" in flags:
+    # Décrochage sévère
+    if level == "faible" and nb_idles >= 2:
         return {
-            "action": "pause_active",
-            "message": "Tu sembles fatigué. Prends 2 minutes de pause !",
-            "priority": "haute"
+            "type":     "pause",
+            "priority": "haute",
+            "message":  "Tu sembles décroché. Fais une courte pause de 5 minutes avant de continuer.",
+            "action":   "suggest_break"
         }
 
-    if score < 0.4 and "reponses_lentes" in flags:
+    # Décrochage modéré
+    if level == "faible":
         return {
-            "action": "simplifier_exercice",
-            "message": "Essayons quelque chose de plus simple d'abord.",
-            "priority": "moyenne"
+            "type":     "encouragement",
+            "priority": "haute",
+            "message":  "Ton niveau d'attention est faible. Essaie de te concentrer — tu y es presque !",
+            "action":   "encourage"
         }
 
-    if "clics_repetes" in flags:
+    # Beaucoup d'indices demandés = difficulté trop élevée
+    if nb_help >= 3 and nb_responses > 0:
+        taux = nb_correct / nb_responses
+        if taux < 0.5:
+            return {
+                "type":     "simplify",
+                "priority": "moyenne",
+                "message":  "Ces exercices semblent difficiles. Relis la leçon avant de continuer.",
+                "action":   "suggest_review"
+            }
+
+    # Excellent engagement + bonne performance → proposer un défi
+    if level == "eleve" and nb_responses >= 3 and nb_correct == nb_responses:
         return {
-            "action": "afficher_indice",
-            "message": "Besoin d'un coup de pouce ?",
-            "priority": "moyenne"
+            "type":     "challenge",
+            "priority": "basse",
+            "message":  "Excellent travail ! Tu maîtrises bien — prêt pour des exercices plus difficiles ?",
+            "action":   "increase_difficulty"
         }
 
-    if score > 0.8:
-        return {
-            "action": "proposer_defi",
-            "message": "Excellent travail ! Prêt pour un défi ?",
-            "priority": "basse"
-        }
-
-    return None  # pas d'intervention nécessaire
+    return None

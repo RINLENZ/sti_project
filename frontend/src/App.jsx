@@ -10,6 +10,7 @@ import Session       from './pages/apprenant/Session'
 import DashboardProf from './pages/enseignant/DashboardProf'
 import AdminCours    from './pages/enseignant/AdminCours'
 import AppLayout     from './components/layout/AppLayout'
+import Profil from './pages/apprenant/Profil'
 
 function PrivateRoute({ children, role }) {
   const { user, token } = useSelector(s => s.auth)
@@ -48,6 +49,12 @@ export default function App() {
         </PrivateRoute>
       }/>
 
+      <Route path="/profil" element={
+  <ApprenantRoute>
+    <AppLayout><Profil /></AppLayout>
+  </ApprenantRoute>
+}/>
+
       {/* Routes apprenant avec sidebar */}
       <Route path="/dashboard" element={
         <ApprenantRoute>
@@ -70,10 +77,10 @@ export default function App() {
         </PrivateRoute>
       }/>
       <Route path="/admin" element={
-        <PrivateRoute>
-          <AppLayout><AdminCours /></AppLayout>
-        </PrivateRoute>
-      }/>
+  <PrivateRoute role="super_admin">
+    <AppLayout><AdminCours /></AppLayout>
+  </PrivateRoute>
+}/>
 
       <Route path="*" element={<Navigate to="/" replace />}/>
     </Routes>
