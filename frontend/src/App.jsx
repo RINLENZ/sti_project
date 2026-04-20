@@ -11,11 +11,12 @@ import DashboardProf from './pages/enseignant/DashboardProf'
 import AdminCours    from './pages/enseignant/AdminCours'
 import AppLayout     from './components/layout/AppLayout'
 import Profil from './pages/apprenant/Profil'
+import AdminReferentiel from './pages/enseignant/AdminReferentiel'
 
 function PrivateRoute({ children, role }) {
   const { user, token } = useSelector(s => s.auth)
   if (!token || !user) return <Navigate to="/login" replace />
-  if (role && user.role !== role) return <Navigate to="/" replace />
+  if (role && user.role !== role) return <Navigate to="/dashboard" replace />
   return children
 }
 
@@ -39,6 +40,12 @@ export default function App() {
       <Route path="/onboarding" element={
         <PrivateRoute><Onboarding /></PrivateRoute>
       }/>
+
+      <Route path="/admin/referentiel" element={
+  <PrivateRoute role="super_admin">
+    <AppLayout><AdminReferentiel /></AppLayout>
+  </PrivateRoute>
+}/>
 
       {/* Redirection selon rôle */}
       <Route path="/app" element={
@@ -76,7 +83,7 @@ export default function App() {
           <AppLayout><DashboardProf /></AppLayout>
         </PrivateRoute>
       }/>
-      <Route path="/admin" element={
+    <Route path="/admin" element={
   <PrivateRoute role="super_admin">
     <AppLayout><AdminCours /></AppLayout>
   </PrivateRoute>
@@ -86,3 +93,4 @@ export default function App() {
     </Routes>
   )
 }
+
