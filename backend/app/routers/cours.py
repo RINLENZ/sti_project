@@ -25,7 +25,7 @@ def get_matieres(niveau: str = None, db: Session = Depends(get_db)):
     """
     query = db.query(Matiere).filter(Matiere.actif == True)
     if niveau:
-        query = query.filter(Matiere.niveau.ilike(f"%{niveau}%"))
+        query = query.filter(Matiere.description.ilike(f"%{niveau}%"))
 
     matieres = query.all()
     result = []
@@ -37,7 +37,7 @@ def get_matieres(niveau: str = None, db: Session = Depends(get_db)):
         result.append({
             "id":          str(m.id),
             "nom":         m.nom,
-            "niveau":      m.niveau,
+            "niveau":      m.description,
             "description": m.description,
             "modules": [{
                 "id":          str(mod.id),

@@ -23,7 +23,7 @@ function PrivateRoute({ children, role }) {
 function ApprenantRoute({ children }) {
   const { user, token } = useSelector(s => s.auth)
   if (!token || !user) return <Navigate to="/login" replace />
-  if (!user.niveau) return <Navigate to="/onboarding" replace />
+  if (!user.niveau_label) return <Navigate to="/onboarding" replace />
   return children
 }
 

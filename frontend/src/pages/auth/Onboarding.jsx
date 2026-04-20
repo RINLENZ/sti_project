@@ -138,10 +138,11 @@ export default function Onboarding() {
     try {
       const pays = selectedPays?.name || 'Cameroun'
       const payload = {
-        niveau:        selectedNiveau.nom,
-        pays,
-      }
-      await api.put(`/api/admin/apprenant/${user.id}`, payload)
+  niveau_label:  selectedNiveau.nom,
+  filiere_label: selectedFiliere?.nom || null,
+  pays,
+}
+      await api.put(`/auth/profil/${user.id}/update`, payload)
       dispatch(loginSuccess({
         token,
         user: {

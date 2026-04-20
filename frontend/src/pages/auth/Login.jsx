@@ -29,7 +29,8 @@ dispatch(loginSuccess({
     email:           form.email,
     nom:             data.nom,
     prenom:          data.prenom,
-    niveau:          data.niveau,
+    niveau_label:    data.niveau,
+    filiere_label:   data.filiere_label,
     code_invitation: data.code_invitation
   }
 }))

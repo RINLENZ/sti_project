@@ -10,6 +10,7 @@ from ..services.auth_service import (
     authenticate_user, create_access_token,
     hash_password, get_user_by_email
 )
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["authentification"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -75,15 +76,16 @@ def login(
         )
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return {
-        "access_token":   token,
-        "token_type":     "bearer",
-        "user_id":        str(user.id),
-        "role":           user.role,
-        "nom":            user.nom,
-        "prenom":         user.prenom,
-        "niveau": user.niveau_label,
-        "code_invitation": user.code_invitation,
-    }
+    "access_token":    token,
+    "token_type":      "bearer",
+    "user_id":         str(user.id),
+    "role":            user.role,
+    "nom":             user.nom,
+    "prenom":          user.prenom,
+    "niveau":          user.niveau_label,
+    "filiere_label":   user.filiere_label,   # ← ajoute cette ligne
+    "code_invitation": user.code_invitation
+}
 
 
 @router.get("/profil/{user_id}")
@@ -176,6 +178,33 @@ def get_apprenants_du_tuteur(tuteur_id: str, db: Session = Depends(get_db)):
             })
     return result
 
+
+@router.put("/profil/{user_id}/update")
+def update_mon_profil(
+    user_id: UUID,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Permet à un apprenant de mettre à jour son propre profil.
+    Accessible à tout utilisateur connecté pour son propre compte.
+    """
+    # Sécurité : on ne peut modifier que son propre profil
+    if str(current_user.id) != str(user_id):
+        raise HTTPException(403, "Vous ne pouvez modifier que votre propre profil")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Utilisateur introuvable")
+
+    champs_autorises = ["niveau_label", "filiere_label", "pays", "niveau"]
+    for field, value in body.items():
+        if field in champs_autorises:
+            setattr(user, field, value)
+
+    db.commit()
+    return {"message": "Profil mis à jour"}
 
 @router.delete("/tuteur/delier/{apprenant_id}")
 def delier_tuteur(apprenant_id: str, tuteur_id: str,
