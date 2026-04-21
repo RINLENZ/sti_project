@@ -1,0 +1,6 @@
+session_id,nb_idles,nb_responses,nb_correct,nb_help,taux_reussite,temps_moyen_reponse,duree_secondes,nb_interactions,score_engagement,etat_affectif
+1271cfed-1fc4-4f99-b669-d5d93a7f6ccd,0,3,3,0,1.0,5.3,27,8,0.874,engagement_eleve
+a2144080-ab32-4edb-af2b-940da754074e,0,5,5,0,1.0,4.8,34,11,0.886,engagement_eleve
+e5a77724-612f-488e-97aa-250860a3bbba,0,3,0,0,0.0,65.7,220,43,0.719,ennui
+af43e66f-ff35-4c04-bfa2-f51717017f45,0,3,2,4,0.667,15.7,54,18,0.836,neutre
+27ed70af-9bc2-459f-b886-ce81758a8909,0,3,0,6,0.0,11.0,39,16,0.686,frustration
