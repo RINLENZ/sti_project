@@ -22,7 +22,13 @@ from app.services.auth_service import hash_password
 Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 
-# Nettoyage
+# Nettoyage dans le bon ordre (contraintes FK)
+from app.models.interaction import Interaction
+from app.models.cours import BKTMastery, ProgressionApprenant
+
+db.query(BKTMastery).delete()
+db.query(ProgressionApprenant).delete()
+db.query(Interaction).delete()
 db.query(EngagementAnalysis).delete()
 db.query(LearningSession).delete()
 db.query(User).delete()
