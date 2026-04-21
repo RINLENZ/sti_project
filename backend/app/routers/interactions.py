@@ -14,8 +14,15 @@ from ..config import settings
 
 router = APIRouter(prefix="/api", tags=["interactions"])
 
-# Connexion Redis pour le cache
-redis = redis_client.from_url(settings.redis_url, decode_responses=True)
+
+def get_redis():
+    """Connexion Redis lazy — ne crashe pas si Redis indisponible."""
+    try:
+        r = redis_client.from_url(settings.redis_url, decode_responses=True)
+        r.ping()
+        return r
+    except Exception:
+        return None
 
 
 class InteractionEvent(BaseModel):
@@ -27,16 +34,12 @@ class InteractionEvent(BaseModel):
 
 @router.post("/interaction")
 def log_interaction(event: InteractionEvent, db: Session = Depends(get_db)):
-    """Enregistre un événement et retourne le score d'engagement mis à jour."""
-
-    # Vérifie que la session existe
     session = db.query(LearningSession).filter(
         LearningSession.id == event.session_id
     ).first()
     if not session:
         raise HTTPException(404, "Session introuvable")
 
-    # Sauvegarde l'événement en base
     interaction = Interaction(
         session_id=event.session_id,
         user_id=event.user_id,
@@ -46,27 +49,25 @@ def log_interaction(event: InteractionEvent, db: Session = Depends(get_db)):
     db.add(interaction)
     db.commit()
 
-    # Récupère tous les événements de la session depuis Redis
+    # Redis lazy
+    r = get_redis()
     cache_key = f"session_events:{event.session_id}"
-    cached    = redis.get(cache_key)
-    events    = json.loads(cached) if cached else []
+    cached = r.get(cache_key) if r else None
+    events = json.loads(cached) if cached else []
     events.append({"type": event.type, "data": event.data})
+    if r:
+        r.setex(cache_key, 7200, json.dumps(events))
 
-    # Met à jour le cache (expire après 2h)
-    redis.setex(cache_key, 7200, json.dumps(events))
-
-    # Calcule le score fusionné (visuel + comportemental)
     result = compute_behavioral_score(events)
-
-    # L'adaptation est déjà calculée dans compute_behavioral_score
     adaptation = result.get("adaptation")
 
     return {
         "status":           "recorded",
-        "behavioral_score": result.get("behavioral_score", result.get("score", 0.5)),
+        "behavioral_score": result.get("behavioral_score", 0.5),
         "visual_score":     result.get("visual_score"),
         "engagement_score": result.get("score", 0.5),
-        "engagement_level": result.get("level", "modere"),
+        "engagement_level": result.get("level", "neutre"),
+        "etat_affectif":    result.get("etat_affectif", "neutre"),
         "fusion_info":      result.get("fusion_info", ""),
         "adaptation":       adaptation,
         "stats":            result.get("stats", {}),
@@ -75,14 +76,12 @@ def log_interaction(event: InteractionEvent, db: Session = Depends(get_db)):
 
 @router.get("/session/{session_id}/score")
 def get_session_score(session_id: UUID, db: Session = Depends(get_db)):
-    """Retourne le score d'engagement courant d'une session."""
-
+    r = get_redis()
     cache_key = f"session_events:{session_id}"
-    cached    = redis.get(cache_key)
-    events    = json.loads(cached) if cached else []
+    cached = r.get(cache_key) if r else None
+    events = json.loads(cached) if cached else []
 
     if not events:
-        # Charge depuis la base si pas en cache
         db_events = db.query(Interaction).filter(
             Interaction.session_id == session_id
         ).all()
@@ -92,10 +91,11 @@ def get_session_score(session_id: UUID, db: Session = Depends(get_db)):
 
     return {
         "session_id":       str(session_id),
-        "behavioral_score": result.get("behavioral_score", result.get("score", 0.5)),
+        "behavioral_score": result.get("behavioral_score", 0.5),
         "visual_score":     result.get("visual_score"),
         "engagement_score": result.get("score", 0.5),
-        "engagement_level": result.get("level", "modere"),
+        "engagement_level": result.get("level", "neutre"),
+        "etat_affectif":    result.get("etat_affectif", "neutre"),
         "fusion_info":      result.get("fusion_info", ""),
         "nb_events":        len(events),
         "stats":            result.get("stats", {}),
