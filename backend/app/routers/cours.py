@@ -268,6 +268,65 @@ def creer_session(body: SessionCreate, db: Session = Depends(get_db)):
     db.refresh(session)
     return {"session_id": str(session.id)}
 
+@router.post("/session/clore/{session_id}")
+def clore_session(session_id: UUID, db: Session = Depends(get_db)):
+    """
+    Clôture une session et persiste le score d'engagement final.
+    Appelé depuis le frontend quand l'apprenant termine ou quitte.
+    """
+    import redis as redis_client, json
+    from ..models.session import LearningSession
+    from ..services.engagement_service import compute_behavioral_score
+    from ..config import settings
+    from datetime import datetime, timezone
+
+    session = db.query(LearningSession).filter(
+        LearningSession.id == session_id
+    ).first()
+    if not session:
+        raise HTTPException(404, "Session introuvable")
+
+    # Récupère les événements depuis Redis
+    try:
+        redis = redis_client.from_url(settings.redis_url, decode_responses=True)
+        cached = redis.get(f"session_events:{session_id}")
+        events = json.loads(cached) if cached else []
+    except Exception:
+        events = []
+
+    # Si pas en cache, charge depuis la base
+    if not events:
+        from ..models.interaction import Interaction
+        db_events = db.query(Interaction).filter(
+            Interaction.session_id == session_id
+        ).all()
+        events = [{"type": e.type, "data": e.data} for e in db_events]
+
+    # Calcule le score final
+    result = compute_behavioral_score(events)
+
+    # Met à jour la session
+    now = datetime.now(timezone.utc)
+    duree = int((now - session.started_at.replace(tzinfo=timezone.utc)).total_seconds()) \
+        if session.started_at else None
+
+    session.ended_at       = now
+    session.score_engagement = result["score"]
+    session.etat_affectif  = result.get("etat_affectif", "neutre")
+    session.nb_interactions = len(events)
+    session.duree_secondes  = duree
+    db.commit()
+
+    return {
+        "message":         "Session clôturée",
+        "score_engagement": result["score"],
+        "level":           result["level"],
+        "etat_affectif":   result.get("etat_affectif", "neutre"),
+        "duree_secondes":  duree,
+        "nb_interactions": len(events),
+        "fusion_info":     result.get("fusion_info", ""),
+    }
+
 @router.get("/dashboard/enseignant")
 def dashboard_enseignant(db: Session = Depends(get_db)):
     """
@@ -306,7 +365,7 @@ def dashboard_enseignant(db: Session = Depends(get_db)):
                     events = json_lib.loads(cached)
                     nb_events = len(events)
                     # Calcule le score depuis les événements
-                    from ..services.engagement_service import compute_behavioral_score
+                    from ..models.session import LearningSession
                     res = compute_behavioral_score(events)
                     score_actuel = res["score"]
                     niveau = res["level"]

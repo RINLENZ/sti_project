@@ -379,18 +379,23 @@ export default function Session() {
 
   // ── Exercice suivant ──────────────────────────────────────────
   function suivant() {
-    if (current+1 >= exercices.length) {
-      const r = scores.filter(s=>s>0).length+(resultat?.correct?1:0)
-      if (Math.round(r/exercices.length*100)>=80) setConfetti(true)
-      setTermine(true)
-    } else {
-      setCurrent(c=>c+1)
-      setReponse(null); setResultat(null)
-      setIndices(0); setAdaptation(null)
-      setExplicationIA(null)
-      setQuestionTime(Date.now())  // ← reset timer question
+  if (current + 1 >= exercices.length) {
+    const r = scores.filter(s => s > 0).length + (resultat?.correct ? 1 : 0)
+    if (Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
+    // ← Clôture la session et persiste le score engagement
+    if (sessionIdRef.current) {
+      api.post(`/api/cours/session/clore/${sessionIdRef.current}`)
+        .catch(() => {})
     }
+    setTermine(true)
+  } else {
+    setCurrent(c => c + 1)
+    setReponse(null); setResultat(null)
+    setIndices(0); setAdaptation(null)
+    setExplicationIA(null)
+    setQuestionTime(Date.now())
   }
+}
 
   // ── Tuteur IA ─────────────────────────────────────────────────
   async function demanderExplication() {
