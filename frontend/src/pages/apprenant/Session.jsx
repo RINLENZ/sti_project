@@ -115,6 +115,8 @@ export default function Session() {
   const faceMeshRef = useRef(null)
   const lastSendRef = useRef(0)
   const [cameraActive, setCameraActive] = useState(false)
+  const [explicationIA, setExplicationIA] = useState(null)
+  const [loadingIA,     setLoadingIA]     = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -211,12 +213,31 @@ export default function Session() {
     } catch { toast.error('Erreur de vérification') }
   }
 
+  async function demanderExplication() {
+  if (!resultat || resultat.correct) return
+  setLoadingIA(true)
+  setExplicationIA(null)
+  try {
+    const { data } = await api.post('/api/tuteur/expliquer', {
+      exercice_id:    ex.id,
+      reponse_donnee: reponse || '',
+      niveau:         user?.niveau_label  || 'Première',
+      filiere:        user?.filiere_label || 'F6 BIPE',
+    })
+    setExplicationIA(data.explication_ia)
+  } catch {
+    toast.error('Tuteur IA indisponible')
+  } finally {
+    setLoadingIA(false)
+  }
+}
+
   function suivant() {
     if (current+1 >= exercices.length) {
       const r = scores.filter(s=>s>0).length+(resultat?.correct?1:0)
       if (Math.round(r/exercices.length*100)>=80) setConfetti(true)
       setTermine(true)
-    } else { setCurrent(c=>c+1); setReponse(null); setResultat(null); setIndices(0); setAdaptation(null) }
+    } else { setCurrent(c=>c+1); setReponse(null); setResultat(null); setIndices(0); setAdaptation(null); setExplicationIA(null)  }
   }
 
   if (!ua || exercices.length === 0) return (
@@ -339,6 +360,55 @@ export default function Session() {
                   <p style={{ margin:'0 0 5px',fontSize:14,fontWeight:800,color:resultat.correct?C.emerald:C.red }}>{resultat.correct?'Excellent ! Bonne réponse !':'Pas tout à fait…'}</p>
                   <p style={{ margin:0,fontSize:13,color:C.text,lineHeight:1.6 }}>{resultat.explication}</p>
                   {!resultat.correct&&<p style={{ fontSize:13,marginTop:8,color:C.emerald }}><strong>Réponse correcte :</strong> {resultat.reponse_correcte}</p>}
+
+                  {/* ── Tuteur IA ── */}
+<div style={{ marginTop: 14 }}>
+  {!explicationIA && (
+    <button onClick={demanderExplication} disabled={loadingIA} style={{
+      display:'flex', alignItems:'center', gap:8, padding:'9px 16px',
+      background: loadingIA ? '#E5E7EB' : `linear-gradient(135deg,${C.brown},${C.brownLight})`,
+      color: loadingIA ? C.textSec : 'white',
+      border:'none', borderRadius:10, fontSize:13, fontWeight:700,
+      cursor: loadingIA ? 'wait' : 'pointer', transition:'all .2s ease'
+    }}>
+      {loadingIA ? (
+        <>
+          <div style={{ width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',animation:'spin 1s linear infinite' }}/>
+          Le tuteur réfléchit…
+        </>
+      ) : <>💡 Expliquer autrement</>}
+    </button>
+  )}
+  {explicationIA && (
+    <div style={{
+      marginTop:12,
+      background:`linear-gradient(135deg,${C.brownPale},#FFFBEB)`,
+      borderRadius:12, padding:'14px 16px',
+      border:`1px solid ${C.gold}40`,
+      animation:'slideDown .3s ease'
+    }}>
+      <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:10 }}>
+        <div style={{
+          width:28,height:28,borderRadius:8,flexShrink:0,
+          background:`linear-gradient(135deg,${C.brown},${C.gold})`,
+          display:'flex',alignItems:'center',justifyContent:'center',fontSize:14
+        }}>🧠</div>
+        <span style={{ fontSize:12,fontWeight:800,color:C.brown }}>
+          Tuteur EduSmart AI
+        </span>
+      </div>
+      <p style={{ fontSize:13,color:C.text,lineHeight:1.7,margin:0 }}>
+        {explicationIA}
+      </p>
+      <button onClick={()=>setExplicationIA(null)} style={{
+        marginTop:10,background:'none',border:'none',
+        cursor:'pointer',fontSize:11,color:C.textSec,textDecoration:'underline'
+      }}>
+        Fermer
+      </button>
+    </div>
+  )}
+</div>
                 </div>
               </div>
             )}

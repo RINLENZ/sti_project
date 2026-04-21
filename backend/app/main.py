@@ -7,6 +7,7 @@ from .models import cours
 from .routers import cours 
 from .routers import bkt 
 from .routers import admin 
+from .routers import tuteur
 
 # Crée les tables au démarrage (en dev ; en prod on utilise Alembic)
 Base.metadata.create_all(bind=engine)
@@ -28,6 +29,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(interactions.router)
 app.include_router(cours.router) 
+app.include_router(tuteur.router)
 app.include_router(bkt.router)
 app.include_router(admin.router) 
 

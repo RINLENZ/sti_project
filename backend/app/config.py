@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     environment: str = "development"
+    anthropic_api_key: str = ""
 
     class Config:
         env_file = "../.env"
