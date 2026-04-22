@@ -230,6 +230,14 @@ export default function Session() {
   const lastSendRef = useRef(0)
   const [cameraActive, setCameraActive] = useState(false)
 
+
+const [audioActive,    setAudioActive]    = useState(false)
+const [niveauBruit,    setNiveauBruit]    = useState(0)      // dB RMS 0-100
+const [bruitPerturb,   setBruitPerturb]   = useState(false)  // bruit > seuil
+const audioContextRef  = useRef(null)
+const analyserRef      = useRef(null)
+const audioIntervalRef = useRef(null)
+
   // Tuteur IA
   const [explicationIA, setExplicationIA] = useState(null)
   const [loadingIA,     setLoadingIA]     = useState(false)
@@ -262,6 +270,16 @@ export default function Session() {
     events.forEach(e => window.addEventListener(e, reset)); reset()
     return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)) }
   }, [user.id])
+
+
+
+  useEffect(() => {
+  return () => {
+    if (audioIntervalRef.current) clearInterval(audioIntervalRef.current)
+    if (audioContextRef.current) audioContextRef.current.close()
+  }
+}, [])
+
 
   // ── sendEvent — reçoit le score fusionné et met à jour la jauge ──
   const sendEvent = useCallback(async (type, data = {}) => {
@@ -300,6 +318,48 @@ export default function Session() {
     } catch { toast.error('Caméra non disponible') }
   }
 
+  async function startAudio() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const ctx    = new (window.AudioContext || window.webkitAudioContext)()
+    const source = ctx.createMediaStreamSource(stream)
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    source.connect(analyser)
+    audioContextRef.current = ctx
+    analyserRef.current     = analyser
+
+    // Analyse toutes les 3 secondes
+    audioIntervalRef.current = setInterval(() => {
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      analyser.getByteFrequencyData(data)
+
+      // Calcul RMS — niveau sonore moyen
+      const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length)
+      const db  = Math.round(rms)  // 0-128, normalisé en %
+
+      // Seuil bruit perturbateur : > 60 sur 128 = ~47%
+      const perturb = db > 60
+
+      setNiveauBruit(db)
+      setBruitPerturb(perturb)
+
+      // Envoi au backend
+      sendEvent('audio_analysis', {
+        rms_level:    db,
+        db_normalise: Math.round(db / 1.28), // 0-100
+        bruit_perturb: perturb,
+        contexte:     perturb ? 'bruit_eleve' : 'calme',
+      })
+    }, 3000)
+
+    setAudioActive(true)
+    toast.success('Analyse audio activée')
+  } catch {
+    toast.error('Micro non disponible')
+  }
+}
+
   function computeEAR(lm, idx) {
     const p = idx.map(i => lm[i])
     return (Math.hypot(p[1].x-p[5].x,p[1].y-p[5].y)+Math.hypot(p[2].x-p[4].x,p[2].y-p[4].y))/(2*Math.hypot(p[0].x-p[3].x,p[0].y-p[3].y))
@@ -321,7 +381,7 @@ export default function Session() {
       }
       return
     }
-
+    
     const lm = results.multiFaceLandmarks[0]
     const LEFT_EYE  = [362,385,387,263,373,380]
     const RIGHT_EYE = [33,160,158,133,153,144]
@@ -657,6 +717,48 @@ export default function Session() {
                 <Camera size={13}/> Activer la caméra
               </button>
             )}
+
+            {/* ── Bouton micro + barre bruit ── */}
+{!audioActive ? (
+  <button onClick={startAudio} style={{
+    width:'100%', padding:'9px',
+    background:`linear-gradient(135deg,${C.emerald},#0A7A5E)`,
+    color:'white', border:'none', borderRadius:8,
+    fontSize:12, fontWeight:700, cursor:'pointer',
+    display:'flex', alignItems:'center', justifyContent:'center',
+    gap:6, marginBottom:14
+  }}>
+    🎤 Activer le micro
+  </button>
+) : (
+  <div style={{
+    backgroundColor: bruitPerturb ? '#FEE2E2' : C.emeraldPale,
+    borderRadius:10, padding:'8px 10px', marginBottom:14,
+    border:`1px solid ${bruitPerturb ? C.red : C.emerald}30`
+  }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+      <span style={{ fontSize:11, fontWeight:700, color: bruitPerturb ? C.red : C.emerald }}>
+        🎤 {bruitPerturb ? 'Bruit détecté !' : 'Ambiance calme'}
+      </span>
+      <span style={{ fontSize:10, color:C.textSec }}>
+        {Math.round(niveauBruit/1.28)}%
+      </span>
+    </div>
+    <div style={{ height:4, backgroundColor:'#E5E7EB', borderRadius:4, overflow:'hidden' }}>
+      <div style={{
+        height:'100%', borderRadius:4,
+        width:`${Math.min(100, Math.round(niveauBruit/1.28))}%`,
+        backgroundColor: bruitPerturb ? C.red : C.emerald,
+        transition:'width .5s ease'
+      }}/>
+    </div>
+    {bruitPerturb && (
+      <p style={{ fontSize:10, color:C.red, margin:'4px 0 0' }}>
+        Environnement bruyant — concentration difficile
+      </p>
+    )}
+  </div>
+)}
 
             {/* Jauge engagement fusionné + émotion */}
             <EngagementGauge score={engagementScore} emotion={emotion}/>

@@ -150,6 +150,16 @@ def compute_behavioral_score(events: list) -> dict:
             if etat:
                 etats_affectifs_list.append(etat)
 
+        elif t == "audio_analysis":
+            # Analyse bruit ambiant — pénalité si environnement perturbateur
+            perturb = data.get("bruit_perturb", False)
+            rms     = data.get("rms_level", 0)
+            if perturb:
+                score_comportemental -= 0.08
+            # Signal proxy : bruit fort → ennui potentiel
+            if perturb:
+                etats_affectifs_list.append("ennui")
+
     # Clamp score comportemental
     score_comportemental = max(0.0, min(1.0, score_comportemental))
 
