@@ -24,6 +24,7 @@ db = SessionLocal()
 
 # Nettoyage dans le bon ordre (contraintes FK)
 from app.models.interaction import Interaction
+from app.models.user import TuteurSuivi
 from app.models.cours import BKTMastery, ProgressionApprenant
 
 db.query(BKTMastery).delete()
@@ -31,6 +32,7 @@ db.query(ProgressionApprenant).delete()
 db.query(Interaction).delete()
 db.query(EngagementAnalysis).delete()
 db.query(LearningSession).delete()
+db.query(TuteurSuivi).delete()
 db.query(User).delete()
 db.commit()
 
