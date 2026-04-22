@@ -1,18 +1,20 @@
 import axios from 'axios'
 
+const BASE_URL = import.meta.env.VITE_API_URL 
+  || import.meta.env.VITE_BACKEND_URL
+  || 'https://sti-backend-a2d1.onrender.com'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: BASE_URL,
   timeout: 15000,
 })
 
-// Injecte automatiquement le token JWT dans chaque requête
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('sti_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// Redirige vers /login si token expiré
 api.interceptors.response.use(
   res => res,
   err => {
