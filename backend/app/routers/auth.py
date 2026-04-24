@@ -84,6 +84,7 @@ def login(
         "nom":                 user.nom,
         "prenom":              user.prenom,
         "niveau":              user.niveau_label,
+        "niveau_id": str(user.niveau_id) if user.niveau_id else None,
         "filiere_label":       user.filiere_label,
         "code_invitation":     user.code_invitation,
         "etablissement":       user.etablissement,

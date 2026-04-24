@@ -137,7 +137,7 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const { data } = await api.get('/api/cours/matieres')
+        const { data } = await api.get(`/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`)
         setMatieres(data)
         if (data[0]?.modules[0]) {
           const mid = data[0].modules[0].id

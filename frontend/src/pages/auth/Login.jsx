@@ -80,6 +80,7 @@ dispatch(loginSuccess({
     nom:                 data.nom,
     prenom:              data.prenom,
     niveau_label:        data.niveau,
+    niveau_id:           data.niveau_id, 
     filiere_label:       data.filiere_label,
     code_invitation:     data.code_invitation,
     etablissement:       data.etablissement,

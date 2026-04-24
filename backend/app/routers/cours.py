@@ -17,66 +17,253 @@ router = APIRouter(prefix="/api/cours", tags=["cours"])
 
 
 @router.get("/matieres")
-def get_matieres(niveau: str = None, db: Session = Depends(get_db)):
+def get_matieres(
+    niveau_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
-    Retourne toutes les matières.
-    Si niveau fourni, filtre par niveau (choisi par l'apprenant).
-    Les cours sont universels — visibles par tous.
+    Retourne les matières avec leurs modules.
+    Si niveau_id est fourni, filtre les modules par niveau.
+    Utilisé par Dashboard.jsx et Sidebar.jsx
     """
-    query = db.query(Matiere).filter(Matiere.actif == True)
-    if niveau:
-        query = query.filter(Matiere.description.ilike(f"%{niveau}%"))
-
-    matieres = query.all()
+    matieres = db.query(Matiere).filter(Matiere.actif == True).all()
     result = []
-    for m in matieres:
-        modules = db.query(Module).filter(
-            Module.matiere_id == m.id,
-            Module.actif      == True
-        ).order_by(Module.ordre).all()
+ 
+    for mat in matieres:
+        # Filtrage des modules par niveau si spécifié
+        query = db.query(Module).filter(
+            Module.matiere_id == mat.id,
+            Module.actif == True
+        )
+        if niveau_id:
+            try:
+                nid = UUID(niveau_id)
+                # Modules du niveau OU modules sans niveau (génériques)
+                query = query.filter(
+                    (Module.niveau_id == nid) | (Module.niveau_id == None)
+                )
+            except (ValueError, AttributeError):
+                pass  # niveau_id invalide → pas de filtre
+ 
+        modules = query.order_by(Module.ordre, Module.numero).all()
+        if not modules:
+            continue  # ne pas retourner une matière sans modules pour ce niveau
+ 
+        modules_data = []
+        for mod in modules:
+            modules_data.append({
+                "id":        str(mod.id),
+                "numero":    mod.numero,
+                "titre":     mod.titre,
+                "niveau_id": str(mod.niveau_id) if mod.niveau_id else None,
+            })
+ 
         result.append({
-            "id":          str(m.id),
-            "nom":         m.nom,
-            "niveau":      m.description,
-            "description": m.description,
-            "modules": [{
-                "id":          str(mod.id),
-                "numero":      mod.numero,
-                "titre":       mod.titre,
-                "description": mod.description
-            } for mod in modules]
+            "id":      str(mat.id),
+            "nom":     mat.nom,
+            "code":    mat.code,
+            "modules": modules_data,
         })
+ 
     return result
 
 
 @router.get("/modules/{module_id}/familles")
-def get_familles(module_id: UUID, db: Session = Depends(get_db)):
-    """Retourne les familles de situations d'un module."""
+def get_familles_par_module(
+    module_id: UUID,
+    user_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Retourne les familles + UA d'un module.
+    Si user_id fourni, calcule le statut de chaque UA (terminé/en cours/verrouillé).
+    Applique la logique de prérequis.
+    """
     familles = db.query(FamilleSituation).filter(
         FamilleSituation.module_id == module_id
     ).order_by(FamilleSituation.ordre).all()
-
+ 
+    # Récupère les UAs déjà faites par l'apprenant (si user_id fourni)
+    completed_ua_ids = set()
+    mastery_scores = {}
+    if user_id:
+        try:
+            uid = UUID(user_id)
+            progressions = db.query(ProgressionApprenant).filter(
+                ProgressionApprenant.user_id == uid,
+                ProgressionApprenant.correct == True
+            ).all()
+            completed_ua_ids = {str(p.ua_id) for p in progressions}
+ 
+            # Scores BKT par UA (si disponible)
+            bkt_records = db.query(BKTMastery).filter(
+                BKTMastery.user_id == uid
+            ).all()
+            mastery_scores = {str(b.competence): b.p_mastery for b in bkt_records}
+        except (ValueError, AttributeError):
+            pass
+ 
     result = []
-    for f in familles:
+    for i, famille in enumerate(familles):
         uas = db.query(UniteApprentissage).filter(
-            UniteApprentissage.famille_id == f.id,
+            UniteApprentissage.famille_id == famille.id,
             UniteApprentissage.actif == True
         ).order_by(UniteApprentissage.ordre).all()
+ 
+        unites_data = []
+        for j, ua in enumerate(uas):
+            ua_id_str = str(ua.id)
+ 
+            # ── Logique de prérequis ──────────────────────────────
+            # UA verrouillée si ses prérequis ne sont pas maîtrisés
+            is_locked = False
+            if user_id and ua.prerequis:
+                # prerequis = liste de titres de compétences
+                for prereq in (ua.prerequis or []):
+                    score = mastery_scores.get(prereq, 0.0)
+                    if score < 0.4:  # seuil BKT minimum
+                        is_locked = True
+                        break
+ 
+            # Calcul du statut
+            nb_ex = db.query(Exercice).filter(Exercice.ua_id == ua.id).count()
+            if ua_id_str in completed_ua_ids:
+                statut = "done"
+            elif is_locked:
+                statut = "locked"
+            else:
+                statut = "available"
+ 
+            unites_data.append({
+                "id":                 ua_id_str,
+                "titre":              ua.titre,
+                "reference_ue":       ua.reference_ue,
+                "description":        ua.description,
+                "situation_probleme": ua.situation_probleme,
+                "competences":        ua.competences or [],
+                "prerequis":          ua.prerequis or [],
+                "duree_estimee":      ua.duree_estimee,
+                "nb_exercices":       nb_ex,
+                "statut":             statut,
+                "is_locked":          is_locked,
+            })
+ 
         result.append({
-            "id": str(f.id),
-            "titre": f.titre,
-            "description": f.description,
-            "unites": [{
-                "id": str(ua.id),
-                "titre": ua.titre,
-                "reference_ue": ua.reference_ue,
-                "competences": ua.competences,
-                "duree_estimee": ua.duree_estimee,
-                "nb_exercices": db.query(Exercice).filter(
-                    Exercice.ua_id == ua.id
-                ).count()
-            } for ua in uas]
+            "id":     str(famille.id),
+            "titre":  famille.titre,
+            "unites": unites_data,
         })
+ 
+    return result
+
+
+@router.get("/programme/{niveau_id}")
+def get_programme_par_niveau(
+    niveau_id: UUID,
+    user_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Point d'entrée principal du Dashboard.
+    Retourne Matières → Modules (filtrés par niveau) → Familles → UAs
+    avec statuts de progression si user_id fourni.
+    """
+    # Modules de ce niveau (ou génériques)
+    modules = db.query(Module).filter(
+        Module.actif == True,
+        (Module.niveau_id == niveau_id) | (Module.niveau_id == None)
+    ).order_by(Module.ordre, Module.numero).all()
+ 
+    if not modules:
+        return []
+ 
+    # Grouper par matière
+    matieres_map = {}
+    for mod in modules:
+        mat = db.query(Matiere).filter(Matiere.id == mod.matiere_id).first()
+        if not mat or not mat.actif:
+            continue
+        mat_id = str(mat.id)
+        if mat_id not in matieres_map:
+            matieres_map[mat_id] = {"id": mat_id, "nom": mat.nom, "code": mat.code, "modules": []}
+        matieres_map[mat_id]["modules"].append(mod)
+ 
+    # Récupère progression si user_id
+    completed_ua_ids = set()
+    mastery_scores = {}
+    if user_id:
+        try:
+            uid = UUID(user_id)
+            progressions = db.query(ProgressionApprenant).filter(
+                ProgressionApprenant.user_id == uid,
+                ProgressionApprenant.correct == True
+            ).all()
+            completed_ua_ids = {str(p.ua_id) for p in progressions}
+            bkt_records = db.query(BKTMastery).filter(BKTMastery.user_id == uid).all()
+            mastery_scores = {str(b.competence): b.p_mastery for b in bkt_records}
+        except (ValueError, AttributeError):
+            pass
+ 
+    result = []
+    for mat_id, mat_data in matieres_map.items():
+        modules_result = []
+        for mod in mat_data["modules"]:
+            familles = db.query(FamilleSituation).filter(
+                FamilleSituation.module_id == mod.id
+            ).order_by(FamilleSituation.ordre).all()
+ 
+            familles_result = []
+            for fam in familles:
+                uas = db.query(UniteApprentissage).filter(
+                    UniteApprentissage.famille_id == fam.id,
+                    UniteApprentissage.actif == True
+                ).order_by(UniteApprentissage.ordre).all()
+ 
+                unites_result = []
+                for ua in uas:
+                    ua_id_str = str(ua.id)
+                    nb_ex = db.query(Exercice).filter(Exercice.ua_id == ua.id).count()
+ 
+                    # Prérequis check
+                    is_locked = False
+                    if user_id and ua.prerequis:
+                        for prereq in (ua.prerequis or []):
+                            if mastery_scores.get(prereq, 0.0) < 0.4:
+                                is_locked = True
+                                break
+ 
+                    statut = "done" if ua_id_str in completed_ua_ids else ("locked" if is_locked else "available")
+ 
+                    unites_result.append({
+                        "id":            ua_id_str,
+                        "titre":         ua.titre,
+                        "reference_ue":  ua.reference_ue,
+                        "competences":   ua.competences or [],
+                        "duree_estimee": ua.duree_estimee,
+                        "nb_exercices":  nb_ex,
+                        "statut":        statut,
+                        "is_locked":     is_locked,
+                    })
+ 
+                familles_result.append({
+                    "id":     str(fam.id),
+                    "titre":  fam.titre,
+                    "unites": unites_result,
+                })
+ 
+            modules_result.append({
+                "id":       str(mod.id),
+                "numero":   mod.numero,
+                "titre":    mod.titre,
+                "familles": familles_result,
+            })
+ 
+        result.append({
+            "id":      mat_data["id"],
+            "nom":     mat_data["nom"],
+            "modules": modules_result,
+        })
+ 
     return result
 
 
