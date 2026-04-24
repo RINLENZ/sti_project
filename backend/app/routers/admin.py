@@ -7,10 +7,7 @@ from typing import Optional
 from uuid import UUID
 from ..database import get_db
 from ..models.user import User, TuteurSuivi
-from ..models.cours import (
-    Matiere, Module, FamilleSituation,
-    UniteApprentissage, RessourcePedagogique, Exercice
-)
+from ..models.cours import Matiere, Module, FamilleSituation, UniteApprentissage, Exercice, RessourcePedagogique
 from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
@@ -519,3 +516,110 @@ Retourne UNIQUEMENT un JSON valide :
         "nb_exercices_crees": exercices_crees,
         "competences":       ua.competences
     }
+
+
+# ── Cycles ──────────────────────────────────────────────────────
+
+@router.post("/referentiel/cycles")
+def create_cycle(body: dict, db: Session = Depends(get_db)):
+    cycle = Cycle(nom=body["nom"], code=body["code"])
+    db.add(cycle); db.commit(); db.refresh(cycle)
+    return {"id": str(cycle.id), "nom": cycle.nom, "code": cycle.code}
+
+@router.put("/referentiel/cycles/{cycle_id}")
+def update_cycle(cycle_id: UUID, body: dict, db: Session = Depends(get_db)):
+    cycle = db.query(Cycle).filter(Cycle.id == cycle_id).first()
+    if not cycle: raise HTTPException(404, "Cycle introuvable")
+    for k in ["nom", "code", "description"]:
+        if k in body: setattr(cycle, k, body[k])
+    db.commit()
+    return {"message": "Cycle mis à jour"}
+
+@router.delete("/referentiel/cycles/{cycle_id}")
+def delete_cycle(cycle_id: UUID, db: Session = Depends(get_db)):
+    cycle = db.query(Cycle).filter(Cycle.id == cycle_id).first()
+    if not cycle: raise HTTPException(404, "Cycle introuvable")
+    cycle.actif = False; db.commit()
+    return {"message": "Cycle désactivé"}
+
+# ── Ordres ──────────────────────────────────────────────────────
+
+@router.post("/referentiel/ordres")
+def create_ordre(body: dict, db: Session = Depends(get_db)):
+    ordre = Ordre(
+        nom=body["nom"], code=body["code"],
+        cycle_id=UUID(body["cycle_id"])
+    )
+    db.add(ordre); db.commit(); db.refresh(ordre)
+    return {"id": str(ordre.id), "nom": ordre.nom, "code": ordre.code}
+
+@router.put("/referentiel/ordres/{ordre_id}")
+def update_ordre(ordre_id: UUID, body: dict, db: Session = Depends(get_db)):
+    ordre = db.query(Ordre).filter(Ordre.id == ordre_id).first()
+    if not ordre: raise HTTPException(404, "Ordre introuvable")
+    for k in ["nom", "code", "description"]:
+        if k in body: setattr(ordre, k, body[k])
+    db.commit()
+    return {"message": "Ordre mis à jour"}
+
+@router.delete("/referentiel/ordres/{ordre_id}")
+def delete_ordre(ordre_id: UUID, db: Session = Depends(get_db)):
+    ordre = db.query(Ordre).filter(Ordre.id == ordre_id).first()
+    if not ordre: raise HTTPException(404, "Ordre introuvable")
+    ordre.actif = False; db.commit()
+    return {"message": "Ordre désactivé"}
+
+# ── Filières ─────────────────────────────────────────────────────
+
+@router.post("/referentiel/filieres")
+def create_filiere(body: dict, db: Session = Depends(get_db)):
+    filiere = Filiere(
+        nom=body["nom"], code=body["code"],
+        description=body.get("description", ""),
+        ordre_id=UUID(body["ordre_id"])
+    )
+    db.add(filiere); db.commit(); db.refresh(filiere)
+    return {"id": str(filiere.id), "nom": filiere.nom, "code": filiere.code}
+
+@router.put("/referentiel/filieres/{filiere_id}")
+def update_filiere(filiere_id: UUID, body: dict, db: Session = Depends(get_db)):
+    filiere = db.query(Filiere).filter(Filiere.id == filiere_id).first()
+    if not filiere: raise HTTPException(404, "Filière introuvable")
+    for k in ["nom", "code", "description"]:
+        if k in body: setattr(filiere, k, body[k])
+    db.commit()
+    return {"message": "Filière mise à jour"}
+
+@router.delete("/referentiel/filieres/{filiere_id}")
+def delete_filiere(filiere_id: UUID, db: Session = Depends(get_db)):
+    filiere = db.query(Filiere).filter(Filiere.id == filiere_id).first()
+    if not filiere: raise HTTPException(404, "Filière introuvable")
+    filiere.actif = False; db.commit()
+    return {"message": "Filière désactivée"}
+
+# ── Niveaux ──────────────────────────────────────────────────────
+
+@router.post("/referentiel/niveaux")
+def create_niveau(body: dict, db: Session = Depends(get_db)):
+    niveau = Niveau(
+        nom=body["nom"], code=body["code"],
+        cycle_id=UUID(body["cycle_id"])
+    )
+    db.add(niveau); db.commit(); db.refresh(niveau)
+    return {"id": str(niveau.id), "nom": niveau.nom, "code": niveau.code}
+
+@router.put("/referentiel/niveaux/{niveau_id}")
+def update_niveau(niveau_id: UUID, body: dict, db: Session = Depends(get_db)):
+    niveau = db.query(Niveau).filter(Niveau.id == niveau_id).first()
+    if not niveau: raise HTTPException(404, "Niveau introuvable")
+    for k in ["nom", "code"]:
+        if k in body: setattr(niveau, k, body[k])
+    db.commit()
+    return {"message": "Niveau mis à jour"}
+
+@router.delete("/referentiel/niveaux/{niveau_id}")
+def delete_niveau(niveau_id: UUID, db: Session = Depends(get_db)):
+    niveau = db.query(Niveau).filter(Niveau.id == niveau_id).first()
+    if not niveau: raise HTTPException(404, "Niveau introuvable")
+    niveau.actif = False; db.commit()
+    return {"message": "Niveau désactivé"}

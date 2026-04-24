@@ -542,3 +542,145 @@ def get_referentiel_public(db: Session = Depends(get_db)):
             "niveaux": [{"id": str(n.id), "nom": n.nom, "code": n.code} for n in niveaux]
         })
     return result
+
+
+# ════════════════════════════════════════════════════════════════
+# AJOUTE CES ENDPOINTS À LA FIN DE cours.py
+# Les imports Matiere, UniteApprentissage, Exercice, FamilleSituation
+# sont déjà présents en haut de cours.py
+# ════════════════════════════════════════════════════════════════
+
+# ── CRUD Matières ────────────────────────────────────────────────
+
+@router.post("/matieres")
+def create_matiere(body: dict, db: Session = Depends(get_db)):
+    mat = Matiere(
+        nom=body["nom"],
+        code=body.get("code", ""),
+        description=body.get("description", ""),
+    )
+    db.add(mat); db.commit(); db.refresh(mat)
+    return {"id": str(mat.id), "nom": mat.nom, "code": mat.code}
+
+@router.put("/matieres/{matiere_id}")
+def update_matiere(matiere_id: UUID, body: dict, db: Session = Depends(get_db)):
+    mat = db.query(Matiere).filter(Matiere.id == matiere_id).first()
+    if not mat: raise HTTPException(404, "Matière introuvable")
+    for k in ["nom", "code", "description"]:
+        if k in body: setattr(mat, k, body[k])
+    db.commit()
+    return {"message": "Matière mise à jour"}
+
+@router.delete("/matieres/{matiere_id}")
+def delete_matiere(matiere_id: UUID, db: Session = Depends(get_db)):
+    mat = db.query(Matiere).filter(Matiere.id == matiere_id).first()
+    if not mat: raise HTTPException(404, "Matière introuvable")
+    mat.actif = False; db.commit()
+    return {"message": "Matière désactivée"}
+
+
+# ── CRUD Unités d'apprentissage ──────────────────────────────────
+# Note: UniteApprentissage n'a pas de colonne "statut" ni "difficulte"
+# Ces champs sont ignorés à la sauvegarde
+
+@router.post("/ua")
+def create_ua(body: dict, db: Session = Depends(get_db)):
+    ua = UniteApprentissage(
+        titre=body["titre"],
+        reference_ue=body.get("reference_ue", ""),
+        description=body.get("description", ""),
+        situation_probleme=body.get("situation_probleme", ""),
+        duree_estimee=int(body.get("duree_estimee", 60)),
+        competences=body.get("competences", []),
+        prerequis=body.get("prerequis", []),
+        famille_id=UUID(body["famille_id"]) if body.get("famille_id") else None,
+    )
+    db.add(ua); db.commit(); db.refresh(ua)
+    return {"id": str(ua.id), "titre": ua.titre}
+
+@router.put("/ua/{ua_id}")
+def update_ua(ua_id: UUID, body: dict, db: Session = Depends(get_db)):
+    ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
+    if not ua: raise HTTPException(404, "UA introuvable")
+    for k in ["titre", "reference_ue", "description", "situation_probleme",
+              "duree_estimee", "competences", "prerequis"]:
+        if k in body: setattr(ua, k, body[k])
+    if "famille_id" in body and body["famille_id"]:
+        ua.famille_id = UUID(body["famille_id"])
+    db.commit()
+    return {"message": "UA mise à jour"}
+
+@router.delete("/ua/{ua_id}")
+def delete_ua(ua_id: UUID, db: Session = Depends(get_db)):
+    ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
+    if not ua: raise HTTPException(404, "UA introuvable")
+    ua.actif = False; db.commit()
+    return {"message": "UA désactivée"}
+
+
+# ── CRUD Exercices ───────────────────────────────────────────────
+# Note: Exercice n'a pas de colonne "actif" ni "statut"
+
+@router.get("/exercices")
+def list_exercices(db: Session = Depends(get_db)):
+    """Liste tous les exercices pour AdminCours."""
+    exercices = db.query(Exercice).all()
+    result = []
+    for ex in exercices:
+        result.append({
+            "id":                 str(ex.id),
+            "titre":              ex.titre,
+            "type":               ex.type,
+            "enonce":             ex.enonce,
+            "options":            ex.options or [],
+            "reponse_correcte":   ex.reponse_correcte,
+            "explication":        ex.explication,
+            "indice_1":           ex.indice_1,
+            "indice_2":           ex.indice_2,
+            "competence_evaluee": ex.competence_evaluee,
+            "difficulte":         ex.difficulte,
+            "points":             ex.points,
+            "statut":             "publié",  # pas dans le modèle — valeur fixe
+            "ua_id":              str(ex.ua_id) if ex.ua_id else None,
+        })
+    return result
+
+@router.post("/exercices")
+def create_exercice(body: dict, db: Session = Depends(get_db)):
+    ex = Exercice(
+        titre=body.get("titre", ""),
+        type=body.get("type", "qcm"),
+        enonce=body["enonce"],
+        options=body.get("options"),
+        reponse_correcte=body.get("reponse_correcte", ""),
+        explication=body.get("explication", ""),
+        indice_1=body.get("indice_1", ""),
+        indice_2=body.get("indice_2", ""),
+        competence_evaluee=body.get("competence_evaluee", ""),
+        difficulte=int(body.get("difficulte", 1)),
+        points=int(body.get("points", 10)),
+        ua_id=UUID(body["ua_id"]) if body.get("ua_id") else None,
+    )
+    db.add(ex); db.commit(); db.refresh(ex)
+    return {"id": str(ex.id), "titre": ex.titre}
+
+@router.put("/exercices/{exercice_id}")
+def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db)):
+    ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
+    if not ex: raise HTTPException(404, "Exercice introuvable")
+    for k in ["titre", "type", "enonce", "options", "reponse_correcte",
+              "explication", "indice_1", "indice_2", "competence_evaluee",
+              "difficulte", "points"]:
+        if k in body: setattr(ex, k, body[k])
+    if "ua_id" in body and body["ua_id"]:
+        ex.ua_id = UUID(body["ua_id"])
+    db.commit()
+    return {"message": "Exercice mis à jour"}
+
+@router.delete("/exercices/{exercice_id}")
+def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
+    ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
+    if not ex: raise HTTPException(404, "Exercice introuvable")
+    # Exercice n'a pas de colonne actif — on supprime vraiment
+    db.delete(ex); db.commit()
+    return {"message": "Exercice supprimé"}
