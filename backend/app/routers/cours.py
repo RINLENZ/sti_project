@@ -328,7 +328,7 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db)):
     }
 
 @router.get("/dashboard/enseignant")
-def dashboard_enseignant(db: Session = Depends(get_db)):
+def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
     """
     Retourne une vue globale pour l'enseignant :
     - Liste des apprenants avec leur score d'engagement actuel
@@ -340,7 +340,22 @@ def dashboard_enseignant(db: Session = Depends(get_db)):
     import json
 
     # Récupère tous les apprenants
-    apprenants = db.query(User).filter(User.role == "apprenant").all()
+    from ..models.user import TuteurSuivi
+    liens = db.query(TuteurSuivi).filter(
+        TuteurSuivi.tuteur_id == enseignant_id,
+        TuteurSuivi.actif     == True
+    ).all()
+    apprenant_ids = [l.apprenant_id for l in liens]
+    if not apprenant_ids:
+        return {
+            "apprenants": [],
+            "stats_classe": {"nb_apprenants":0,"score_moyen":0,"nb_decrocheurs":0,"niveau_global":"aucun"},
+            "exercices_difficiles": []
+        }
+    apprenants = db.query(User).filter(
+        User.id.in_(apprenant_ids),
+        User.role == "apprenant"
+    ).all()
 
     result = []
     for apprenant in apprenants:

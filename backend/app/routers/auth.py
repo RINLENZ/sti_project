@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -76,16 +77,21 @@ def login(
         )
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return {
-    "access_token":    token,
-    "token_type":      "bearer",
-    "user_id":         str(user.id),
-    "role":            user.role,
-    "nom":             user.nom,
-    "prenom":          user.prenom,
-    "niveau":          user.niveau_label,
-    "filiere_label":   user.filiere_label,   # ← ajoute cette ligne
-    "code_invitation": user.code_invitation
-}
+        "access_token":        token,
+        "token_type":          "bearer",
+        "user_id":             str(user.id),
+        "role":                user.role,
+        "nom":                 user.nom,
+        "prenom":              user.prenom,
+        "niveau":              user.niveau_label,
+        "filiere_label":       user.filiere_label,
+        "code_invitation":     user.code_invitation,
+        "etablissement":       user.etablissement,
+        "ville":               user.ville,
+        "matieres_enseignees": user.matieres_enseignees,
+        "niveaux_enseignes":   user.niveaux_enseignes,
+        "code_classe":         user.code_classe,
+    }
 
 
 @router.get("/profil/{user_id}")
@@ -103,7 +109,7 @@ def get_profil(user_id: str, db: Session = Depends(get_db)):
         "niveau":          user.niveau_label,
         "pays":            user.pays,
         "code_invitation": user.code_invitation,
-        "created_at":      str(user.created_at)
+        "created_at":      str(user.created_at),
     }
 
 
@@ -114,11 +120,9 @@ def lier_tuteur(code: str, tuteur_id: str, db: Session = Depends(get_db)):
     """
     Un enseignant entre le code_invitation d'un apprenant
     pour commencer à suivre sa progression.
-    La relation est initiée par l'apprenant qui partage son code.
     """
     from ..models.user import TuteurSuivi
 
-    # Trouve l'apprenant par son code
     apprenant = db.query(User).filter(
         User.code_invitation == code.strip().upper(),
         User.role == "apprenant"
@@ -126,7 +130,6 @@ def lier_tuteur(code: str, tuteur_id: str, db: Session = Depends(get_db)):
     if not apprenant:
         raise HTTPException(404, "Code d'invitation invalide")
 
-    # Vérifie que le lien n'existe pas déjà
     existing = db.query(TuteurSuivi).filter(
         TuteurSuivi.apprenant_id == apprenant.id,
         TuteurSuivi.tuteur_id    == UUID(tuteur_id)
@@ -150,6 +153,56 @@ def lier_tuteur(code: str, tuteur_id: str, db: Session = Depends(get_db)):
         "message":      "Lien créé avec succès",
         "apprenant":    f"{apprenant.prenom} {apprenant.nom}",
         "apprenant_id": str(apprenant.id)
+    }
+
+
+@router.post("/lier-enseignant")
+def lier_par_code_classe(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Un apprenant entre le code_classe d'un enseignant.
+    Crée automatiquement la relation TuteurSuivi.
+    """
+    from ..models.user import TuteurSuivi
+
+    code_classe = body.get("code_classe", "").upper().strip()
+    if not code_classe:
+        raise HTTPException(400, "code_classe requis")
+
+    enseignant = db.query(User).filter(
+        User.code_classe == code_classe,
+        User.role == "enseignant"
+    ).first()
+    if not enseignant:
+        raise HTTPException(404, "Aucun enseignant trouvé avec ce code")
+
+    existing = db.query(TuteurSuivi).filter(
+        TuteurSuivi.apprenant_id == current_user.id,
+        TuteurSuivi.tuteur_id    == enseignant.id,
+    ).first()
+    if existing:
+        if not existing.actif:
+            existing.actif = True
+            db.commit()
+        return {
+            "message":    "Déjà lié à cet enseignant",
+            "enseignant": f"{enseignant.prenom} {enseignant.nom}"
+        }
+
+    lien = TuteurSuivi(
+        apprenant_id=current_user.id,
+        tuteur_id=enseignant.id,
+        actif=True
+    )
+    db.add(lien)
+    db.commit()
+    return {
+        "message":    f"Tu es maintenant lié à {enseignant.prenom} {enseignant.nom}",
+        "enseignant": f"{enseignant.prenom} {enseignant.nom}",
+        "tuteur_id":  str(enseignant.id)
     }
 
 
@@ -187,10 +240,9 @@ def update_mon_profil(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Permet à un apprenant de mettre à jour son propre profil.
-    Accessible à tout utilisateur connecté pour son propre compte.
+    Met à jour le profil d'un utilisateur connecté.
+    Accessible à tout rôle pour son propre compte.
     """
-    # Sécurité : on ne peut modifier que son propre profil
     if str(current_user.id) != str(user_id):
         raise HTTPException(403, "Vous ne pouvez modifier que votre propre profil")
 
@@ -198,13 +250,37 @@ def update_mon_profil(
     if not user:
         raise HTTPException(404, "Utilisateur introuvable")
 
-    champs_autorises = ["niveau_label", "filiere_label", "pays", "niveau"]
+    champs_autorises = [
+        # Apprenant
+        "niveau_label", "filiere_label", "pays", "niveau",
+        # Enseignant
+        "etablissement", "ville",
+        "matieres_enseignees", "niveaux_enseignes",
+        "code_classe",
+    ]
+
     for field, value in body.items():
         if field in champs_autorises:
-            setattr(user, field, value)
+            # Sérialise les listes en JSON string
+            if isinstance(value, list):
+                setattr(user, field, json.dumps(value, ensure_ascii=False))
+            else:
+                setattr(user, field, value)
 
     db.commit()
-    return {"message": "Profil mis à jour"}
+
+    return {
+        "message":             "Profil mis à jour",
+        "etablissement":       user.etablissement,
+        "ville":               user.ville,
+        "code_classe":         user.code_classe,
+        "matieres_enseignees": user.matieres_enseignees,
+        "niveaux_enseignes":   user.niveaux_enseignes,
+        "niveau_label":        user.niveau_label,
+        "filiere_label":       user.filiere_label,
+        "pays":                user.pays,
+    }
+
 
 @router.delete("/tuteur/delier/{apprenant_id}")
 def delier_tuteur(apprenant_id: str, tuteur_id: str,

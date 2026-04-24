@@ -75,7 +75,7 @@ export default function DashboardProf() {
 
   const fetchData = useCallback(async () => {
     try {
-      const { data: res } = await api.get('/api/cours/dashboard/enseignant')
+      const { data: res } = await api.get(`/api/cours/dashboard/enseignant?enseignant_id=${user.id}`)
       setData(res)
       setLastUpdate(new Date())
     } catch {
