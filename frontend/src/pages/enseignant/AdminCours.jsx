@@ -294,11 +294,20 @@ function FormUA({ onSubmit, onClose, initial = {}, familles = [] }) {
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
-    e.preventDefault(); setLoading(true)
-    try {
-      await onSubmit({ ...form, duree_estimee: parseInt(form.duree_estimee), difficulte: parseInt(form.difficulte) })
-    } finally { setLoading(false) }
-  }
+  e.preventDefault(); setLoading(true)
+  try {
+    const payload = {
+      titre:              form.titre,
+      reference_ue:       form.reference_ue,
+      situation_probleme: form.situation_probleme,
+      duree_estimee:      parseInt(form.duree_estimee),
+      famille_id:         form.famille_id,
+      competences:        form.competences,
+      prerequis:          form.prerequis,
+    }
+    await onSubmit(payload)
+  } finally { setLoading(false) }
+}
 
   return (
     <form onSubmit={handleSubmit}>
@@ -366,17 +375,25 @@ function FormExercice({ onSubmit, onClose, initial = {}, uas = [] }) {
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
-    e.preventDefault(); setLoading(true)
-    try {
-      await onSubmit({
-        ...form,
-        options: form.type === 'qcm' ? form.options.filter(o => o.trim()) : null,
-        difficulte: parseInt(form.difficulte),
-        points: parseInt(form.points),
-      })
-    } finally { setLoading(false) }
-  }
-
+  e.preventDefault(); setLoading(true)
+  try {
+    const payload = {
+      titre:              form.titre,
+      type:               form.type,
+      enonce:             form.enonce,
+      options:            form.type === 'qcm' ? form.options.filter(o => o.trim()) : null,
+      reponse_correcte:   form.reponse_correcte,
+      explication:        form.explication,
+      indice_1:           form.indice_1,
+      indice_2:           form.indice_2,
+      competence_evaluee: form.competence_evaluee,
+      difficulte:         parseInt(form.difficulte),
+      points:             parseInt(form.points),
+      ua_id:              form.ua_id,
+    }
+    await onSubmit(payload)
+  } finally { setLoading(false) }
+}
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

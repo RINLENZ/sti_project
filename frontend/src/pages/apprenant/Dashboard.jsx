@@ -134,32 +134,44 @@ export default function Dashboard() {
   const [loading,     setLoading]     = useState(true)
   const [copied,      setCopied]      = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data } = await api.get(`/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`)
-        setMatieres(data)
-        if (data[0]?.modules[0]) {
-          const mid = data[0].modules[0].id
-          const { data: fam } = await api.get(`/api/cours/modules/${mid}/familles`)
-          setFamilles(fam)
+ useEffect(() => {
+  async function load() {
+    try {
+      const { data } = await api.get(
+        `/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`
+      )
+      setMatieres(data)
+
+      // Charger les familles de TOUS les modules de TOUTES les matières
+      const toutesLesFamilles = []
+      for (const matiere of data) {
+        for (const mod of (matiere.modules || [])) {
+          try {
+            const { data: fam } = await api.get(
+              `/api/cours/modules/${mod.id}/familles?user_id=${user.id}`
+            )
+            toutesLesFamilles.push(...fam)
+          } catch {}
         }
-        const { data: prog } = await api.get(`/api/cours/progression/${user.id}`)
-        setProgression(prog)
-        const { data: bkt }  = await api.get(`/api/bkt/apprenant/${user.id}`)
-        setBktData(bkt)
-        try {
-          const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
-          setRecommandee(reco?.recommandee || null)
-        } catch {}
-      } catch {
-        toast.error('Erreur de chargement')
-      } finally {
-        setLoading(false)
       }
+      setFamilles(toutesLesFamilles)
+
+      const { data: prog } = await api.get(`/api/cours/progression/${user.id}`)
+      setProgression(prog)
+      const { data: bkt } = await api.get(`/api/bkt/apprenant/${user.id}`)
+      setBktData(bkt)
+      try {
+        const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
+        setRecommandee(reco?.recommandee || null)
+      } catch {}
+    } catch {
+      toast.error('Erreur de chargement')
+    } finally {
+      setLoading(false)
     }
-    load()
-  }, [user.id])
+  }
+  load()
+}, [user.id])
 
   function copyCode() {
     navigator.clipboard.writeText(user?.code_invitation || '')

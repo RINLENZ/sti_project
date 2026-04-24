@@ -365,24 +365,24 @@ export default function AdminReferentiel() {
   // ── Handlers CRUD ───────────────────────────────────────────
   const CRUD = {
     cycle: {
-      create: async p => { await api.post('/api/cours/referentiel/cycles', p);         toast.success('Cycle créé !') },
-      update: async (id, p) => { await api.put(`/api/cours/referentiel/cycles/${id}`, p); toast.success('Cycle mis à jour !') },
-      delete: async id => { await api.delete(`/api/cours/referentiel/cycles/${id}`); toast.success('Cycle désactivé') },
+      create: async p => { await api.post('/api/admin/referentiel/cycles', p);         toast.success('Cycle créé !') },
+      update: async (id, p) => { await api.put(`/api/admin/referentiel/cycles/${id}`, p); toast.success('Cycle mis à jour !') },
+      delete: async id => { await api.delete(`/api/admin/referentiel/cycles/${id}`); toast.success('Cycle désactivé') },
     },
     ordre: {
-      create: async p => { await api.post('/api/cours/referentiel/ordres', p);         toast.success('Ordre créé !') },
-      update: async (id, p) => { await api.put(`/api/cours/referentiel/ordres/${id}`, p); toast.success('Ordre mis à jour !') },
-      delete: async id => { await api.delete(`/api/cours/referentiel/ordres/${id}`); toast.success('Ordre désactivé') },
+      create: async p => { await api.post('/api/admin/referentiel/ordres', p);         toast.success('Ordre créé !') },
+      update: async (id, p) => { await api.put(`/api/admin/referentiel/ordres/${id}`, p); toast.success('Ordre mis à jour !') },
+      delete: async id => { await api.delete(`/api/admin/referentiel/ordres/${id}`); toast.success('Ordre désactivé') },
     },
     filiere: {
-      create: async p => { await api.post('/api/cours/referentiel/filieres', p);         toast.success('Filière créée !') },
-      update: async (id, p) => { await api.put(`/api/cours/referentiel/filieres/${id}`, p); toast.success('Filière mise à jour !') },
-      delete: async id => { await api.delete(`/api/cours/referentiel/filieres/${id}`); toast.success('Filière désactivée') },
+      create: async p => { await api.post('/api/admin/referentiel/filieres', p);         toast.success('Filière créée !') },
+      update: async (id, p) => { await api.put(`/api/admin/referentiel/filieres/${id}`, p); toast.success('Filière mise à jour !') },
+      delete: async id => { await api.delete(`/api/admin/referentiel/filieres/${id}`); toast.success('Filière désactivée') },
     },
     niveau: {
-      create: async p => { await api.post('/api/cours/referentiel/niveaux', p);         toast.success('Niveau créé !') },
-      update: async (id, p) => { await api.put(`/api/cours/referentiel/niveaux/${id}`, p); toast.success('Niveau mis à jour !') },
-      delete: async id => { await api.delete(`/api/cours/referentiel/niveaux/${id}`); toast.success('Niveau désactivé') },
+      create: async p => { await api.post('/api/admin/referentiel/niveaux', p);         toast.success('Niveau créé !') },
+      update: async (id, p) => { await api.put(`/api/admin/referentiel/niveaux/${id}`, p); toast.success('Niveau mis à jour !') },
+      delete: async id => { await api.delete(`/api/admin/referentiel/niveaux/${id}`); toast.success('Niveau désactivé') },
     },
   }
 

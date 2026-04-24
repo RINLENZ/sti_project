@@ -138,7 +138,6 @@ def get_familles_par_module(
                 "id":                 ua_id_str,
                 "titre":              ua.titre,
                 "reference_ue":       ua.reference_ue,
-                "description":        ua.description,
                 "situation_probleme": ua.situation_probleme,
                 "competences":        ua.competences or [],
                 "prerequis":          ua.prerequis or [],
