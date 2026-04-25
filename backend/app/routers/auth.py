@@ -169,7 +169,8 @@ def lier_par_code_classe(
     """
     from ..models.user import TuteurSuivi
 
-    code_classe = body.get("code_classe", "").upper().strip()
+    code_classe = body.get("code_classe",
+        "avatar", "pays", "").upper().strip()
     if not code_classe:
         raise HTTPException(400, "code_classe requis")
 
@@ -258,6 +259,7 @@ def update_mon_profil(
         "etablissement", "ville",
         "matieres_enseignees", "niveaux_enseignes",
         "code_classe",
+        "avatar", "pays",
     ]
 
     for field, value in body.items():
