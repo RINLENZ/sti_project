@@ -5,11 +5,11 @@ import { useNavigate } from 'react-router-dom'
    DESIGN TOKENS
 ═══════════════════════════════════════════════════════════════ */
 const T = {
-  bg:        '#0D1628',
-  bgLight:   '#121E36',
-  surface:   '#182034',
-  card:      '#1E2A42',
-  cardHover: '#243250',
+  bg:        '#1d0902',
+  bgLight:   '#362212',
+  surface:   '#342818',
+  card:      '#42291e',
+  cardHover: '#504124',
   border:    'rgba(255,255,255,0.07)',
   gold:      '#F0B429',
   goldLight: '#FFD060',
@@ -19,16 +19,16 @@ const T = {
   coral:     '#FF6B6B',
   coralPale: 'rgba(255,107,107,0.1)',
   sky:       '#38BDF8',
-  skyPale:   'rgba(56,189,248,0.1)',
+  skyPale:   'rgba(248, 203, 56, 0.1)',
   text:      '#EEF2FF',
-  textSec:   '#8892B0',
-  textMuted: '#4A5568',
+  textSec:   '#b09f88',
+  textMuted: '#685a4a',
 }
 
 const gGold   = `linear-gradient(135deg, ${T.gold}, #E8952A)`
 const gTeal   = `linear-gradient(135deg, ${T.teal}, #00A896)`
 const gHero   = `linear-gradient(135deg, ${T.gold} 0%, ${T.teal} 50%, ${T.sky} 100%)`
-const gCool   = `linear-gradient(135deg, ${T.sky}, #6366F1)`
+const gCool   = `linear-gradient(135deg, ${T.sky}, #f1c463)`
 
 /* ═══════════════════════════════════════════════════════════════
    HOOKS
@@ -141,7 +141,7 @@ function Navbar({ onLogin }) {
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
       padding: scrolled ? '10px 24px' : '18px 24px',
-      background: scrolled ? 'rgba(13,22,40,0.92)' : 'transparent',
+      background: scrolled ? 'rgba(40, 29, 13, 0.92)' : 'transparent',
       backdropFilter: scrolled ? 'blur(20px)' : 'none',
       borderBottom: scrolled ? `1px solid ${T.border}` : 'none',
       transition: 'all 0.35s cubic-bezier(.4,0,.2,1)',
@@ -761,7 +761,7 @@ function Footer() {
     { title:'Académique', links:['Programme APC','Méthode BKT','ENSET Ebolowa','Contacts'] },
   ]
   return (
-    <footer style={{ background:'#080E1C', padding:'56px 24px 32px', borderTop:`1px solid ${T.border}` }}>
+    <footer style={{ background:'#1c1008', padding:'56px 24px 32px', borderTop:`1px solid ${T.border}` }}>
       <div style={{ maxWidth:1100, margin:'0 auto' }}>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:40, marginBottom:48 }}>
           {/* Brand */}

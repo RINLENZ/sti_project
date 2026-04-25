@@ -226,9 +226,14 @@ function FormMatiere({ onSubmit, onClose, initial = {}, modules = [] }) {
   const EMOJIS = ['📚', '📐', '🔬', '🌍', '💡', '🖥️', '🎨', '📊', '✏️', '🧮']
 
   async function handleSubmit(e) {
-    e.preventDefault(); setLoading(true)
-    try { await onSubmit(form) } finally { setLoading(false) }
-  }
+  e.preventDefault(); setLoading(true)
+  try {
+    await onSubmit({
+      nom:  form.nom,
+      code: form.code,
+    })
+  } finally { setLoading(false) }
+}
 
   return (
     <form onSubmit={handleSubmit}>

@@ -134,7 +134,7 @@ def update_apprenant(user_id: UUID, body: UserUpdate,
 def get_structure_complete(db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
     """Retourne toute la structure pédagogique pour l'interface admin."""
-    matieres = db.query(Matiere).all()
+    matieres = db.query(Matiere).filter(Matiere.actif == True).all()
     result = []
     for mat in matieres:
         modules = db.query(Module).filter(Module.matiere_id == mat.id).all()

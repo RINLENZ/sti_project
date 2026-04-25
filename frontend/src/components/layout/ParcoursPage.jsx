@@ -1,60 +1,213 @@
 import { useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import api from '../../services/api'
 import {
   Map, BookOpen, Clock, ChevronRight, ChevronLeft,
   CheckCircle2, PlayCircle, Lock, Trophy,
-  ChevronDown, ChevronUp, BookMarked, Layers
+  ChevronDown, BookMarked, Layers, Star
 } from 'lucide-react'
 
 const C = {
-  brown:      '#6B3A2A', brownLight: '#C4865A',
-  brownPale:  '#F5EDE5', gold:       '#D4A853',
-  emerald:    '#0D9373', emeraldPale:'#E6F5F0',
-  bg:         '#FAF7F4', surface:    '#FFFFFF',
-  text:       '#1A1207', textSec:    '#6B5744',
+  brown:       '#6B3A2A', brownDark:  '#3D1F13',
+  brownLight:  '#C4865A', brownPale:  '#F5EDE5',
+  gold:        '#D4A853', emerald:    '#0D9373',
+  emeraldPale: '#E6F5F0', bg:         '#FAF7F4',
+  surface:     '#FFFFFF', text:       '#1A1207',
+  textSec:     '#6B5744', red:        '#DC2626',
+  orange:      '#F59E0B', blue:       '#2563EB',
 }
 
+// ── Helpers ─────────────────────────────────────────────────────
+
 function uaStatus(ua, progression) {
+  if (ua.statut === 'done') return 'done'
+  if (ua.is_locked) return 'locked'
   const details = progression?.details || []
   const done = details.filter(d => d.ua_id === ua.id && d.correct).length
-  const pct = ua.nb_exercices > 0 ? Math.round(done / ua.nb_exercices * 100) : 0
+  const pct  = ua.nb_exercices > 0 ? Math.round(done / ua.nb_exercices * 100) : 0
   if (pct === 100) return 'done'
-  if (pct > 0) return 'inprogress'
+  if (pct > 0)     return 'inprogress'
   return 'todo'
 }
 
-function StatusBadge({ status }) {
-  const cfg = {
-    done:       { label: 'Terminé',   color: C.emerald, bg: `${C.emerald}18` },
-    inprogress: { label: 'En cours',  color: C.gold,    bg: `${C.gold}18`    },
-    todo:       { label: 'À faire',   color: C.textSec, bg: C.brownPale      },
-  }[status]
-  return (
-    <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: cfg.bg, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
-      {cfg.label}
-    </span>
-  )
+function uaStars(ua, progression) {
+  const details = progression?.details || []
+  const done = details.filter(d => d.ua_id === ua.id && d.correct).length
+  const pct  = ua.nb_exercices > 0 ? Math.round(done / ua.nb_exercices * 100) : 0
+  if (pct >= 90) return 3
+  if (pct >= 60) return 2
+  if (pct >= 30) return 1
+  return 0
 }
 
-function StatusIcon({ status, size = 18 }) {
-  if (status === 'done')       return <CheckCircle2 size={size} color={C.emerald}/>
-  if (status === 'inprogress') return <PlayCircle   size={size} color={C.gold}/>
-  return <Lock size={size} color="#CBD5E1"/>
-}
+const ProgressBar = ({ value, color = C.emerald, h = 5 }) => (
+  <div style={{ height: h, background: 'rgba(107,58,42,0.1)', borderRadius: h, overflow: 'hidden' }}>
+    <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, background: color, borderRadius: h, transition: 'width .7s ease' }} />
+  </div>
+)
 
-function ProgressBar({ value, color = C.emerald, h = 5 }) {
+// ── Nœud UA style Duolingo ──────────────────────────────────────
+function UANode({ ua, index, progression, recommandeeId, navigate, isLast }) {
+  const status  = uaStatus(ua, progression)
+  const stars   = uaStars(ua, progression)
+  const isDone       = status === 'done'
+  const isInProgress = status === 'inprogress'
+  const isTodo       = status === 'todo'
+  const isLocked     = status === 'locked'
+  const isReco       = recommandeeId === ua.id
+  const canClick     = !isLocked && status !== 'locked'
+
+  // Décalage zigzag
+  const offsets = [0, 48, 80, 48, 0, -48, -80, -48]
+  const offset  = offsets[index % offsets.length]
+
+  const size = (isDone || isTodo || isLocked) ? 64 : 72
+
+  const nodeStyle = {
+    width: size, height: size, borderRadius: '50%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: isDone ? 26 : isInProgress ? 28 : 22,
+    cursor: canClick ? 'pointer' : 'default',
+    transition: 'transform .15s, box-shadow .15s',
+    border: isDone
+      ? `3px solid ${C.brownLight}`
+      : isInProgress
+        ? `3px solid ${C.gold}`
+        : `2px dashed ${isLocked ? '#CBD5E1' : '#D1D5DB'}`,
+    background: isDone
+      ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
+      : isInProgress
+        ? `linear-gradient(135deg, ${C.gold}, ${C.orange})`
+        : '#F3F4F6',
+    boxShadow: isInProgress
+      ? `0 0 0 8px ${C.gold}20, 0 4px 20px ${C.gold}40`
+      : isDone
+        ? `0 4px 14px ${C.brown}35`
+        : 'none',
+    animation: isInProgress ? 'pulse 2.5s infinite' : 'none',
+  }
+
+  const emoji = isDone
+    ? '✅'
+    : isInProgress
+      ? '📖'
+      : isLocked
+        ? '🔒'
+        : '📘'
+
   return (
-    <div style={{ height: h, background: 'rgba(107,58,42,0.1)', borderRadius: h, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${Math.min(100, value)}%`, background: color, borderRadius: h, transition: 'width .7s cubic-bezier(.4,0,.2,1)' }}/>
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      marginLeft: offset, animation: `fadeIn .3s ease ${index * 0.07}s both`,
+    }}>
+      {/* Badge recommandé */}
+      {isReco && !isDone && !isLocked && (
+        <div style={{
+          background: C.emerald, color: 'white',
+          fontSize: 9, fontWeight: 700, padding: '3px 10px',
+          borderRadius: 20, marginBottom: 6, letterSpacing: .5,
+        }}>
+          ⭐ RECOMMANDÉ PAR L'IA
+        </div>
+      )}
+
+      {/* Nœud */}
+      <div style={{ position: 'relative' }}>
+        <div
+          style={nodeStyle}
+          onClick={() => canClick && navigate(`/cours/${ua.id}`)}
+          onMouseOver={e => { if (canClick) { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = isInProgress ? `0 0 0 10px ${C.gold}25, 0 6px 24px ${C.gold}50` : `0 6px 20px ${C.brown}40` } }}
+          onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = nodeStyle.boxShadow }}
+        >
+          <span>{emoji}</span>
+        </div>
+
+        {/* Badge EN COURS */}
+        {isInProgress && (
+          <div style={{
+            position: 'absolute', top: -8, right: -8,
+            background: C.red, color: 'white',
+            fontSize: 8, fontWeight: 700, padding: '2px 7px',
+            borderRadius: 10, whiteSpace: 'nowrap',
+          }}>
+            EN COURS
+          </div>
+        )}
+      </div>
+
+      {/* Étoiles */}
+      <div style={{ display: 'flex', gap: 2, margin: '8px 0 4px' }}>
+        {[1, 2, 3].map(s => (
+          <Star
+            key={s}
+            size={13}
+            fill={s <= stars ? C.gold : 'none'}
+            color={s <= stars ? C.gold : '#D1D5DB'}
+          />
+        ))}
+      </div>
+
+      {/* Titre */}
+      <div style={{ textAlign: 'center', maxWidth: 140 }}>
+        <p style={{
+          fontSize: 11, fontWeight: 700,
+          color: isLocked ? '#9CA3AF' : isDone ? C.brown : C.text,
+          margin: '0 0 3px', lineHeight: 1.3,
+        }}>
+          {ua.titre.length > 40 ? ua.titre.substring(0, 40) + '…' : ua.titre}
+        </p>
+        <span style={{ fontSize: 10, color: isLocked ? '#9CA3AF' : C.textSec }}>
+          {ua.reference_ue}
+          {ua.nb_exercices > 0 && ` · ${ua.nb_exercices} exos`}
+          {ua.duree_estimee > 0 && ` · ${ua.duree_estimee}min`}
+        </span>
+      </div>
+
+      {/* Bouton action */}
+      {canClick && (
+        <button
+          onClick={() => navigate(`/cours/${ua.id}`)}
+          style={{
+            marginTop: 8, padding: '6px 20px',
+            background: isDone
+              ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
+              : `linear-gradient(135deg, ${C.gold}, ${C.orange})`,
+            color: 'white', border: 'none', borderRadius: 20,
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            boxShadow: `0 3px 10px ${isDone ? C.brown : C.gold}35`,
+            transition: 'transform .15s',
+          }}
+          onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          {isDone ? 'Revoir' : isInProgress ? 'Continuer →' : 'Commencer →'}
+        </button>
+      )}
+
+      {isLocked && (
+        <p style={{ fontSize: 10, color: '#9CA3AF', marginTop: 6, textAlign: 'center', maxWidth: 120, lineHeight: 1.4 }}>
+          Terminez l'UA précédente pour débloquer
+        </p>
+      )}
+
+      {/* Connecteur vers le nœud suivant */}
+      {!isLast && (
+        <div style={{
+          width: 3, height: 40, marginTop: 10,
+          background: isDone
+            ? `linear-gradient(${C.brown}, ${C.brownLight})`
+            : `repeating-linear-gradient(to bottom, #D1D5DB 0px, #D1D5DB 6px, transparent 6px, transparent 12px)`,
+          borderRadius: 2,
+        }} />
+      )}
     </div>
   )
 }
 
-// ── Famille accordion card ────────────────────────────────────────
-function FamilleCard({ famille, fi, progression, currentUaId, navigate }) {
-  const [open, setOpen] = useState(fi === 0) // première ouverte par défaut
+// ── Section famille (accordéon) ─────────────────────────────────
+function FamilleSection({ famille, index, progression, recommandeeId, navigate }) {
+  const [open, setOpen] = useState(index === 0)
 
   const doneFam  = (famille.unites || []).filter(u => uaStatus(u, progression) === 'done').length
   const totalFam = (famille.unites || []).length
@@ -63,367 +216,377 @@ function FamilleCard({ famille, fi, progression, currentUaId, navigate }) {
 
   return (
     <div style={{
-      background: C.surface,
-      borderRadius: 18,
-      overflow: 'hidden',
-      boxShadow: open
-        ? '0 8px 30px rgba(107,58,42,0.12)'
-        : '0 2px 8px rgba(107,58,42,0.06)',
-      border: `1px solid ${allDone ? C.emerald + '40' : C.brownPale}`,
-      transition: 'box-shadow .25s ease',
+      background: C.surface, borderRadius: 20, overflow: 'hidden',
+      border: `1px solid ${allDone ? C.emerald + '50' : C.brownPale}`,
+      boxShadow: open ? '0 8px 32px rgba(107,58,42,0.12)' : '0 2px 10px rgba(107,58,42,0.06)',
+      transition: 'box-shadow .25s',
+      animation: `fadeIn .35s ease ${index * 0.08}s both`,
     }}>
-
-      {/* ── Header famille ── */}
+      {/* Header */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-          padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14,
+          padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 14,
           borderBottom: open ? `1px solid ${C.brownPale}` : 'none',
-          transition: 'background .15s',
         }}
-        onMouseEnter={e => e.currentTarget.style.background = C.brownPale + '60'}
+        onMouseEnter={e => e.currentTarget.style.background = `${C.brownPale}60`}
         onMouseLeave={e => e.currentTarget.style.background = 'none'}
       >
         {/* Numéro / check */}
         <div style={{
-          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+          width: 44, height: 44, borderRadius: 14, flexShrink: 0,
           background: allDone
             ? `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`
-            : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+            : `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, fontWeight: 900, color: 'white',
-          boxShadow: `0 3px 10px ${allDone ? C.emerald : C.brown}40`,
+          fontSize: 15, fontWeight: 900, color: 'white',
+          boxShadow: `0 4px 14px ${allDone ? C.emerald : C.brown}40`,
         }}>
-          {allDone ? '✓' : fi + 1}
+          {allDone ? '✓' : index + 1}
         </div>
 
-        {/* Titre + stats */}
         <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, marginBottom: 6, lineHeight: 1.3 }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: '0 0 6px' }}>
             {famille.titre}
           </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <ProgressBar value={pctFam} color={allDone ? C.emerald : C.brownLight} h={4}/>
-            <span style={{
-              fontSize: 11, fontWeight: 700, color: allDone ? C.emerald : C.brownLight,
-              flexShrink: 0, minWidth: 36,
-            }}>
-              {pctFam}%
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <ProgressBar value={pctFam} color={allDone ? C.emerald : C.brownLight} h={5} />
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: allDone ? C.emerald : C.brownLight, flexShrink: 0 }}>
+              {doneFam}/{totalFam} UA
             </span>
           </div>
-          <p style={{ fontSize: 11, color: C.textSec, margin: 0, marginTop: 4 }}>
-            {doneFam}/{totalFam} unité{totalFam > 1 ? 's' : ''} terminée{doneFam > 1 ? 's' : ''}
-          </p>
         </div>
 
-        {/* Chevron */}
-        <div style={{ flexShrink: 0, color: C.textSec, transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }}>
-          <ChevronDown size={18}/>
-        </div>
+        <ChevronDown
+          size={18} color={C.textSec}
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }}
+        />
       </button>
 
-      {/* ── Unités ── */}
+      {/* Parcours Duolingo */}
       {open && (
-        <div>
-          {(famille.unites || []).map((ua, ui) => {
-            const status  = uaStatus(ua, progression)
-            const isExam  = ua.type === 'exam'
-            const active  = currentUaId === ua.id
-            const isLast  = ui === (famille.unites || []).length - 1
-
-            return (
-              <button key={ua.id}
-                onClick={() => status !== 'todo' && navigate(`/cours/${ua.id}`)}
-                style={{
-                  width: '100%', background: active
-                    ? `linear-gradient(90deg, ${C.brownPale}, ${C.brownPale}80)`
-                    : 'none',
-                  border: 'none',
-                  borderLeft: active ? `3px solid ${C.brown}` : '3px solid transparent',
-                  borderBottom: !isLast ? `1px solid ${C.brownPale}` : 'none',
-                  cursor: status === 'todo' ? 'default' : 'pointer',
-                  padding: '14px 20px 14px 18px',
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  textAlign: 'left',
-                  opacity: status === 'todo' ? 0.55 : 1,
-                  transition: 'all .15s',
-                }}
-                onMouseEnter={e => { if (!active && status !== 'todo') e.currentTarget.style.background = C.brownPale + '70' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = active ? `linear-gradient(90deg, ${C.brownPale}, ${C.brownPale}80)` : 'none' }}
-              >
-                {/* Connecteur vertical (ligne de parcours) */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, position: 'relative' }}>
-                  <StatusIcon status={status} size={20}/>
-                  {!isLast && (
-                    <div style={{
-                      position: 'absolute', top: 22, width: 2, height: 'calc(100% + 14px)',
-                      background: status === 'done'
-                        ? `linear-gradient(${C.emerald}, ${C.brownPale})`
-                        : C.brownPale,
-                      left: '50%', transform: 'translateX(-50%)',
-                    }}/>
-                  )}
-                </div>
-
-                {/* Contenu */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                    {isExam && <Trophy size={13} color={C.gold}/>}
-                    <p style={{
-                      fontSize: 13, fontWeight: active ? 800 : status === 'done' ? 700 : 600,
-                      color: active ? C.brown : C.text,
-                      margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {ua.titre}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    {ua.nb_exercices > 0 && (
-                      <span style={{ fontSize: 11, color: C.textSec, display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <BookOpen size={10}/> {ua.nb_exercices} exos
-                      </span>
-                    )}
-                    {ua.duree_estimee > 0 && (
-                      <span style={{ fontSize: 11, color: C.textSec, display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <Clock size={10}/> {ua.duree_estimee}min
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Badge statut + flèche */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <StatusBadge status={status}/>
-                  {status !== 'todo' && <ChevronRight size={14} color={C.brownLight}/>}
-                </div>
-              </button>
-            )
-          })}
+        <div style={{ padding: '28px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {(famille.unites || []).length === 0 ? (
+            <p style={{ color: C.textSec, fontSize: 13 }}>Aucune UA dans cette famille.</p>
+          ) : (
+            (famille.unites || []).map((ua, i) => (
+              <UANode
+                key={ua.id}
+                ua={ua}
+                index={i}
+                progression={progression}
+                recommandeeId={recommandeeId}
+                navigate={navigate}
+                isLast={i === famille.unites.length - 1}
+              />
+            ))
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── ParcoursPage ──────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════
+// ── PAGE PARCOURS ───────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════
 export default function ParcoursPage({ onBack }) {
   const { user }   = useSelector(s => s.auth)
   const navigate   = useNavigate()
-  const location   = useLocation()
 
   const [matieres,    setMatieres]    = useState([])
-  const [modules,     setModules]     = useState([])  // modules de la matière sélectionnée
+  const [modules,     setModules]     = useState([])
   const [familles,    setFamilles]    = useState([])
   const [progression, setProgression] = useState(null)
+  const [recommandee, setRecommandee] = useState(null)
   const [selectedMat, setSelectedMat] = useState(null)
   const [selectedMod, setSelectedMod] = useState(null)
   const [loading,     setLoading]     = useState(true)
+  const [loadingFam,  setLoadingFam]  = useState(false)
 
-  const currentUaId = location.pathname.startsWith('/cours/')
-    ? parseInt(location.pathname.split('/cours/')[1])
-    : null
+  // ── Charge les familles d'un module ──────────────────────────
+  const loadFamilles = useCallback(async (mod) => {
+    if (!mod) return
+    setLoadingFam(true)
+    try {
+      const { data: fam } = await api.get(
+        `/api/cours/modules/${mod.id}/familles?user_id=${user.id}`
+      )
+      setFamilles(fam)
+    } catch { setFamilles([]) }
+    finally { setLoadingFam(false) }
+  }, [user.id])
 
-  // ── Chargement initial ──────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return
     async function init() {
       try {
         const [{ data: mat }, { data: prog }] = await Promise.all([
-          api.get('/api/cours/matieres'),
+          api.get(`/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`),
           api.get(`/api/cours/progression/${user.id}`),
         ])
         setMatieres(mat)
         setProgression(prog)
-        if (mat[0]) {
+
+        if (mat.length > 0) {
           setSelectedMat(mat[0])
-          setModules(mat[0].modules || [])
-          const firstMod = mat[0].modules?.[0]
-          if (firstMod) {
-            setSelectedMod(firstMod)
-            const { data: fam } = await api.get(`/api/cours/modules/${firstMod.id}/familles`)
-            setFamilles(fam)
+          const mods = mat[0].modules || []
+          setModules(mods)
+          if (mods.length > 0) {
+            setSelectedMod(mods[0])
+            await loadFamilles(mods[0])
           }
         }
+
+        try {
+          const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
+          setRecommandee(reco?.recommandee || null)
+        } catch {}
       } catch {}
       finally { setLoading(false) }
     }
     init()
-  }, [user?.id])
+  }, [user?.id, loadFamilles])
 
-  // ── Changement de matière ───────────────────────────────────────
+  // ── Changement matière ────────────────────────────────────────
   async function handleSelectMatiere(mat) {
     setSelectedMat(mat)
     setFamilles([])
     const mods = mat.modules || []
     setModules(mods)
-    const firstMod = mods[0]
-    setSelectedMod(firstMod || null)
-    if (firstMod) {
-      try {
-        const { data: fam } = await api.get(`/api/cours/modules/${firstMod.id}/familles`)
-        setFamilles(fam)
-      } catch {}
-    }
+    const first = mods[0] || null
+    setSelectedMod(first)
+    await loadFamilles(first)
   }
 
-  // ── Changement de module ────────────────────────────────────────
+  // ── Changement module ─────────────────────────────────────────
   async function handleSelectModule(mod) {
     setSelectedMod(mod)
-    setFamilles([])
-    try {
-      const { data: fam } = await api.get(`/api/cours/modules/${mod.id}/familles`)
-      setFamilles(fam)
-    } catch {}
+    await loadFamilles(mod)
   }
 
-  // ── Stats globales ──────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────
   const totalDone  = familles.reduce((a, f) => a + (f.unites || []).filter(u => uaStatus(u, progression) === 'done').length, 0)
   const totalUnits = familles.reduce((a, f) => a + (f.unites || []).length, 0)
   const overallPct = totalUnits > 0 ? Math.round(totalDone / totalUnits * 100) : 0
 
-  // ── Spinner ─────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', background: C.bg }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 14px', animation: 'spin 1s linear infinite' }}/>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 14px', animation: 'spin 1s linear infinite' }} />
         <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600, margin: 0 }}>Chargement du parcours…</p>
       </div>
     </div>
   )
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    <div style={{ background: C.bg, minHeight: '100vh' }}>
+      <style>{`
+        @keyframes spin    { to { transform: rotate(360deg) } }
+        @keyframes fadeIn  { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes pulse   { 0%,100%{box-shadow:0 0 0 0 ${C.gold}55} 50%{box-shadow:0 0 0 12px ${C.gold}00} }
+        * { box-sizing: border-box; }
+      `}</style>
 
-      {/* ══ HERO HEADER ══════════════════════════════════════════ */}
+      {/* ── HERO ── */}
       <div style={{
-        background: `linear-gradient(135deg, ${C.brown} 0%, ${C.brownLight} 100%)`,
-        padding: '28px 28px 24px',
-        position: 'relative', overflow: 'hidden',
+        background: `linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 60%, ${C.brownLight} 100%)`,
+        padding: '28px 28px 24px', position: 'relative', overflow: 'hidden',
       }}>
-        {/* Motif de fond */}
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none' }}>
           <defs>
-            <pattern id="grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-              <circle cx="20" cy="20" r="1.5" fill="white"/>
+            <pattern id="dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+              <circle cx="20" cy="20" r="1.5" fill="white" />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#grid)"/>
+          <rect width="100%" height="100%" fill="url(#dots)" />
         </svg>
 
         <div style={{ position: 'relative' }}>
-          {/* Retour */}
           {onBack && (
-            <button onClick={onBack} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, padding: '6px 14px', cursor: 'pointer', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, transition: 'all .15s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
-            >
-              <ChevronLeft size={14}/> Retour
+            <button onClick={onBack} style={{
+              background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.25)',
+              borderRadius: 10, padding: '6px 14px', cursor: 'pointer', color: 'white',
+              fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6,
+              marginBottom: 16,
+            }}>
+              <ChevronLeft size={14} /> Retour
             </button>
           )}
 
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Map size={18} color="white"/>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Map size={18} color="white" />
                 </div>
-                <h1 style={{ fontSize: 22, fontWeight: 900, color: 'white', margin: 0, letterSpacing: -.3 }}>Mon Parcours</h1>
+                <h1 style={{ fontSize: 22, fontWeight: 900, color: 'white', margin: 0 }}>Mon Parcours</h1>
               </div>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', margin: 0, fontWeight: 500 }}>
-                {selectedMat?.nom || 'Toutes les matières'} · {totalDone}/{totalUnits} unités terminées
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,.7)', margin: 0, fontWeight: 500 }}>
+                {selectedMat?.nom || 'Cours'} · {totalDone}/{totalUnits} unités terminées
               </p>
             </div>
 
-            {/* Progression globale compacte */}
-            <div style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14, padding: '12px 18px', minWidth: 140 }}>
-              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .8, margin: 0, marginBottom: 6 }}>Progression</p>
-              <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0, lineHeight: 1 }}>{overallPct}<span style={{ fontSize: 14 }}>%</span></p>
-              <div style={{ height: 4, background: 'rgba(255,255,255,0.25)', borderRadius: 4, marginTop: 8, overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: 4, background: 'white', width: `${overallPct}%`, transition: 'width .8s ease' }}/>
+            {/* Progression globale */}
+            <div style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.22)', borderRadius: 14, padding: '12px 18px', minWidth: 130 }}>
+              <p style={{ fontSize: 9, color: 'rgba(255,255,255,.7)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 6px' }}>Progression</p>
+              <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0, lineHeight: 1 }}>
+                {overallPct}<span style={{ fontSize: 14 }}>%</span>
+              </p>
+              <div style={{ height: 5, background: 'rgba(255,255,255,.25)', borderRadius: 5, marginTop: 8, overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 5, background: 'white', width: `${overallPct}%`, transition: 'width .8s ease' }} />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ══ SÉLECTEURS ═══════════════════════════════════════════ */}
+      {/* ── SÉLECTEURS matière + module ── */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.brownPale}`, padding: '0 28px' }}>
 
-        {/* Ligne 1 : Matières (si plusieurs) */}
-        {matieres.length > 1 && (
-          <div style={{ borderBottom: `1px solid ${C.brownPale}`, padding: '12px 0' }}>
-            <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 8px' }}>
-              <BookMarked size={11} style={{ marginRight: 5, verticalAlign: 'middle' }}/>Matière
+        {/* Matières */}
+        {matieres.length >= 1 && (
+          <div style={{ borderBottom: modules.length > 1 ? `1px solid ${C.brownPale}` : 'none', padding: '12px 0' }}>
+            <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <BookMarked size={11} /> Matière
             </p>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
-              {matieres.map(mat => (
-                <button key={mat.id} onClick={() => handleSelectMatiere(mat)} style={{
-                  padding: '7px 18px', borderRadius: 22, border: 'none', cursor: 'pointer',
-                  background: selectedMat?.id === mat.id
-                    ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
-                    : C.brownPale,
-                  color: selectedMat?.id === mat.id ? 'white' : C.textSec,
-                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
-                  transition: 'all .2s',
-                  boxShadow: selectedMat?.id === mat.id ? `0 3px 12px ${C.brown}40` : 'none',
-                }}>
-                  {mat.nom}
-                </button>
-              ))}
+              {matieres.map(mat => {
+                const active = selectedMat?.id === mat.id
+                return (
+                  <button key={mat.id} onClick={() => handleSelectMatiere(mat)} style={{
+                    padding: '8px 18px', borderRadius: 24, border: `2px solid ${active ? C.brown : C.brownPale}`,
+                    background: active ? C.brown : C.surface,
+                    color: active ? 'white' : C.textSec,
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                    transition: 'all .2s', boxShadow: active ? `0 3px 12px ${C.brown}35` : 'none',
+                  }}>
+                    {mat.icone || '📚'} {mat.nom}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* Ligne 2 : Modules / chapitres (si plusieurs) */}
+        {/* Modules */}
         {modules.length > 1 && (
           <div style={{ padding: '12px 0' }}>
-            <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 8px' }}>
-              <Layers size={11} style={{ marginRight: 5, verticalAlign: 'middle' }}/>Module
+            <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Layers size={11} /> Module
             </p>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
-              {modules.map(mod => (
-                <button key={mod.id} onClick={() => handleSelectModule(mod)} style={{
-                  padding: '7px 18px', borderRadius: 22, border: 'none', cursor: 'pointer',
-                  background: selectedMod?.id === mod.id
-                    ? `linear-gradient(135deg, ${C.gold}CC, ${C.gold})`
-                    : C.brownPale,
-                  color: selectedMod?.id === mod.id ? C.brown : C.textSec,
-                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
-                  transition: 'all .2s',
-                  boxShadow: selectedMod?.id === mod.id ? `0 3px 10px ${C.gold}50` : 'none',
-                }}>
-                  {mod.titre || mod.nom || `Module ${mod.id}`}
-                </button>
-              ))}
+              {modules.map(mod => {
+                const active = selectedMod?.id === mod.id
+                return (
+                  <button key={mod.id} onClick={() => handleSelectModule(mod)} style={{
+                    padding: '7px 16px', borderRadius: 22, border: 'none', cursor: 'pointer',
+                    background: active ? `linear-gradient(135deg, ${C.gold}, ${C.orange})` : C.brownPale,
+                    color: active ? 'white' : C.textSec,
+                    fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+                    transition: 'all .2s', boxShadow: active ? `0 3px 10px ${C.gold}45` : 'none',
+                  }}>
+                    Module {mod.numero} · {mod.titre.length > 30 ? mod.titre.substring(0, 30) + '…' : mod.titre}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
       </div>
 
-      {/* ══ CONTENU PARCOURS ═════════════════════════════════════ */}
-      <div style={{ padding: '28px', maxWidth: 860, margin: '0 auto', animation: 'fadeIn .35s ease' }}>
+      {/* ── CONTENU ── */}
+      <div style={{ padding: '28px', maxWidth: 760, margin: '0 auto' }}>
 
-        {familles.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: C.textSec }}>
-            <BookOpen size={40} color={C.brownPale} style={{ marginBottom: 16 }}/>
-            <p style={{ fontSize: 15, fontWeight: 700, color: C.brown, margin: '0 0 8px' }}>Aucun contenu disponible</p>
-            <p style={{ fontSize: 13, margin: 0 }}>Sélectionnez une matière ou un module pour voir le parcours.</p>
+        {loadingFam ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <style>{`@keyframes spin2{to{transform:rotate(360deg)}}`}</style>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto', animation: 'spin2 1s linear infinite' }} />
+          </div>
+        ) : familles.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span style={{ fontSize: 48 }}>📭</span>
+            <p style={{ fontSize: 15, fontWeight: 700, color: C.brown, margin: '16px 0 8px' }}>
+              Aucun contenu disponible
+            </p>
+            <p style={{ fontSize: 13, color: C.textSec, margin: 0 }}>
+              Sélectionnez une matière ou un module, ou attendez que l'administrateur ajoute du contenu pour <strong>{user?.niveau_label}</strong>.
+            </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {familles.map((famille, fi) => (
-              <div key={famille.id} style={{ animation: `fadeIn .35s ease ${fi * 0.05}s both` }}>
-                <FamilleCard
-                  famille={famille}
-                  fi={fi}
-                  progression={progression}
-                  currentUaId={currentUaId}
-                  navigate={navigate}
-                />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Badge progrès en haut */}
+            {totalDone > 0 && (
+              <div style={{
+                background: `linear-gradient(135deg, ${C.gold}18, ${C.brownPale})`,
+                borderRadius: 14, padding: '12px 18px',
+                border: `1px solid ${C.gold}35`,
+                display: 'flex', alignItems: 'center', gap: 12,
+                animation: 'fadeIn .3s ease',
+              }}>
+                <span style={{ fontSize: 28 }}>
+                  {totalDone >= totalUnits ? '🏆' : totalDone >= totalUnits / 2 ? '🥈' : '🥉'}
+                </span>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: '0 0 2px' }}>
+                    {totalDone >= totalUnits
+                      ? 'Module terminé ! Félicitations 🎉'
+                      : `${totalDone} UA terminée${totalDone > 1 ? 's' : ''} sur ${totalUnits}`}
+                  </p>
+                  <ProgressBar value={overallPct} color={overallPct === 100 ? C.emerald : C.gold} h={5} />
+                </div>
+                <span style={{ fontSize: 18, fontWeight: 900, color: C.gold, marginLeft: 'auto' }}>
+                  {overallPct}%
+                </span>
               </div>
+            )}
+
+            {/* UA recommandée */}
+            {recommandee && (
+              <div style={{
+                background: `linear-gradient(135deg, ${C.emeraldPale}, white)`,
+                borderRadius: 14, padding: '14px 18px',
+                border: `1.5px solid ${C.emerald}40`,
+                display: 'flex', alignItems: 'center', gap: 12,
+                animation: 'fadeIn .4s ease',
+              }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>
+                  ⭐
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, color: C.emerald, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 2px' }}>Recommandé par l'IA</p>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {recommandee.titre}
+                  </p>
+                  <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>Maîtrise BKT : {Math.round(recommandee.score_bkt * 100)}%</p>
+                </div>
+                <button onClick={() => navigate(`/cours/${recommandee.ua_id}`)} style={{
+                  padding: '8px 16px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`,
+                  color: 'white', border: 'none', borderRadius: 20,
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  boxShadow: `0 3px 12px ${C.emerald}40`,
+                }}>
+                  Commencer →
+                </button>
+              </div>
+            )}
+
+            {/* Familles */}
+            {familles.map((famille, fi) => (
+              <FamilleSection
+                key={famille.id}
+                famille={famille}
+                index={fi}
+                progression={progression}
+                recommandeeId={recommandee?.ua_id}
+                navigate={navigate}
+              />
             ))}
           </div>
         )}
