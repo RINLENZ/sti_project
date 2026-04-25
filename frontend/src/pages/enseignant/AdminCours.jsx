@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Edit3, BookOpen, X, Save,
   Search, ChevronDown, ChevronRight,
   Clock, Zap, Layers, FolderOpen, Grid,
-  AlertTriangle, Sparkles, Loader
+  FileText, AlertTriangle, Sparkles, Loader
 } from 'lucide-react'
 
 const C = {
@@ -767,9 +767,319 @@ function TabExercices({ structure, onReload }) {
   )
 }
 
+
 // ════════════════════════════════════════════════════════════════
-// ── PAGE PRINCIPALE ─────────────────────────────────────────────
+// TAB CONTENU — ajoute ce composant dans AdminCours.jsx
+// avant le composant "export default AdminCours"
+//
+// Dans AdminCours, modifie :
+// 1. TABS array : ajoute { id: 'contenu', label: 'Contenu', icon: FileText, badge: '...' }
+// 2. loadAll : déjà OK (structure contient les UA avec nb_ressources)
+// 3. Rendu : ajoute {activeTab === 'contenu' && <TabContenu structure={structure} onReload={loadAll} />}
+// 4. Import : ajoute FileText depuis lucide-react
 // ════════════════════════════════════════════════════════════════
+
+function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
+  const [form, setForm] = useState({
+    titre:       initial.titre       || '',
+    type:        initial.type        || 'lecon',
+    contenu:     initial.contenu     || '',
+    points_cles: initial.points_cles || [],
+    ordre:       initial.ordre       || 1,
+    ua_id:       initial.ua_id       || uas[0]?.id || '',
+  })
+  const [loading,  setLoading]  = useState(false)
+  const [pkDraft,  setPkDraft]  = useState('')
+  const [preview,  setPreview]  = useState(false)
+
+  const TYPE_OPTS = [
+    { value: 'lecon',  label: '📖 Leçon'  },
+    { value: 'tp',     label: '🔬 TP'     },
+    { value: 'resume', label: '📋 Résumé' },
+    { value: 'video',  label: '🎬 Vidéo'  },
+  ]
+
+  function addPk() {
+    const t = pkDraft.trim()
+    if (t) { setForm(f => ({ ...f, points_cles: [...f.points_cles, t] })); setPkDraft('') }
+  }
+
+  async function handle(e) {
+    e.preventDefault(); setLoading(true)
+    try {
+      await onSubmit({
+        ua_id:       form.ua_id,
+        titre:       form.titre,
+        type:        form.type,
+        contenu:     form.contenu,
+        points_cles: form.points_cles,
+        ordre:       parseInt(form.ordre),
+      })
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <form onSubmit={handle}>
+      {/* UA + type */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 12 }}>
+        <FSelect label="UA parente" value={form.ua_id}
+          onChange={e => setForm(f => ({ ...f, ua_id: e.target.value }))} required
+          options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 50) }))} />
+        <FSelect label="Type" value={form.type}
+          onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+          options={TYPE_OPTS} />
+      </div>
+
+      <FInput label="Titre de la ressource" value={form.titre}
+        onChange={e => setForm(f => ({ ...f, titre: e.target.value }))}
+        placeholder="ex: Cours — Les structures de contrôle" required />
+
+      {/* Éditeur avec preview */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <FieldLabel required>Contenu (Markdown)</FieldLabel>
+          <button type="button" onClick={() => setPreview(p => !p)} style={{
+            padding: '3px 10px', background: preview ? C.brownPale : C.bluePale,
+            color: preview ? C.brown : C.blue, border: 'none', borderRadius: 6,
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}>
+            {preview ? '✏️ Éditer' : '👁 Aperçu'}
+          </button>
+        </div>
+
+        {preview ? (
+          <div style={{ border: `1.5px solid ${C.brownPale}`, borderRadius: 8, padding: 16, minHeight: 200, background: '#FAFAFA' }}>
+            <MarkdownPreview content={form.contenu} />
+          </div>
+        ) : (
+          <textarea value={form.contenu} onChange={e => setForm(f => ({ ...f, contenu: e.target.value }))}
+            placeholder={`# Titre\n\nIntroduction...\n\n## Définition\n\nTexte explicatif...\n\n- Point 1\n- Point 2\n\n\`\`\`\nExemple de code\n\`\`\``}
+            rows={12}
+            style={{ ...inputBase, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 }}
+            onFocus={e => e.target.style.borderColor = C.brown}
+            onBlur={e => e.target.style.borderColor = C.brownPale}
+          />
+        )}
+        <p style={{ fontSize: 10, color: C.textSec, marginTop: 4 }}>
+          Supports : # Titres, **gras**, `code`, ```blocs```, - listes, &gt; citations
+        </p>
+      </div>
+
+      {/* Points clés */}
+      <div style={{ marginBottom: 12 }}>
+        <FieldLabel>Points clés à retenir</FieldLabel>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {form.points_cles.map((pk, i) => (
+            <span key={i} style={{ background: '#FEF3C7', color: '#92400E', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+              → {pk}
+              <button type="button" onClick={() => setForm(f => ({ ...f, points_cles: f.points_cles.filter((_, j) => j !== i) }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B45309', padding: 0, display: 'flex' }}>
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input value={pkDraft} onChange={e => setPkDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPk() } }}
+            placeholder="Ajouter un point clé puis Entrée…"
+            style={{ ...inputBase, flex: 1 }}
+            onFocus={e => e.target.style.borderColor = C.brown}
+            onBlur={e => e.target.style.borderColor = C.brownPale}
+          />
+          <button type="button" onClick={addPk} style={{ padding: '0 14px', background: C.gold, color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>+ Ajouter</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <CancelBtn onClose={onClose} />
+        <SaveBtn loading={loading} />
+      </div>
+    </form>
+  )
+}
+
+// Aperçu Markdown simplifié (identique à LeconReader)
+function MarkdownPreview({ content }) {
+  if (!content) return <p style={{ color: C.textSec, fontStyle: 'italic', fontSize: 13 }}>Aucun contenu à afficher.</p>
+  const lines = content.split('\n')
+  return (
+    <div style={{ fontSize: 13, lineHeight: 1.7, color: C.text }}>
+      {lines.map((line, i) => {
+        if (line.startsWith('# '))  return <h1 key={i} style={{ fontSize: 18, fontWeight: 900, color: C.brownDark, margin: '0 0 12px' }}>{line.slice(2)}</h1>
+        if (line.startsWith('## ')) return <h2 key={i} style={{ fontSize: 15, fontWeight: 800, color: C.brown, margin: '16px 0 8px', borderBottom: `2px solid ${C.brownPale}`, paddingBottom: 4 }}>{line.slice(3)}</h2>
+        if (line.startsWith('### ')) return <h3 key={i} style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: '12px 0 6px', borderLeft: `3px solid ${C.brownLight}`, paddingLeft: 8 }}>{line.slice(4)}</h3>
+        if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4 }}><span style={{ color: C.brownLight, fontWeight: 900 }}>•</span><span>{line.slice(2)}</span></div>
+        if (line.startsWith('> ')) return <blockquote key={i} style={{ borderLeft: `4px solid ${C.gold}`, paddingLeft: 12, margin: '8px 0', background: '#FEF9E7', borderRadius: '0 6px 6px 0', padding: '8px 12px', fontStyle: 'italic' }}>{line.slice(2)}</blockquote>
+        if (line.startsWith('```')) return null
+        if (line.trim() === '') return <div key={i} style={{ height: 6 }} />
+        return <p key={i} style={{ margin: '0 0 4px' }}>{line}</p>
+      })}
+    </div>
+  )
+}
+
+function TabContenu({ structure, onReload }) {
+  const [ressources,   setRessources]   = useState([])
+  const [loadingRes,   setLoadingRes]   = useState(true)
+  const [modal,        setModal]        = useState(null)
+  const [deleting,     setDeleting]     = useState(null)
+  const [filterUA,     setFilterUA]     = useState('all')
+  const [search,       setSearch]       = useState('')
+  const { mobile } = useBreakpoint()
+
+  const allUAs = structure.flatMap(m =>
+    (m.modules || []).flatMap(mod =>
+      (mod.familles || []).flatMap(fam =>
+        (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, famille_titre: fam.titre }))
+      )
+    )
+  )
+
+  const loadRessources = useCallback(async () => {
+    setLoadingRes(true)
+    try {
+      // Charge les ressources de toutes les UA
+      const all = []
+      for (const ua of allUAs) {
+        try {
+          const { data } = await api.get(`/api/cours/ua/${ua.id}`)
+          for (const r of (data.ressources || [])) {
+            all.push({ ...r, ua_titre: ua.titre, ua_id: ua.id, matiere_nom: ua.matiere_nom })
+          }
+        } catch {}
+      }
+      setRessources(all)
+    } finally { setLoadingRes(false) }
+  }, [allUAs.length])
+
+  useEffect(() => { loadRessources() }, [loadRessources])
+
+  const filtered = ressources.filter(r => {
+    const matchUA = filterUA === 'all' || r.ua_id === filterUA
+    const matchQ  = !search || r.titre.toLowerCase().includes(search.toLowerCase())
+    return matchUA && matchQ
+  })
+
+  async function handleSubmit(payload) {
+    try {
+      if (modal?.id) {
+        await api.put(`/api/admin/ressource/${modal.id}`, payload)
+        toast.success('Ressource mise à jour !')
+      } else {
+        await api.post('/api/admin/ressource', payload)
+        toast.success('Ressource créée !')
+      }
+      setModal(null); loadRessources()
+    } catch { toast.error('Erreur lors de la sauvegarde') }
+  }
+
+  async function handleDelete() {
+    try {
+      await api.delete(`/api/admin/ressource/${deleting.id}`)
+      toast.success('Ressource supprimée')
+      setDeleting(null); loadRessources()
+    } catch { toast.error('Erreur') }
+  }
+
+  const TYPE_STYLE = {
+    lecon:   { icon: '📖', color: C.brown,  bg: C.brownPale  },
+    tp:      { icon: '🔬', color: C.emerald, bg: C.emeraldPale },
+    resume:  { icon: '📋', color: C.blue,    bg: C.bluePale   },
+    video:   { icon: '🎬', color: '#7C3AED', bg: '#F3E8FF'    },
+  }
+
+  return (
+    <div>
+      {/* Info banner */}
+      <div style={{ background: `linear-gradient(135deg, ${C.emeraldPale}, ${C.brownPale})`, borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: `1px solid ${C.emerald}30`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <span style={{ fontSize: 22, flexShrink: 0 }}>📚</span>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: '0 0 4px' }}>Contenu pédagogique</p>
+          <p style={{ fontSize: 12, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            Les ressources sont affichées à l'apprenant <strong>avant les exercices</strong>. Utilisez le Markdown pour structurer : <code style={{ background: C.brownPale, padding: '0 4px', borderRadius: 4, fontSize: 11 }}># Titre</code>, <code style={{ background: C.brownPale, padding: '0 4px', borderRadius: 4, fontSize: 11 }}>**gras**</code>, <code style={{ background: C.brownPale, padding: '0 4px', borderRadius: 4, fontSize: 11 }}>```code```</code>
+          </p>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 140, position: 'relative' }}>
+          <Search size={13} color={C.textSec} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une ressource…"
+            style={{ ...inputBase, paddingLeft: 30 }}
+            onFocus={e => e.target.style.borderColor = C.brown}
+            onBlur={e => e.target.style.borderColor = C.brownPale}
+          />
+        </div>
+        <select value={filterUA} onChange={e => setFilterUA(e.target.value)} style={{ ...inputBase, width: 'auto', minWidth: 180 }}>
+          <option value="all">Toutes les UA</option>
+          {allUAs.map(u => <option key={u.id} value={u.id}>{u.titre?.substring(0, 40)}</option>)}
+        </select>
+        <button onClick={() => setModal('create')} style={{ padding: '9px 16px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+          <Plus size={13} /> Nouvelle ressource
+        </button>
+      </div>
+
+      {/* Liste */}
+      {loadingRes ? (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto', animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 20px', background: C.surface, borderRadius: 16, border: `1px dashed ${C.brownLight}` }}>
+          <span style={{ fontSize: 40 }}>📭</span>
+          <p style={{ fontSize: 14, fontWeight: 700, color: C.brown, margin: '12px 0 6px' }}>Aucune ressource pédagogique</p>
+          <p style={{ fontSize: 12, color: C.textSec }}>Créez du contenu pour chaque UA — leçons, TP, résumés.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(r => {
+            const ts = TYPE_STYLE[r.type] || TYPE_STYLE.lecon
+            const wordCount = r.contenu?.split(' ').length || 0
+            const readMin = Math.max(1, Math.round(wordCount / 200))
+            return (
+              <div key={r.id} style={{ background: C.surface, borderRadius: 14, padding: mobile ? '14px' : '14px 20px', border: `1px solid ${C.brownPale}`, boxShadow: '0 2px 8px rgba(107,58,42,0.06)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: ts.bg, border: `1.5px solid ${ts.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                  {ts.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.titre}</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ background: ts.bg, color: ts.color, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{r.type}</span>
+                    <span style={{ fontSize: 10, color: C.textSec }}>· {r.ua_titre?.substring(0, 35)}</span>
+                    <span style={{ fontSize: 10, color: C.textSec }}>· ~{readMin} min de lecture</span>
+                    {r.points_cles?.length > 0 && (
+                      <span style={{ fontSize: 10, color: C.gold, fontWeight: 700 }}>⭐ {r.points_cles.length} points clés</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => setModal(r)} style={{ padding: '6px 10px', background: C.bluePale, color: C.blue, border: 'none', borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700 }}>
+                    <Edit3 size={11} />{!mobile && ' Modifier'}
+                  </button>
+                  <button onClick={() => setDeleting(r)} style={{ padding: '6px 8px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {modal && (
+        <Modal title={modal?.id ? 'Modifier la ressource' : 'Nouvelle ressource pédagogique'} onClose={() => setModal(null)} size={760}>
+          <FormRessource initial={modal?.id ? modal : {}} uas={allUAs} onSubmit={handleSubmit} onClose={() => setModal(null)} />
+        </Modal>
+      )}
+      {deleting && <ConfirmDelete item={deleting.titre} onConfirm={handleDelete} onCancel={() => setDeleting(null)} />}
+    </div>
+  )
+}
+
+
+// ── PAGE PRINCIPALE
 export default function AdminCours() {
   const [structure, setStructure] = useState([])
   const [niveaux,   setNiveaux]   = useState([])
@@ -797,10 +1107,11 @@ export default function AdminCours() {
   const totalMod = structure.flatMap(m => m.modules || []).length
 
   const TABS = [
-    { id: 'structure', label: 'Structure',  icon: Grid,     badge: `${structure.length} mat.` },
-    { id: 'ua',        label: 'UA',         icon: Layers,   badge: totalUAs },
-    { id: 'exercices', label: 'Exercices',  icon: Zap,      badge: totalEx },
-  ]
+  { id: 'structure', label: 'Structure',  icon: Grid,      badge: `${structure.length} mat.` },
+  { id: 'ua',        label: 'UA',         icon: Layers,    badge: totalUAs },
+  { id: 'exercices', label: 'Exercices',  icon: Zap,       badge: totalEx },
+  { id: 'contenu',   label: 'Contenu',    icon: FileText,  badge: '📖' },
+]
 
   const pad = xs ? 12 : mobile ? 16 : 28
 
@@ -873,6 +1184,7 @@ export default function AdminCours() {
         {activeTab === 'structure'  && <TabStructure  structure={structure} niveaux={niveaux} onReload={loadAll} />}
         {activeTab === 'ua'         && <TabUA         structure={structure} onReload={loadAll} />}
         {activeTab === 'exercices'  && <TabExercices  structure={structure} onReload={loadAll} />}
+        {activeTab === 'contenu'    && <TabContenu    structure={structure} onReload={loadAll} />}
       </div>
     </div>
   )

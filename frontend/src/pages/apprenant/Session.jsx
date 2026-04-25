@@ -234,6 +234,206 @@ const CameraBanner = ({ onActivate, onDismiss }) => (
   </div>
 )
 
+
+// LECON READER
+
+function LeconReader({ ua, ressources, onStart }) {
+  const [idx, setIdx] = useState(0)
+  const res = ressources[idx]
+
+  const typeLabel = {
+    lecon:   { icon: '📖', label: 'Leçon',   color: '#6B3A2A' },
+    tp:      { icon: '🔬', label: 'TP',      color: '#0D9373' },
+    resume:  { icon: '📋', label: 'Résumé',  color: '#2563EB' },
+    video:   { icon: '🎬', label: 'Vidéo',   color: '#7C3AED' },
+  }[res?.type] || { icon: '📄', label: 'Ressource', color: '#6B3A2A' }
+
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#FAF7F4',
+      display: 'flex', flexDirection: 'column',
+      fontFamily: 'system-ui, sans-serif',
+    }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #3D1F13, #6B3A2A)',
+        padding: '20px 24px', color: 'white',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 11, opacity: .7, fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5 }}>
+            {ua?.reference_ue} · {ua?.titre}
+          </span>
+        </div>
+        {/* Navigation ressources */}
+        {ressources.length > 1 && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {ressources.map((r, i) => {
+              const t = { lecon: '📖', tp: '🔬', resume: '📋', video: '🎬' }[r.type] || '📄'
+              return (
+                <button key={r.id} onClick={() => setIdx(i)} style={{
+                  padding: '4px 12px', borderRadius: 20,
+                  background: i === idx ? 'rgba(255,255,255,.3)' : 'rgba(255,255,255,.12)',
+                  border: `1px solid ${i === idx ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.2)'}`,
+                  color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                  {t} {r.titre.length > 20 ? r.titre.substring(0, 20) + '…' : r.titre}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Contenu */}
+      <div style={{ flex: 1, maxWidth: 760, width: '100%', margin: '0 auto', padding: '28px 20px' }}>
+
+        {/* Titre ressource */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: `${typeLabel.color}18`, border: `1.5px solid ${typeLabel.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+            {typeLabel.icon}
+          </div>
+          <div>
+            <span style={{ fontSize: 10, fontWeight: 700, color: typeLabel.color, textTransform: 'uppercase', letterSpacing: .5 }}>{typeLabel.label}</span>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A1207', margin: 0 }}>{res?.titre}</h2>
+          </div>
+        </div>
+
+        {/* Situation problème */}
+        {ua?.situation_probleme && (
+          <div style={{ background: 'linear-gradient(135deg, #E6F5F0, #F5EDE5)', borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: '1px solid #0D937330' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: '#0D9373', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 6px' }}>🎯 Situation problème</p>
+            <p style={{ fontSize: 13, color: '#1A1207', lineHeight: 1.7, margin: 0 }}>{ua.situation_probleme}</p>
+          </div>
+        )}
+
+        {/* Contenu principal — rendu Markdown simplifié */}
+        <div style={{ background: '#FFFFFF', borderRadius: 16, padding: '24px 28px', border: '1px solid #F5EDE5', boxShadow: '0 2px 16px rgba(107,58,42,0.07)', marginBottom: 20 }}>
+          <MarkdownRenderer content={res?.contenu || ''} />
+        </div>
+
+        {/* Points clés */}
+        {res?.points_cles && res.points_cles.length > 0 && (
+          <div style={{ background: '#FEF3C7', borderRadius: 14, padding: '16px 18px', marginBottom: 24, border: '1px solid #D97706' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px' }}>⭐ Points clés à retenir</p>
+            {res.points_cles.map((pt, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                <span style={{ color: '#D97706', fontWeight: 900, flexShrink: 0, marginTop: 1 }}>→</span>
+                <p style={{ fontSize: 13, color: '#1A1207', margin: 0, lineHeight: 1.6 }}>{pt}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Compétences */}
+        {ua?.competences && ua.competences.length > 0 && (
+          <div style={{ background: '#F0FDF4', borderRadius: 12, padding: '14px 18px', marginBottom: 24, border: '1px solid #BBF7D0' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>🎓 Compétences visées</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {ua.competences.map((c, i) => (
+                <span key={i} style={{ background: '#DCFCE7', color: '#15803D', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{c}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Navigation + bouton démarrer */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {idx > 0 && (
+            <button onClick={() => setIdx(i => i - 1)} style={{ padding: '12px 20px', background: '#F5EDE5', color: '#6B3A2A', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              ← Précédent
+            </button>
+          )}
+          {idx < ressources.length - 1 ? (
+            <button onClick={() => setIdx(i => i + 1)} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #6B3A2A, #C4865A)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              Ressource suivante → ({idx + 2}/{ressources.length})
+            </button>
+          ) : (
+            <button onClick={onStart} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #0D9373, #0A7A5E)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(13,147,115,0.4)' }}>
+              ✅ J'ai compris — Commencer les exercices !
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Rendu Markdown simplifié ─────────────────────────────────────
+function MarkdownRenderer({ content }) {
+  if (!content) return <p style={{ color: '#6B5744', fontStyle: 'italic' }}>Aucun contenu.</p>
+
+  const lines = content.split('\n')
+  const elements = []
+  let codeBlock = []
+  let inCode = false
+
+  lines.forEach((line, i) => {
+    if (line.startsWith('```')) {
+      if (inCode) {
+        elements.push(
+          <pre key={i} style={{ background: '#1A1207', color: '#E2D8C8', padding: '16px', borderRadius: 10, overflowX: 'auto', fontSize: 13, lineHeight: 1.6, margin: '12px 0', fontFamily: 'monospace' }}>
+            <code>{codeBlock.join('\n')}</code>
+          </pre>
+        )
+        codeBlock = []; inCode = false
+      } else { inCode = true }
+      return
+    }
+    if (inCode) { codeBlock.push(line); return }
+
+    if (line.startsWith('### ')) {
+      elements.push(<h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: '#6B3A2A', margin: '20px 0 8px', borderLeft: '3px solid #C4865A', paddingLeft: 10 }}>{line.slice(4)}</h3>)
+    } else if (line.startsWith('## ')) {
+      elements.push(<h2 key={i} style={{ fontSize: 17, fontWeight: 800, color: '#3D1F13', margin: '24px 0 10px', paddingBottom: 6, borderBottom: '2px solid #F5EDE5' }}>{line.slice(3)}</h2>)
+    } else if (line.startsWith('# ')) {
+      elements.push(<h1 key={i} style={{ fontSize: 20, fontWeight: 900, color: '#3D1F13', margin: '0 0 16px' }}>{line.slice(2)}</h1>)
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      elements.push(
+        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+          <span style={{ color: '#C4865A', fontWeight: 900, flexShrink: 0 }}>•</span>
+          <p style={{ fontSize: 14, color: '#1A1207', margin: 0, lineHeight: 1.7 }}>{renderInline(line.slice(2))}</p>
+        </div>
+      )
+    } else if (/^\d+\. /.test(line)) {
+      const num = line.match(/^(\d+)\. /)[1]
+      elements.push(
+        <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+          <span style={{ background: '#6B3A2A', color: 'white', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0, marginTop: 2 }}>{num}</span>
+          <p style={{ fontSize: 14, color: '#1A1207', margin: 0, lineHeight: 1.7 }}>{renderInline(line.replace(/^\d+\. /, ''))}</p>
+        </div>
+      )
+    } else if (line.startsWith('> ')) {
+      elements.push(
+        <blockquote key={i} style={{ borderLeft: '4px solid #D4A853', paddingLeft: 14, margin: '10px 0', background: '#FEF9E7', borderRadius: '0 8px 8px 0', padding: '10px 14px' }}>
+          <p style={{ fontSize: 13, color: '#1A1207', margin: 0, fontStyle: 'italic', lineHeight: 1.6 }}>{line.slice(2)}</p>
+        </blockquote>
+      )
+    } else if (line.trim() === '') {
+      elements.push(<div key={i} style={{ height: 8 }} />)
+    } else {
+      elements.push(<p key={i} style={{ fontSize: 14, color: '#1A1207', lineHeight: 1.8, margin: '0 0 6px' }}>{renderInline(line)}</p>)
+    }
+  })
+
+  return <div>{elements}</div>
+}
+
+function renderInline(text) {
+  // **gras** et `code`
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} style={{ fontWeight: 800, color: '#3D1F13' }}>{part.slice(2, -2)}</strong>
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} style={{ background: '#F5EDE5', color: '#6B3A2A', padding: '1px 6px', borderRadius: 5, fontSize: 13, fontFamily: 'monospace', fontWeight: 700 }}>{part.slice(1, -1)}</code>
+    }
+    return part
+  })
+}
+
+
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Session() {
   const { uaId }   = useParams()
@@ -266,6 +466,8 @@ export default function Session() {
   const [bruitPerturb, setBruitPerturb] = useState(false)
   const [explicationIA, setExplicationIA] = useState(null)
   const [loadingIA,     setLoadingIA]     = useState(false)
+  const [ressources, setRessources] = useState([])
+  const [phase,      setPhase]      = useState('lecon')
   const [elapsedMin, setElapsedMin]       = useState(0)
 
   const videoRef    = useRef(null)
@@ -294,7 +496,11 @@ export default function Session() {
     async function init() {
       try {
         const { data: uaData } = await api.get(`/api/cours/ua/${uaId}`)
-        setUA(uaData); setExercices(uaData.exercices || [])
+setUA(uaData)
+setExercices(uaData.exercices || [])
+const resos = uaData.ressources || []
+setRessources(resos)
+if (resos.length === 0) setPhase('exercices')
         const { data: sess } = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
         sessionIdRef.current = sess.session_id
       } catch { toast.error('Erreur de chargement') }
@@ -480,6 +686,10 @@ export default function Session() {
       </div>
     </div>
   )
+
+   if (phase === 'lecon' && ua) {
+    return <LeconReader ua={ua} ressources={ressources} onStart={() => setPhase('exercices')} />
+  }
 
   /* ── Fin de session ──────────────────────────────────────── */
   if (termine) {
