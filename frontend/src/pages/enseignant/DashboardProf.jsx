@@ -7,6 +7,10 @@ import {
   Users, TrendingUp, AlertTriangle, Activity,
   RefreshCw, CheckCircle, Plus, ChevronRight
 } from 'lucide-react'
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  PolarRadiusAxis, ResponsiveContainer, Tooltip
+} from 'recharts'
 
 // ── Thème ─────────────────────────────────────────────────────────
 const C = {
@@ -61,6 +65,85 @@ const StatCard = ({ label, value, subtitle, color, Icon, trend }) => (
   </div>
 )
 
+
+function BKTModal({ apprenant, onClose }) {
+  const [bkt, setBkt] = useState(null)
+  useEffect(() => {
+    api.get(`/api/bkt/apprenant/${apprenant.user_id}`)
+      .then(({ data }) => setBkt(data))
+      .catch(() => {})
+  }, [apprenant.user_id])
+
+  const data = bkt ? Object.entries(bkt.competences).map(([comp, val]) => ({
+    subject: comp.length > 16 ? comp.substring(0, 16) + '…' : comp,
+    A: val.pourcentage, fullName: comp,
+  })) : []
+
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()} style={{
+      position: 'fixed', inset: 0, background: 'rgba(26,18,7,.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 24, backdropFilter: 'blur(3px)',
+    }}>
+      <div style={{ background: '#FAF7F4', borderRadius: 20, padding: '24px 28px', maxWidth: 560, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#6B3A2A', margin: 0 }}>
+              🧠 BKT — {apprenant.prenom} {apprenant.nom}
+            </h2>
+            <p style={{ fontSize: 11, color: '#6B5744', margin: '4px 0 0' }}>
+              {bkt?.nb_competences_maitrisees || 0} compétence(s) maîtrisée(s)
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: '#F5EDE5', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6B3A2A' }}>✕</button>
+        </div>
+
+        {!bkt ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid #F5EDE5', borderTopColor: '#6B3A2A', margin: '0 auto', animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : data.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#6B5744', fontSize: 13, padding: '32px 0' }}>
+            Aucune compétence enregistrée — cet apprenant n'a pas encore fait d'exercices.
+          </p>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={220}>
+              <RadarChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+                <PolarGrid stroke="#E5E7EB" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#6B5744', fontSize: 10, fontWeight: 700 }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                <Radar dataKey="A" stroke="#6B3A2A" fill="#6B3A2A" fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: '#6B3A2A' }} />
+                <Tooltip formatter={(v, _, p) => [`${v}%`, p.payload.fullName]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              </RadarChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+              {Object.entries(bkt.competences).map(([comp, val]) => {
+                const color = val.pourcentage >= 95 ? '#0D9373' : val.pourcentage >= 70 ? '#2563EB' : val.pourcentage >= 40 ? '#F59E0B' : '#DC2626'
+                return (
+                  <div key={comp} style={{ padding: '6px 10px', background: '#F5EDE5', borderRadius: 8, borderLeft: `3px solid ${color}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#1A1207', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{comp}</span>
+                      <span style={{ fontSize: 11, color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{val.pourcentage}%</span>
+                    </div>
+                    <div style={{ height: 4, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${val.pourcentage}%`, background: color, borderRadius: 4, transition: 'width .6s ease' }} />
+                    </div>
+                    <p style={{ fontSize: 10, color: '#6B5744', margin: '3px 0 0' }}>
+                      {val.nb_correct}/{val.nb_tentatives} réussis · {val.label}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 // ── Dashboard Enseignant ──────────────────────────────────────────
 export default function DashboardProf() {
   const { user }     = useSelector(s => s.auth)
@@ -72,6 +155,7 @@ export default function DashboardProf() {
   const [codeInput, setCodeInput] = useState('')
   const [linked, setLinked]       = useState([])
   const [linking, setLinking]     = useState(false)
+  const [selectedApprenant, setSelectedApprenant] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -216,8 +300,9 @@ export default function DashboardProf() {
                   border: score < 0.4 ? `1px solid ${C.red}30` : `1px solid ${C.brownPale}`,
                   display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr',
                   gap: 16, alignItems: 'center',
-                  animation: 'slideRight .3s ease'
-                }}>
+                  animation: 'slideRight .3s ease',
+                  cursor: 'pointer'
+                }} onClick={() => setSelectedApprenant(apprenant)}>
                   {/* Identité */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: avatarColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, flexShrink: 0 }}>
@@ -265,6 +350,9 @@ export default function DashboardProf() {
                       </span>
                     )}
                   </div>
+                  {selectedApprenant && (
+  <BKTModal apprenant={selectedApprenant} onClose={() => setSelectedApprenant(null)} />
+)}
                 </div>
               )
             })}
