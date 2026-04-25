@@ -4,7 +4,7 @@ from ..database import get_db
 from ..models.cours import (
     Matiere, Module, FamilleSituation,
     UniteApprentissage, RessourcePedagogique,
-    Exercice, ProgressionApprenant
+    Exercice, ProgressionApprenant, BKTMastery
 )
 from ..models.user import User
 from pydantic import BaseModel
@@ -46,8 +46,6 @@ def get_matieres(
                 pass  # niveau_id invalide → pas de filtre
  
         modules = query.order_by(Module.ordre, Module.numero).all()
-        if not modules:
-            continue  # ne pas retourner une matière sans modules pour ce niveau
  
         modules_data = []
         for mod in modules:

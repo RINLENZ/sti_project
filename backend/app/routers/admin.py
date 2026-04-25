@@ -623,3 +623,188 @@ def delete_niveau(niveau_id: UUID, db: Session = Depends(get_db)):
     if not niveau: raise HTTPException(404, "Niveau introuvable")
     niveau.actif = False; db.commit()
     return {"message": "Niveau désactivé"}
+
+
+# ── CRUD Modules ─────────────────────────────────────────────────
+@router.post("/modules")
+def create_module(body: dict, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
+    mod = Module(
+        matiere_id  = UUID(body["matiere_id"]),
+        niveau_id   = UUID(body["niveau_id"]) if body.get("niveau_id") else None,
+        numero      = int(body.get("numero", 1)),
+        titre       = body["titre"],
+        description = body.get("description", ""),
+        ordre       = int(body.get("ordre", 1)),
+    )
+    db.add(mod); db.commit(); db.refresh(mod)
+    return {"id": str(mod.id), "titre": mod.titre, "numero": mod.numero}
+
+@router.put("/modules/{module_id}")
+def update_module(module_id: UUID, body: dict, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
+    mod = db.query(Module).filter(Module.id == module_id).first()
+    if not mod: raise HTTPException(404, "Module introuvable")
+    for k in ["titre", "description", "numero", "ordre"]:
+        if k in body: setattr(mod, k, body[k])
+    if body.get("niveau_id"):
+        mod.niveau_id = UUID(body["niveau_id"])
+    if body.get("matiere_id"):
+        mod.matiere_id = UUID(body["matiere_id"])
+    db.commit()
+    return {"message": "Module mis à jour"}
+
+@router.delete("/modules/{module_id}")
+def delete_module(module_id: UUID, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
+    mod = db.query(Module).filter(Module.id == module_id).first()
+    if not mod: raise HTTPException(404, "Module introuvable")
+    mod.actif = False; db.commit()
+    return {"message": "Module désactivé"}
+
+
+# ── CRUD Familles ─────────────────────────────────────────────────
+@router.post("/familles")
+def create_famille_admin(body: dict, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
+    fam = FamilleSituation(
+        module_id = UUID(body["module_id"]),
+        titre     = body["titre"],
+        ordre     = int(body.get("ordre", 1)),
+        description = body.get("description", ""),
+    )
+    db.add(fam); db.commit(); db.refresh(fam)
+    return {"id": str(fam.id), "titre": fam.titre}
+
+@router.put("/familles/{famille_id}")
+def update_famille_admin(famille_id: UUID, body: dict, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
+    fam = db.query(FamilleSituation).filter(FamilleSituation.id == famille_id).first()
+    if not fam: raise HTTPException(404, "Famille introuvable")
+    for k in ["titre", "ordre", "description"]:
+        if k in body: setattr(fam, k, body[k])
+    if body.get("module_id"):
+        fam.module_id = UUID(body["module_id"])
+    db.commit()
+    return {"message": "Famille mise à jour"}
+
+@router.delete("/familles/{famille_id}")
+def delete_famille_admin(famille_id: UUID, db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)):
+    fam = db.query(FamilleSituation).filter(FamilleSituation.id == famille_id).first()
+    if not fam: raise HTTPException(404, "Famille introuvable")
+    db.delete(fam); db.commit()
+    return {"message": "Famille supprimée"}
+
+
+# ── Génération IA d'exercices ─────────────────────────────────────
+@router.post("/generer-exercices/{ua_id}")
+async def generer_exercices_ia(
+    ua_id: UUID,
+    body: dict,
+    db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin)
+):
+    """
+    Génère N exercices QCM pour une UA via Claude Haiku.
+    body: { "nb": 3, "type": "qcm", "difficulte": 1 }
+    """
+    import httpx, json as _json, os
+
+    ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
+    if not ua: raise HTTPException(404, "UA introuvable")
+
+    nb         = int(body.get("nb", 3))
+    type_ex    = body.get("type", "qcm")
+    difficulte = int(body.get("difficulte", 1))
+    diff_label = {1: "facile", 2: "intermédiaire", 3: "difficile"}.get(difficulte, "facile")
+
+    competences_str = "\n".join(f"- {c}" for c in (ua.competences or []))
+
+    prompt = f"""Tu es un enseignant camerounais expert en informatique. 
+Génère exactement {nb} exercice(s) de type {type_ex} de niveau {diff_label} 
+pour l'unité d'apprentissage : "{ua.titre}".
+
+Contexte : {ua.situation_probleme or 'Apprentissage des bases de l informatique'}
+Compétences visées :
+{competences_str or '- Maîtriser les concepts fondamentaux'}
+
+Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après, 
+sans balises markdown. Format exact :
+{{
+  "exercices": [
+    {{
+      "titre": "Titre court",
+      "enonce": "Question complète et claire",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "reponse_correcte": "Option A",
+      "explication": "Pourquoi c'est la bonne réponse",
+      "indice_1": "Premier indice",
+      "indice_2": "Deuxième indice plus précis",
+      "competence_evaluee": "Compétence exacte évaluée",
+      "points": 10
+    }}
+  ]
+}}"""
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "ANTHROPIC_API_KEY non configurée")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key":         api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type":      "application/json",
+            },
+            json={
+                "model":      "claude-haiku-4-5-20251001",
+                "max_tokens": 2000,
+                "messages":   [{"role": "user", "content": prompt}],
+            }
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(500, f"Erreur IA : {resp.text}")
+
+    content = resp.json()["content"][0]["text"].strip()
+    # Nettoie les éventuels backticks markdown
+    if content.startswith("```"):
+        content = content.split("```")[1]
+        if content.startswith("json"):
+            content = content[4:]
+
+    try:
+        data = _json.loads(content)
+    except Exception:
+        raise HTTPException(500, "Réponse IA invalide — relancez")
+
+    # Sauvegarde les exercices générés en base
+    created = []
+    for ex_data in data.get("exercices", []):
+        ex = Exercice(
+            ua_id              = ua.id,
+            titre              = ex_data.get("titre", "Exercice"),
+            type               = type_ex,
+            enonce             = ex_data.get("enonce", ""),
+            options            = ex_data.get("options") if type_ex == "qcm" else None,
+            reponse_correcte   = ex_data.get("reponse_correcte", ""),
+            explication        = ex_data.get("explication", ""),
+            indice_1           = ex_data.get("indice_1", ""),
+            indice_2           = ex_data.get("indice_2", ""),
+            competence_evaluee = ex_data.get("competence_evaluee", ""),
+            difficulte         = difficulte,
+            points             = int(ex_data.get("points", 10)),
+            ordre              = len(created) + 1,
+        )
+        db.add(ex)
+        created.append(ex_data.get("titre"))
+
+    db.commit()
+    return {
+        "message": f"{len(created)} exercice(s) générés et sauvegardés",
+        "exercices_crees": created,
+        "ua_id": str(ua_id),
+    }
