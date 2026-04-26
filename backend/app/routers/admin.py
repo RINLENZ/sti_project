@@ -747,29 +747,24 @@ sans balises markdown. Format exact :
   ]
 }}"""
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
-        raise HTTPException(500, "ANTHROPIC_API_KEY non configurée")
-
+        raise HTTPException(500, "GOOGLE_API_KEY non configurée")
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key":         api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type":      "application/json",
-            },
+            f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={api_key}",
+            headers={"Content-Type": "application/json"},
             json={
-                "model":      "claude-haiku-4-5-20251001",
-                "max_tokens": 2000,
-                "messages":   [{"role": "user", "content": prompt}],
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 2000,
+                }
             }
         )
-
     if resp.status_code != 200:
         raise HTTPException(500, f"Erreur IA : {resp.text}")
-
-    content = resp.json()["content"][0]["text"].strip()
+    content = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     # Nettoie les éventuels backticks markdown
     if content.startswith("```"):
         content = content.split("```")[1]
