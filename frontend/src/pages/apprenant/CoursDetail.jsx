@@ -6,33 +6,9 @@ import {
   Clock, BookOpen, ChevronRight, CheckCircle,
   Target, ArrowLeft, Play, Lock, Star
 } from 'lucide-react'
-
-const C = {
-  brown:       '#6B3A2A', brownLight:  '#C4865A',
-  emerald:     '#0D9373', bg:          '#FAF7F4',
-  surface:     '#FFFFFF', text:        '#1A1207',
-  textSec:     '#6B5744', brownPale:   '#F5EDE5',
-  emeraldPale: '#E6F5F0', red:         '#DC2626',
-  orange:      '#F59E0B', gold:        '#D4A853',
-}
-
-/* ── Breakpoints via CSS-in-JS helpers ─────────────────────────── */
-const useBreakpoint = () => {
-  const [bp, setBp] = useState(() => {
-    if (typeof window === 'undefined') return 'desktop'
-    const w = window.innerWidth
-    return w < 640 ? 'mobile' : w < 1024 ? 'tablet' : 'desktop'
-  })
-  useEffect(() => {
-    const handler = () => {
-      const w = window.innerWidth
-      setBp(w < 640 ? 'mobile' : w < 1024 ? 'tablet' : 'desktop')
-    }
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
-  }, [])
-  return bp
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { Spinner } from '../../components/Skeleton'
 
 const ProgressBar = ({ value, color = C.emerald, h = 6 }) => (
   <div style={{ height: h, backgroundColor: '#E5E7EB', borderRadius: h, overflow: 'hidden' }}>
@@ -190,9 +166,7 @@ function Sidebar({ ua, uaId, navigate }) {
 export default function CoursDetail() {
   const { uaId }  = useParams()
   const navigate  = useNavigate()
-  const bp        = useBreakpoint()
-  const isMobile  = bp === 'mobile'
-  const isTablet  = bp === 'tablet'
+  const { mobile: isMobile, tablet: isTablet } = useBreakpoint()
 
   const [ua, setUA]               = useState(null)
   const [tab, setTab]             = useState('lecon')
@@ -207,12 +181,9 @@ export default function CoursDetail() {
   }, [uaId])
 
   if (loading) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: C.bg }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 12px', animation: 'spin 1s linear infinite' }}/>
-        <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement du cours…</p>
-      </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: C.bg, gap: 12 }}>
+      <Spinner size={40} />
+      <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement du cours…</p>
     </div>
   )
 
@@ -231,10 +202,6 @@ export default function CoursDetail() {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh' }}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg) } }
-        @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
-      `}</style>
 
       {/* ── Hero ── */}
       <div style={{
@@ -330,7 +297,7 @@ export default function CoursDetail() {
                 background: `linear-gradient(135deg, ${C.brownPale}, ${C.emeraldPale})`,
                 borderRadius: 14, padding: isMobile ? '16px' : '20px 24px',
                 marginBottom: 20, border: `1px solid ${C.brownLight}30`,
-                animation: 'fadeIn .4s ease'
+                animation: 'fadeUp.4s ease'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <Star size={14} color={C.gold} fill={C.gold}/>
@@ -371,7 +338,7 @@ export default function CoursDetail() {
 
             {/* ── Leçon ── */}
             {tab === 'lecon' && (
-              <div style={{ animation: 'fadeIn .3s ease' }}>
+              <div style={{ animation: 'fadeUp.3s ease' }}>
                 {lecons.length > 1 && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     {lecons.map((l, i) => (
@@ -439,7 +406,7 @@ export default function CoursDetail() {
 
             {/* ── Exercices ── */}
             {tab === 'exercices' && (
-              <div style={{ animation: 'fadeIn .3s ease' }}>
+              <div style={{ animation: 'fadeUp.3s ease' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
                   {ua.exercices?.map((ex, i) => (
                     <div key={ex.id} style={{

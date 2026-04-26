@@ -1,23 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Sidebar from './Sidebar'
 import ParcoursPage from './ParcoursPage'
-
-function useIsMobile() {
-  const [mobile, setMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  )
-  useEffect(() => {
-    const h = () => setMobile(window.innerWidth < 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return mobile
-}
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 export default function AppLayout({ children }) {
   const [collapsed,  setCollapsed]  = useState(false)
   const [activeView, setActiveView] = useState('main') // 'main' | 'parcours'
-  const mobile = useIsMobile()
+  const { mobile } = useBreakpoint()
 
   return (
     <div style={{

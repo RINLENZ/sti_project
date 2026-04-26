@@ -1,5 +1,12 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
+import { useEffect } from 'react'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  return null
+}
 
 import LandingPage          from './pages/LandingPage'
 import Login                from './pages/auth/Login'
@@ -56,6 +63,8 @@ export default function App() {
   const { user, token } = useSelector(s => s.auth)
 
   return (
+    <>
+    <ScrollToTop />
     <Routes>
 
       {/* ── Pages publiques ── */}
@@ -127,5 +136,6 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace/>}/>
 
     </Routes>
+    </>
   )
 }

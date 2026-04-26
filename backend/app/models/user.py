@@ -21,6 +21,7 @@ class User(Base):
     filiere_id      = Column(UUID(as_uuid=True), ForeignKey("filieres.id"), nullable=True)
     niveau_id       = Column(UUID(as_uuid=True), ForeignKey("niveaux.id"), nullable=True)
     pays            = Column(String, nullable=True, default="Cameroun")
+    avatar          = Column(String, nullable=True)
     # Champs texte conservés pour compatibilité et affichage rapide
     niveau_label    = Column(String, nullable=True)   # "Première" — dénormalisé pour perf
     filiere_label   = Column(String, nullable=True)   # "F6 BIPE" — dénormalisé

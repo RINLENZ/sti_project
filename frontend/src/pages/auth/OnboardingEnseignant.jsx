@@ -10,15 +10,8 @@ import {
   X, Search, GraduationCap, RefreshCw, ArrowLeft
 } from 'lucide-react'
 import SensiaLogo from '../../components/SensiaLogo'
-
-// ── Palette ───────────────────────────────────────────────────────
-const C = {
-  brown:       '#6B3A2A', brownDark:   '#3D1F13',
-  brownLight:  '#C4865A', brownPale:   '#F5EDE5',
-  emerald:     '#0D9373', emeraldPale: '#E6F5F0',
-  surface:     '#FFFFFF', text:        '#1A1207',
-  textSec:     '#6B5744', gold:        '#D4A853',
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 // ── Onde ECG ──────────────────────────────────────────────────────
 function ECGWave({ width=28, height=18, color='white' }) {
@@ -92,17 +85,6 @@ function generateCode() {
     code += chars[Math.floor(Math.random() * chars.length)]
   }
   return code
-}
-
-// ── Hook responsive ───────────────────────────────────────────────
-function useIsMobile() {
-  const [mobile, setMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 600 : false)
-  useEffect(() => {
-    const h = () => setMobile(window.innerWidth < 600)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return mobile
 }
 
 // ── Composants boutons ────────────────────────────────────────────
@@ -180,7 +162,7 @@ export default function OnboardingEnseignant() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
   const navigate        = useNavigate()
-  const mobile          = useIsMobile()
+  const { mobile }      = useBreakpoint()
 
   const TOTAL_STEPS = 5
   const [step, setStep] = useState(1)

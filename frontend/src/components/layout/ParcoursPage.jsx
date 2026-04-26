@@ -7,16 +7,7 @@ import {
   CheckCircle2, PlayCircle, Lock, Trophy,
   ChevronDown, BookMarked, Layers, Star
 } from 'lucide-react'
-
-const C = {
-  brown:       '#6B3A2A', brownDark:  '#3D1F13',
-  brownLight:  '#C4865A', brownPale:  '#F5EDE5',
-  gold:        '#D4A853', emerald:    '#0D9373',
-  emeraldPale: '#E6F5F0', bg:         '#FAF7F4',
-  surface:     '#FFFFFF', text:       '#1A1207',
-  textSec:     '#6B5744', red:        '#DC2626',
-  orange:      '#F59E0B', blue:       '#2563EB',
-}
+import { C } from '../../styles/theme'
 
 // ── Helpers ─────────────────────────────────────────────────────
 

@@ -580,10 +580,12 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
         score_total       = sum(p.score for p in progressions if p.correct)
 
         result.append({
-            "user_id":    str(apprenant.id),
-            "nom":        apprenant.nom,
-            "prenom":     apprenant.prenom,
-            "email":      apprenant.email,
+            "user_id":      str(apprenant.id),
+            "nom":          apprenant.nom,
+            "prenom":       apprenant.prenom,
+            "email":        apprenant.email,
+            "niveau":       apprenant.niveau_label,
+            "filiere_label": apprenant.filiere_label,
             "engagement": {
                 "score":    score_actuel,
                 "niveau":   niveau,

@@ -9,14 +9,7 @@ import {
   BarChart2, Shield, UserCircle,
   Map, Menu, X, Home,
 } from 'lucide-react'
-
-const C = {
-  brown:        '#6B3A2A', brownLight:  '#C4865A',
-  brownPale:    '#F5EDE5', gold:        '#D4A853',
-  emerald:      '#0D9373',
-  sidebarBg:    '#1A0F0A',
-  sidebarBorder:'rgba(255,255,255,0.08)',
-}
+import { C } from '../../styles/theme'
 
 const ROLE_INFO = {
   super_admin: { label: 'Super Admin', color: '#D4A853', emoji: '⚙️' },

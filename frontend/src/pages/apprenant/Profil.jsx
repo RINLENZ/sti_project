@@ -4,19 +4,8 @@ import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera } from 'lucide-react'
-
-/* ── Palette ── */
-const C = {
-  brown:       '#6B3A2A', brownDark:   '#3D1F13',
-  brownLight:  '#C4865A', brownPale:   '#F5EDE5',
-  brownMid:    '#8B5E3C', brownGhost:  '#F9F2EC',
-  emerald:     '#0D9373', emeraldPale: '#E6F5F0',
-  emeraldDark: '#0A7A5E', gold:        '#D4A853',
-  bg:          '#FAF7F4', surface:     '#FFFFFF',
-  text:        '#1A1207', textSec:     '#6B5744',
-  textLight:   '#9C7E6A', red:         '#DC2626',
-  redPale:     '#FEF2F2', border:      '#EDE4DA',
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const PAYS    = ['Cameroun', "Côte d'Ivoire", 'Sénégal', 'Mali', 'Burkina Faso', 'Congo', 'Gabon', 'Autre']
 
@@ -54,17 +43,6 @@ const AVATARS = [
   { id: 'sun',            emoji: '☀️',    label: 'Soleil',        bg: '#FFFBEB', ring: '#F59E0B' },
   { id: 'gem',            emoji: '💎',    label: 'Diamant',      bg: '#EFF6FF', ring: '#3B82F6' },
 ]
-
-/* ── Breakpoint hook ── */
-function useIsMobile() {
-  const [m, setM] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false)
-  useEffect(() => {
-    const h = () => setM(window.innerWidth < 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return m
-}
 
 /* ── AvatarDisplay ── */
 function AvatarDisplay({ avatarId, initiales, size = 80, editable = false, onClick }) {
@@ -189,7 +167,7 @@ function InfoRow({ icon: Icon, label, children, value }) {
         <Icon size={14} color={C.brownMid} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 2px' }}>{label}</p>
+        <p style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 2px' }}>{label}</p>
         {children || <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</p>}
       </div>
     </div>
@@ -211,23 +189,38 @@ function SelectField({ value, onChange, options }) {
 export default function Profil() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
-  const mobile          = useIsMobile()
+  const { mobile }      = useBreakpoint()
 
   const [editing,        setEditing]        = useState(false)
   const [loading,        setLoading]        = useState(false)
   const [copied,         setCopied]         = useState(false)
   const [showPicker,     setShowPicker]     = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
-  const [niveaux, setNiveaux] = useState([])
-  const [form, setForm] = useState({ niveau_label: user?.niveau_label || user?.niveau || '', pays: user?.pays || 'Cameroun' })
+  const [referentiel,    setReferentiel]    = useState([])   // cycles [{ cycle_id, niveaux, filieres }]
+  const [form, setForm] = useState({
+    niveau_label:  user?.niveau_label || user?.niveau || '',
+    niveau_id:     user?.niveau_id    || '',
+    filiere_label: user?.filiere_label || '',
+    filiere_id:    user?.filiere_id   || '',
+    pays:          user?.pays         || 'Cameroun',
+  })
+
   useEffect(() => {
-  api.get('/api/admin/referentiel')
-    .then(({ data }) => {
-      const allNiveaux = data.flatMap(c => c.niveaux || [])
-      setNiveaux(allNiveaux)
-    })
-    .catch(() => {})
-}, [])
+    api.get('/api/tuteur/referentiel')
+      .then(({ data }) => setReferentiel(data))
+      .catch(() => {})
+  }, [])
+
+  // Niveaux de tous les cycles (liste plate)
+  const allNiveaux = referentiel.flatMap(c => c.niveaux.map(n => ({ ...n, cycle_id: c.cycle_id })))
+
+  // Filières du cycle du niveau sélectionné
+  const filieresDuNiveau = (() => {
+    const choisi = allNiveaux.find(n => n.id === form.niveau_id)
+    if (!choisi) return []
+    const cycle = referentiel.find(c => c.cycle_id === choisi.cycle_id)
+    return cycle?.filieres || []
+  })()
   const initiales = `${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase()
   const currentAv = AVATARS.find(a => a.id === selectedAvatar)
 
@@ -251,22 +244,24 @@ export default function Profil() {
 }
 
   async function saveProfile() {
-  setLoading(true)
-  try {
-    const niveauChoisi = niveaux.find(n => n.nom === form.niveau_label)
-    const payload = {
-      ...form,
-      niveau_id: niveauChoisi?.id || user.niveau_id,
+    setLoading(true)
+    try {
+      const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, {
+        niveau_label:  form.niveau_label,
+        niveau_id:     form.niveau_id     || null,
+        filiere_label: form.filiere_label || null,
+        filiere_id:    form.filiere_id    || null,
+        pays:          form.pays,
+      })
+      dispatch(loginSuccess({ token, user: { ...user, ...updated } }))
+      toast.success('Profil mis à jour !'); setEditing(false)
+    } catch (err) {
+      console.error('Erreur profil:', err.response?.data || err.message)
+      toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setLoading(false)
     }
-    await api.put(`/auth/profil/${user.id}/update`, payload)
-    dispatch(loginSuccess({ token, user: { ...user, ...payload } }))
-    toast.success('Profil mis à jour !'); setEditing(false)
-  } catch (err) {
-    console.error('Erreur profil:', err.response?.data || err.message)
-    toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
   }
-  finally { setLoading(false) }
-}
 
   const pad = mobile ? 14 : 28
 
@@ -398,23 +393,66 @@ export default function Profil() {
                 <InfoRow icon={User}          label="Nom"            value={user?.nom} />
                 <InfoRow icon={Mail}          label="Email"          value={user?.email} />
                 <InfoRow icon={GraduationCap} label="Niveau scolaire">
-  {editing ? (
-    <select
-      value={form.niveau_label || ''}
-      onChange={e => setForm(f => ({ ...f, niveau_label: e.target.value }))}
-      style={{ padding: '7px 12px', border: `2px solid ${C.brownLight}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', cursor: 'pointer', background: C.surface, color: C.brown }}
-    >
-      <option value="">— Choisir un niveau —</option>
-      {niveaux.map(n => (
-        <option key={n.id} value={n.nom}>{n.nom}</option>
-      ))}
-    </select>
-  ) : (
-    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>
-      {user?.niveau_label || user?.niveau || '—'}
-    </p>
-  )}
-</InfoRow>
+                  {editing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {/* Sélecteur niveau */}
+                      <select
+                        value={form.niveau_id || ''}
+                        onChange={e => {
+                          const choisi = allNiveaux.find(n => n.id === e.target.value)
+                          setForm(f => ({
+                            ...f,
+                            niveau_id:     choisi?.id    || '',
+                            niveau_label:  choisi?.nom   || '',
+                            filiere_id:    '',
+                            filiere_label: '',
+                          }))
+                        }}
+                        style={{ padding: '7px 12px', border: `2px solid ${C.brownLight}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', cursor: 'pointer', background: C.surface, color: C.brown }}
+                      >
+                        <option value="">— Choisir un niveau —</option>
+                        {referentiel.map(c => (
+                          <optgroup key={c.cycle_id} label={c.cycle_nom}>
+                            {c.niveaux.map(n => (
+                              <option key={n.id} value={n.id}>{n.nom}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      {/* Sélecteur filière — apparaît seulement si le cycle a des filières */}
+                      {filieresDuNiveau.length > 0 && (
+                        <select
+                          value={form.filiere_id || ''}
+                          onChange={e => {
+                            const f = filieresDuNiveau.find(f => f.id === e.target.value)
+                            setForm(prev => ({
+                              ...prev,
+                              filiere_id:    f?.id  || '',
+                              filiere_label: f?.nom || '',
+                            }))
+                          }}
+                          style={{ padding: '7px 12px', border: `2px solid ${C.emerald}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', cursor: 'pointer', background: C.emeraldPale, color: C.emerald }}
+                        >
+                          <option value="">— Choisir une filière —</option>
+                          {filieresDuNiveau.map(f => (
+                            <option key={f.id} value={f.id}>{f.nom}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>
+                        {user?.niveau_label || user?.niveau || '—'}
+                      </p>
+                      {user?.filiere_label && (
+                        <p style={{ fontSize: 11, color: C.textSec, margin: '2px 0 0', fontWeight: 600 }}>
+                          {user.filiere_label}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </InfoRow>
                 <div style={{ borderBottom: 'none' }}>
                   <InfoRow icon={Globe} label="Pays">
                     {editing

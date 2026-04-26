@@ -7,24 +7,9 @@ import {
   Clock, Zap, Layers, FolderOpen, Grid,
   FileText, AlertTriangle, Sparkles, Loader
 } from 'lucide-react'
-
-const C = {
-  brown: '#6B3A2A', brownDark: '#3D1F13', brownLight: '#C4865A',
-  emerald: '#0D9373', bg: '#FAF7F4', surface: '#FFFFFF',
-  text: '#1A1207', textSec: '#6B5744', brownPale: '#F5EDE5',
-  emeraldPale: '#E6F5F0', red: '#DC2626', orange: '#F59E0B',
-  gold: '#D4A853', blue: '#2563EB', bluePale: '#DBEAFE',
-}
-
-function useBreakpoint() {
-  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
-  useEffect(() => {
-    const h = () => setW(window.innerWidth)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return { mobile: w < 768, xs: w < 480 }
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { SkList } from '../../components/Skeleton'
 
 // ── UI de base ──────────────────────────────────────────────────
 const inputBase = {
@@ -274,47 +259,26 @@ function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload })
 
   return (
     <div>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-  {/* Filtres */}
-  <select value={filterNiveau} onChange={e => setFilterNiveau(e.target.value)}
-    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
-    <option value="all">Tous les niveaux</option>
-    {niveaux.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
-  </select>
-  <select value={filterMat} onChange={e => setFilterMat(e.target.value)}
-    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
-    <option value="all">Toutes les matières</option>
-    {structure.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
-  </select>
-  {(filterNiveau !== 'all' || filterMat !== 'all') && (
-    <button onClick={() => { setFilterNiveau('all'); setFilterMat('all') }}
-      style={{ padding: '8px 14px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-      ✕ Réinitialiser
-    </button>
-  )}
-  {/* Boutons créer */}
-  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-    <button onClick={() => setModal({ type: 'matiere' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-      <Plus size={13} /> Matière
-    </button>
-    <button onClick={() => setModal({ type: 'module' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.gold}, ${C.orange})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-      <Plus size={13} /> Module
-    </button>
-    <button onClick={() => setModal({ type: 'famille' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-      <Plus size={13} /> Famille
-    </button>
-  </div>
-</div>
+      {/* Toolbar — boutons créer uniquement (filtres globaux gérés par le parent) */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <button onClick={() => setModal({ type: 'matiere' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Plus size={13} /> Matière
+        </button>
+        <button onClick={() => setModal({ type: 'module' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.gold}, ${C.orange})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Plus size={13} /> Module
+        </button>
+        <button onClick={() => setModal({ type: 'famille' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Plus size={13} /> Famille
+        </button>
+      </div>
 
-   {/* Arbre hiérarchique */}
-{structure
-  .filter(mat => filterMat === 'all' || mat.id === filterMat)
-  .map(mat => {
-    // filtre les modules par niveau
-    const modulesFiltres = (mat.modules || []).filter(mod =>
-      filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id
-    )
+      {/* Arbre hiérarchique */}
+      {structure
+        .filter(mat => filterMat === 'all' || String(mat.id) === filterMat)
+        .map(mat => {
+          const modulesFiltres = (mat.modules || []).filter(mod =>
+            filterNiveau === 'all' || String(mod.niveau_id) === filterNiveau || !mod.niveau_id
+          )
     
     // Si aucun module après filtre, ne rien rendre (skip)
     if (filterNiveau !== 'all' && modulesFiltres.length === 0) return null
@@ -482,10 +446,10 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
   const { mobile } = useBreakpoint()
 
   const allUAs = structure
-  .filter(m => filterMat === 'all' || m.id === filterMat)
+  .filter(m => filterMat === 'all' || String(m.id) === filterMat)
   .flatMap(m =>
     (m.modules || [])
-      .filter(mod => filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id)
+      .filter(mod => filterNiveau === 'all' || String(mod.niveau_id) === filterNiveau || !mod.niveau_id)
       .flatMap(mod =>
         (mod.familles || []).flatMap(fam =>
           (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
@@ -493,12 +457,10 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
       )
   )
   const familles = structure.flatMap(m => (m.modules || []).flatMap(mod => mod.familles || []))
-  const matiereOpts = [{ value: 'all', label: 'Toutes les matières' }, ...structure.map(m => ({ value: m.id, label: m.nom }))]
 
   const filtered = allUAs.filter(ua => {
-    const matchMat = filterMat === 'all' || ua.matiere_id === filterMat
-    const matchQ   = !search || ua.titre.toLowerCase().includes(search.toLowerCase()) || ua.reference_ue?.toLowerCase().includes(search.toLowerCase())
-    return matchMat && matchQ
+    const matchQ = !search || ua.titre.toLowerCase().includes(search.toLowerCase()) || ua.reference_ue?.toLowerCase().includes(search.toLowerCase())
+    return matchQ
   })
 
   async function handleSubmit(payload) {
@@ -655,10 +617,10 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
   const { mobile } = useBreakpoint()
 
   const allUAs = structure
-  .filter(m => filterMat === 'all' || m.id === filterMat)
+  .filter(m => filterMat === 'all' || String(m.id) === filterMat)
   .flatMap(m =>
     (m.modules || [])
-      .filter(mod => filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id)
+      .filter(mod => filterNiveau === 'all' || String(mod.niveau_id) === filterNiveau || !mod.niveau_id)
       .flatMap(mod =>
         (mod.familles || []).flatMap(fam =>
           (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
@@ -676,7 +638,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
   useEffect(() => { loadExercices() }, [loadExercices])
 
   const filtered = exercices.filter(ex => {
-    const matchUA = filterUA === 'all' || ex.ua_id === filterUA
+    const matchUA = filterUA === 'all' || String(ex.ua_id) === filterUA
     const matchQ  = !search || ex.titre?.toLowerCase().includes(search.toLowerCase()) || ex.enonce?.toLowerCase().includes(search.toLowerCase())
     return matchUA && matchQ
   })
@@ -971,10 +933,10 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
   const { mobile } = useBreakpoint()
 
   const allUAs = structure
-  .filter(m => filterMat === 'all' || m.id === filterMat)
+  .filter(m => filterMat === 'all' || String(m.id) === filterMat)
   .flatMap(m =>
     (m.modules || [])
-      .filter(mod => filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id)
+      .filter(mod => filterNiveau === 'all' || String(mod.niveau_id) === filterNiveau || !mod.niveau_id)
       .flatMap(mod =>
         (mod.familles || []).flatMap(fam =>
           (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
@@ -1002,7 +964,7 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
   useEffect(() => { loadRessources() }, [loadRessources])
 
   const filtered = ressources.filter(r => {
-    const matchUA = filterUA === 'all' || r.ua_id === filterUA
+    const matchUA = filterUA === 'all' || String(r.ua_id) === filterUA
     const matchQ  = !search || r.titre.toLowerCase().includes(search.toLowerCase())
     return matchUA && matchQ
   })
@@ -1164,23 +1126,17 @@ export default function AdminCours() {
   const pad = xs ? 12 : mobile ? 16 : 28
 
   if (loading) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 14px', animation: 'spin 1s linear infinite' }} />
-        <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600 }}>Chargement…</p>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box' }}>
+      <div style={{ background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`, borderRadius: xs ? 16 : 20, height: 100, marginBottom: 20 }} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {[0,1,2,3].map(i => <div key={i} style={{ flex: 1, height: 44, background: C.surface, borderRadius: 10, border: `1px solid ${C.brownPale}` }} />)}
       </div>
+      <SkList count={4} gap={10} />
     </div>
   )
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box', overflowX: 'hidden' }}>
-      <style>{`
-        @keyframes spin     { to { transform: rotate(360deg) } }
-        @keyframes slideDown { from { opacity:0; transform:translateY(-8px) } to { opacity:1; transform:translateY(0) } }
-        @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
-        * { box-sizing: border-box; }
-      `}</style>
 
       {/* Hero */}
       <div style={{ background: `linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 60%, ${C.brownLight} 100%)`, borderRadius: xs ? 16 : 20, padding: xs ? '18px 16px' : '24px 28px', marginBottom: 20, position: 'relative', overflow: 'hidden', color: 'white' }}>
@@ -1247,7 +1203,7 @@ export default function AdminCours() {
   )}
   {filterNiveau !== 'all' && (
     <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>
-      Niveau : <strong style={{ color: C.brown }}>{niveaux.find(n => n.id === filterNiveau)?.nom}</strong>
+      Niveau : <strong style={{ color: C.brown }}>{niveaux.find(n => String(n.id) === filterNiveau)?.nom}</strong>
     </span>
   )}
 </div>

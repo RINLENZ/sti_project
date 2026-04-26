@@ -5,14 +5,7 @@ import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Copy, CheckCircle, GraduationCap, Brain, ChevronRight } from 'lucide-react'
-
-const C = {
-  brown:       '#6B3A2A', brownLight:  '#C4865A',
-  emerald:     '#0D9373', bg:          '#FAF7F4',
-  surface:     '#FFFFFF', text:        '#1A1207',
-  textSec:     '#6B5744', brownPale:   '#F5EDE5',
-  emeraldPale: '#E6F5F0', gold:        '#D4A853',
-}
+import { C } from '../../styles/theme'
 
 const PAYS = [
   { code: 'CM', name: 'Cameroun',      flag: '🇨🇲' },

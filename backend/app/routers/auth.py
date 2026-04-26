@@ -84,8 +84,11 @@ def login(
         "nom":                 user.nom,
         "prenom":              user.prenom,
         "niveau":              user.niveau_label,
-        "niveau_id": str(user.niveau_id) if user.niveau_id else None,
+        "niveau_label":        user.niveau_label,
+        "niveau_id":           str(user.niveau_id) if user.niveau_id else None,
         "filiere_label":       user.filiere_label,
+        "pays":                user.pays,
+        "avatar":              user.avatar,
         "code_invitation":     user.code_invitation,
         "etablissement":       user.etablissement,
         "ville":               user.ville,
@@ -173,8 +176,7 @@ def lier_par_code_classe(
     """
     from ..models.user import TuteurSuivi
 
-    code_classe = body.get("code_classe",
-        "avatar", "pays", "niveau_id", "").upper().strip()
+    code_classe = body.get("code_classe", "").upper().strip()
     if not code_classe:
         raise HTTPException(400, "code_classe requis")
 
@@ -259,11 +261,11 @@ def update_mon_profil(
     champs_autorises = [
         # Apprenant
         "niveau_label", "filiere_label", "pays", "niveau",
+        "niveau_id", "filiere_id", "avatar",
         # Enseignant
         "etablissement", "ville",
         "matieres_enseignees", "niveaux_enseignes",
         "code_classe",
-        "avatar", "pays", "niveau_id",
     ]
 
     for field, value in body.items():
@@ -275,17 +277,21 @@ def update_mon_profil(
                 setattr(user, field, value)
 
     db.commit()
+    db.refresh(user)
 
     return {
         "message":             "Profil mis à jour",
+        "niveau_label":        user.niveau_label,
+        "niveau_id":           str(user.niveau_id)  if user.niveau_id  else None,
+        "filiere_label":       user.filiere_label,
+        "filiere_id":          str(user.filiere_id) if user.filiere_id else None,
+        "pays":                user.pays,
+        "avatar":              user.avatar,
         "etablissement":       user.etablissement,
         "ville":               user.ville,
         "code_classe":         user.code_classe,
         "matieres_enseignees": user.matieres_enseignees,
         "niveaux_enseignes":   user.niveaux_enseignes,
-        "niveau_label":        user.niveau_label,
-        "filiere_label":       user.filiere_label,
-        "pays":                user.pays,
     }
 
 

@@ -5,15 +5,9 @@ import {
   Plus, Trash2, Edit3, ChevronDown, ChevronRight,
   Shield, X, Save, AlertTriangle, RefreshCw,
 } from 'lucide-react'
-
-// ── Palette ────────────────────────────────────────────────────
-const C = {
-  brown: '#6B3A2A', brownLight: '#C4865A', emerald: '#0D9373',
-  bg: '#FAF7F4', surface: '#FFFFFF', text: '#1A1207',
-  textSec: '#6B5744', brownPale: '#F5EDE5', emeraldPale: '#E6F5F0',
-  red: '#DC2626', orange: '#F59E0B', gold: '#D4A853', blue: '#2563EB',
-  bluePale: '#DBEAFE',
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { Spinner } from '../../components/Skeleton'
 
 // Section colors per type
 const SEC = {
@@ -21,17 +15,6 @@ const SEC = {
   ordre:   { color: C.gold,    bg: '#3D2E0A', light: '#FEF9E7',     label: 'Ordre' },
   filiere: { color: C.emerald, bg: '#0A2E22', light: C.emeraldPale, label: 'Filière' },
   niveau:  { color: C.blue,    bg: '#0A1A3D', light: C.bluePale,    label: 'Niveau/Classe' },
-}
-
-// ── Breakpoints ─────────────────────────────────────────────────
-function useBreakpoint() {
-  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
-  useEffect(() => {
-    const h = () => setW(window.innerWidth)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return { mobile: w < 768, xs: w < 480 }
 }
 
 // ── Base input style ────────────────────────────────────────────

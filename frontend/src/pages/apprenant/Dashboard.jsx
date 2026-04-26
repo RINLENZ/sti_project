@@ -8,40 +8,13 @@ import {
   ChevronRight, Brain, Star, ChevronDown, Lock, PlayCircle,
   CheckCircle2, Zap, BarChart2
 } from 'lucide-react'
-
-/* ─── Palette ──────────────────────────────────────────────────── */
-const C = {
-  brown:        '#6B3A2A',
-  brownLight:   '#C4865A',
-  brownPale:    '#F5EDE5',
-  brownMid:     '#A05C38',
-  brownDark:    '#3D1F13',
-  emerald:      '#0D9373',
-  emeraldDark:  '#0A7A5E',
-  emeraldPale:  '#E6F5F0',
-  bg:           '#FAF7F4',
-  surface:      '#FFFFFF',
-  surfaceAlt:   '#FDF9F6',
-  text:         '#1A1207',
-  textSec:      '#6B5744',
-  textMuted:    '#9C7E6A',
-  red:          '#DC2626',
-  orange:       '#F59E0B',
-  gold:         '#D4A853',
-  goldPale:     '#FBF3E0',
-  border:       '#EDE3DA',
-}
-
-/* ─── Breakpoints ──────────────────────────────────────────────── */
-function useBreakpoint() {
-  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024)
-  useEffect(() => {
-    const h = () => setW(window.innerWidth)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return { w, xs: w < 480, mobile: w < 768, desktop: w >= 1024 }
-}
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  PolarRadiusAxis, ResponsiveContainer, Tooltip
+} from 'recharts'
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { SkDashboard } from '../../components/Skeleton'
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
 const BKTLevel = p => {
@@ -455,15 +428,7 @@ export default function Dashboard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
-        <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600 }}>Chargement…</p>
-      </div>
-    </div>
-  )
+  if (loading) return <SkDashboard xs={xs} mobile={mobile} />
 
   const pad = xs ? 12 : mobile ? 16 : 24
   const totalUA = modulesFamilles.reduce((a, mf) => a + mf.familles.reduce((b, f) => b + (f.unites || []).length, 0), 0)
@@ -668,8 +633,6 @@ export default function Dashboard() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box', maxWidth: '100vw', overflowX: 'hidden' }}>
       <style>{`
-        @keyframes spin    { to { transform: rotate(360deg) } }
-        @keyframes fadeUp  { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
         * { box-sizing: border-box; margin: 0; }
         button:focus-visible { outline: 2px solid ${C.emerald}; outline-offset: 2px; }
       `}</style>
@@ -681,9 +644,20 @@ export default function Dashboard() {
         <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
           {RecoCard}
 
-          {/* Sélecteur matière si plusieurs */}
+          
+
+          {/* Titre section */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <BookOpen size={14} color={C.brown} />
+            <h2 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Mes cours</h2>
+            <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
+              {modulesFamilles.length} module{modulesFamilles.length > 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {/* Sélecteur matière si plusieurs — avant le radar pour filtrer */}
           {matieres.length > 1 && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 2 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
               {matieres.map(mat => {
                 const active = matActive?.id === mat.id
                 return (
@@ -703,14 +677,28 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Titre section */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <BookOpen size={14} color={C.brown} />
-            <h2 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Mes cours</h2>
-            <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
-              {modulesFamilles.length} module{modulesFamilles.length > 1 ? 's' : ''}
-            </span>
-          </div>
+          {/* BKT Radar */}
+          {bktData && Object.keys(bktData.competences).length > 0 && (
+            <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '16px 18px', marginBottom: 14, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Brain size={14} color={C.brown} />
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Maîtrise par compétence</h3>
+                <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>BKT</span>
+              </div>
+              <ResponsiveContainer width="100%" height={mobile ? 180 : 220}>
+                <RadarChart data={Object.entries(bktData.competences).map(([comp, val]) => ({
+                  subject: comp.length > 14 ? comp.substring(0, 14) + '…' : comp,
+                  A: val.pourcentage, fullName: comp,
+                }))} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+                  <PolarGrid stroke="#E5E7EB" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: C.textSec, fontSize: mobile ? 9 : 11, fontWeight: 700 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar dataKey="A" stroke={C.brown} fill={C.brown} fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: C.brown }} />
+                  <Tooltip formatter={(v, _, p) => [`${v}%`, p.payload.fullName]} contentStyle={{ backgroundColor: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {CoursList}
 

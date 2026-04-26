@@ -5,22 +5,15 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   Users, TrendingUp, AlertTriangle, Activity,
-  RefreshCw, CheckCircle, Plus, ChevronRight
+  RefreshCw, CheckCircle, Plus, ChevronRight, Edit2, Check, X
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   PolarRadiusAxis, ResponsiveContainer, Tooltip
 } from 'recharts'
-
-// ── Thème ─────────────────────────────────────────────────────────
-const C = {
-  brown:       '#6B3A2A', brownLight:  '#C4865A',
-  emerald:     '#0D9373', bg:          '#FAF7F4',
-  surface:     '#FFFFFF', text:        '#1A1207',
-  textSec:     '#6B5744', brownPale:   '#F5EDE5',
-  emeraldPale: '#E6F5F0', red:         '#DC2626',
-  orange:      '#F59E0B', gold:        '#D4A853',
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { SkList, Spinner } from '../../components/Skeleton'
 
 const engColor = s => s >= 0.7 ? C.emerald : s >= 0.4 ? C.orange : C.red
 const engLabel = s => s >= 0.7 ? '🟢 Engagé' : s >= 0.4 ? '🟡 Modéré' : '🔴 Décroché'
@@ -93,8 +86,8 @@ function BKTModal({ apprenant, onClose }) {
       </div>
 
       {!bkt ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid #F5EDE5', borderTopColor: '#6B3A2A', margin: '0 auto', animation: 'spin 1s linear infinite' }} />
+        <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
+          <Spinner />
         </div>
       ) : data.length === 0 ? (
         <p style={{ textAlign: 'center', color: '#6B5744', fontSize: 13, padding: '32px 0' }}>
@@ -148,6 +141,17 @@ export default function DashboardProf() {
   const [linked, setLinked]       = useState([])
   const [linking, setLinking]     = useState(false)
   const [selectedApprenant, setSelectedApprenant] = useState(null)
+  const [referentiel, setReferentiel]     = useState([])       // cycles [{ cycle_id, niveaux, filieres }]
+  const [editNiveauFor, setEditNiveauFor] = useState(null)   // apprenant_id en cours d'édition
+  const [niveauPick, setNiveauPick]       = useState('')     // niveau_id sélectionné
+  const [filierePick, setFilierePick]     = useState('')     // filiere_id sélectionné
+
+  const allNiveaux = referentiel.flatMap(c => c.niveaux.map(n => ({ ...n, cycle_id: c.cycle_id })))
+  const filieresPourNiveau = (() => {
+    const choisi = allNiveaux.find(n => n.id === niveauPick)
+    if (!choisi) return []
+    return referentiel.find(c => c.cycle_id === choisi.cycle_id)?.filieres || []
+  })()
 
   const fetchData = useCallback(async () => {
     try {
@@ -162,6 +166,33 @@ export default function DashboardProf() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    api.get('/api/tuteur/referentiel')
+      .then(({ data }) => setReferentiel(data))
+      .catch(() => {})
+  }, [])
+
+  async function saveNiveau(apprenantId) {
+    if (!niveauPick) return
+    const nChoisi = allNiveaux.find(n => n.id === niveauPick)
+    const fChoisi = filieresPourNiveau.find(f => f.id === filierePick)
+    if (!nChoisi) return
+    try {
+      await api.put(`/api/tuteur/apprenant/${apprenantId}/niveau`, {
+        niveau_id:     nChoisi.id,
+        niveau_label:  nChoisi.nom,
+        filiere_id:    fChoisi?.id   || null,
+        filiere_label: fChoisi?.nom  || null,
+      })
+      const label = fChoisi ? `${nChoisi.nom} — ${fChoisi.nom}` : nChoisi.nom
+      toast.success(`Classe mise à jour : ${label}`)
+      setEditNiveauFor(null)
+      fetchData()
+    } catch {
+      toast.error('Impossible de modifier la classe')
+    }
+  }
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -187,13 +218,18 @@ export default function DashboardProf() {
     }
   }
 
+  const { mobile, xs } = useBreakpoint()
+  const pad = xs ? 12 : mobile ? 16 : 28
+
   if (loading) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 12px', animation: 'spin 1s linear infinite' }}/>
-        <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement du tableau de bord…</p>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: pad, boxSizing: 'border-box' }}>
+      <div style={{ background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`, borderRadius: xs ? 16 : 20, height: 120, marginBottom: 24, borderRadius: 20 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} style={{ background: C.surface, borderRadius: 16, height: 90, border: `1px solid ${C.brownPale}` }} />
+        ))}
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <SkList count={3} gap={12} />
     </div>
   )
 
@@ -201,8 +237,7 @@ export default function DashboardProf() {
   const alertCount = stats_classe.nb_decrocheurs
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', padding: '28px' }}>
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes slideRight{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}`}</style>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box' }}>
 
       {/* ── En-tête ── */}
       <div style={{
@@ -265,13 +300,13 @@ export default function DashboardProf() {
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
         {/* ── Liste apprenants ── */}
-        <div style={{ flex: 1, minWidth: 400 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 900, color: C.brown }}>
+        <div style={{ flex: 1, minWidth: mobile ? 0 : 400 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <h2 style={{ fontSize: mobile ? 16 : 18, fontWeight: 900, color: C.brown }}>
               Engagement en temps réel
             </h2>
             {alertCount > 0 && (
-              <span style={{ backgroundColor: '#FEE2E2', color: C.red, fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20 }}>
+              <span style={{ backgroundColor: C.redPale, color: C.red, fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20 }}>
                 ⚠ {alertCount} alerte{alertCount > 1 ? 's' : ''}
               </span>
             )}
@@ -284,19 +319,25 @@ export default function DashboardProf() {
               const initiales = `${apprenant.prenom[0]}${apprenant.nom[0]}`
               const colors = [C.brown, C.emerald, C.brownLight, C.orange]
               const avatarColor = colors[apprenant.user_id.charCodeAt(0) % colors.length]
+              const isAlert = score < 0.4
 
               return (
-                <div 
-                  key={apprenant.user_id} 
+                <div
+                  key={apprenant.user_id}
                   onClick={() => setSelectedApprenant(apprenant)}
                   style={{
-                    backgroundColor: C.surface, borderRadius: 16, padding: '16px 20px',
-                    boxShadow: score < 0.4 ? `0 2px 12px ${C.red}15` : '0 2px 10px rgba(107,58,42,0.07)',
-                    border: score < 0.4 ? `1px solid ${C.red}30` : `1px solid ${C.brownPale}`,
-                    display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr',
-                    gap: 16, alignItems: 'center',
+                    backgroundColor: C.surface, borderRadius: 16,
+                    padding: mobile ? '14px' : '16px 20px',
+                    boxShadow: isAlert ? `0 2px 12px ${C.red}15` : '0 2px 10px rgba(107,58,42,0.07)',
+                    border: isAlert ? `1px solid ${C.red}30` : `1px solid ${C.brownPale}`,
+                    display: 'grid',
+                    gridTemplateColumns: mobile ? '1fr auto' : '2fr 1fr 2fr auto',
+                    gridTemplateRows: mobile ? 'auto auto' : '1fr',
+                    gap: mobile ? '10px 12px' : 16,
+                    alignItems: 'center',
                     animation: 'slideRight .3s ease',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    transition: 'box-shadow .2s',
                   }}
                 >
                   {/* Identité */}
@@ -312,40 +353,121 @@ export default function DashboardProf() {
                     </div>
                   </div>
 
-                  {/* Niveau */}
-                  <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
-                    {apprenant.niveau || 'N/A'}
-                  </span>
-
-                  {/* Progression */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                      <span style={{ fontSize: 11, color: C.textSec }}>Exercices</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: C.brown }}>{pct}%</span>
-                    </div>
-                    <ProgressBar value={pct} color={C.brown} h={5}/>
-                    <p style={{ fontSize: 10, color: C.textSec, marginTop: 3 }}>
-                      {apprenant.progression.exercices_reussis}/{apprenant.progression.total_exercices} · {apprenant.progression.score_total} pts
-                    </p>
+                  {/* Niveau + Filière — éditables par l'enseignant */}
+                  <div onClick={e => e.stopPropagation()}>
+                    {editNiveauFor === apprenant.user_id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {/* Sélecteur niveau */}
+                        <select
+                          autoFocus
+                          value={niveauPick}
+                          onChange={e => { setNiveauPick(e.target.value); setFilierePick('') }}
+                          style={{ fontSize: 11, fontWeight: 700, color: C.brown, border: `1.5px solid ${C.brownLight}`, borderRadius: 7, padding: '3px 6px', outline: 'none', background: C.surface, maxWidth: 130, cursor: 'pointer' }}
+                        >
+                          <option value="">— niveau —</option>
+                          {referentiel.map(c => (
+                            <optgroup key={c.cycle_id} label={c.cycle_nom}>
+                              {c.niveaux.map(n => (
+                                <option key={n.id} value={n.id}>{n.nom}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        {/* Sélecteur filière — si le cycle en a */}
+                        {filieresPourNiveau.length > 0 && (
+                          <select
+                            value={filierePick}
+                            onChange={e => setFilierePick(e.target.value)}
+                            style={{ fontSize: 11, fontWeight: 700, color: C.emerald, border: `1.5px solid ${C.emerald}`, borderRadius: 7, padding: '3px 6px', outline: 'none', background: '#E6F5F0', maxWidth: 130, cursor: 'pointer' }}
+                          >
+                            <option value="">— filière —</option>
+                            {filieresPourNiveau.map(f => (
+                              <option key={f.id} value={f.id}>{f.nom}</option>
+                            ))}
+                          </select>
+                        )}
+                        {/* Boutons valider/annuler */}
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => saveNiveau(apprenant.user_id)} style={{ background: C.emerald, border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: 'white' }}>
+                            <Check size={10} /> OK
+                          </button>
+                          <button onClick={() => { setEditNiveauFor(null); setNiveauPick(''); setFilierePick('') }} style={{ background: '#FEE2E2', border: 'none', borderRadius: 6, padding: '4px 5px', cursor: 'pointer', display: 'flex' }}>
+                            <X size={10} color={C.red} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div>
+                          <p style={{ fontSize: 11, fontWeight: 700, color: C.textSec, margin: 0, whiteSpace: 'nowrap' }}>
+                            {apprenant.niveau || 'N/A'}
+                          </p>
+                          {apprenant.filiere_label && (
+                            <p style={{ fontSize: 10, color: C.emerald, fontWeight: 600, margin: 0 }}>
+                              {apprenant.filiere_label}
+                            </p>
+                          )}
+                        </div>
+                        {referentiel.length > 0 && (
+                          <button
+                            title="Modifier la classe"
+                            onClick={() => { setEditNiveauFor(apprenant.user_id); setNiveauPick(''); setFilierePick('') }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', opacity: 0.45, transition: 'opacity .15s' }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={e => e.currentTarget.style.opacity = 0.45}
+                          >
+                            <Edit2 size={11} color={C.brown} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Progression — pleine largeur sur mobile */}
+                  {!mobile && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontSize: 11, color: C.textSec }}>Exercices</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.brown }}>{pct}%</span>
+                      </div>
+                      <ProgressBar value={pct} color={C.brown} h={5}/>
+                      <p style={{ fontSize: 10, color: C.textSec, marginTop: 3 }}>
+                        {apprenant.progression.exercices_reussis}/{apprenant.progression.total_exercices} · {apprenant.progression.score_total} pts
+                      </p>
+                    </div>
+                  )}
 
                   {/* Engagement */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Dot score={score}/>
-                      <span style={{ fontSize: 14, fontWeight: 900, color: engColor(score) }}>
+                      <span style={{ fontSize: mobile ? 13 : 14, fontWeight: 900, color: engColor(score) }}>
                         {Math.round(score * 100)}%
                       </span>
                     </div>
                     <span style={{ fontSize: 10, fontWeight: 700, color: engColor(score) }}>
                       {engLabel(score)}
                     </span>
-                    {score < 0.4 && (
-                      <span style={{ backgroundColor: '#FEE2E2', color: C.red, fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 20 }}>
+                    {isAlert && (
+                      <span style={{ backgroundColor: C.redPale, color: C.red, fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 20 }}>
                         ⚠ Décrochage
                       </span>
                     )}
                   </div>
+
+                  {/* Progression mobile — deuxième ligne */}
+                  {mobile && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 10, color: C.textSec }}>Exercices réussis</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: C.brown }}>{pct}%</span>
+                      </div>
+                      <ProgressBar value={pct} color={C.brown} h={4}/>
+                      <p style={{ fontSize: 10, color: C.textSec, marginTop: 3 }}>
+                        {apprenant.progression.exercices_reussis}/{apprenant.progression.total_exercices} · {apprenant.progression.score_total} pts
+                      </p>
+                    </div>
+                  )}
                 </div>
               )
             })}

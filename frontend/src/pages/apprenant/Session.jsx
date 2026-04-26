@@ -9,35 +9,9 @@ import {
   X, Activity, Clock, Target, Award
 } from 'lucide-react'
 
-/* ── Palette ─────────────────────────────────────────────────── */
-const C = {
-  brown:        '#6B3A2A',
-  brownLight:   '#C4865A',
-  emerald:      '#0D9373',
-  bg:           '#FAF7F4',
-  surface:      '#FFFFFF',
-  text:         '#1A1207',
-  textSec:      '#6B5744',
-  brownPale:    '#F5EDE5',
-  emeraldPale:  '#E6F5F0',
-  red:          '#DC2626',
-  orange:       '#F59E0B',
-  gold:         '#D4A853',
-}
-
-/* ── Breakpoint hook ─────────────────────────────────────────── */
-function useBreakpoint() {
-  const [bp, setBp] = useState(() => {
-    if (typeof window === 'undefined') return 'desktop'
-    return window.innerWidth < 640 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop'
-  })
-  useEffect(() => {
-    const h = () => setBp(window.innerWidth < 640 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop')
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
-  }, [])
-  return bp
-}
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { Spinner } from '../../components/Skeleton'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = s =>
@@ -439,8 +413,7 @@ export default function Session() {
   const { uaId }   = useParams()
   const navigate   = useNavigate()
   const { user }   = useSelector(s => s.auth)
-  const bp         = useBreakpoint()
-  const isMobile   = bp === 'mobile'
+  const { mobile: isMobile, tablet } = useBreakpoint()
   const sessionIdRef = useRef(null)
 
   const [ua, setUA]               = useState(null)
@@ -1172,7 +1145,7 @@ if (resos.length === 0) setPhase('exercices')
 
         {/* ── Panneau IA desktop / tablet ── */}
         {!isMobile && (
-          <div style={{ width: bp === 'tablet' ? 210 : 220, flexShrink: 0 }}>
+          <div style={{ width: tablet ? 210 : 220, flexShrink: 0 }}>
             <PanneauIA isOverlay={false}/>
           </div>
         )}
