@@ -18,7 +18,6 @@ const C = {
   redPale:     '#FEF2F2', border:      '#EDE4DA',
 }
 
-const NIVEAUX = ['Seconde', 'Première', 'Terminale']
 const PAYS    = ['Cameroun', "Côte d'Ivoire", 'Sénégal', 'Mali', 'Burkina Faso', 'Congo', 'Gabon', 'Autre']
 
 /* ── Collection d'avatars ── */
@@ -219,8 +218,16 @@ export default function Profil() {
   const [copied,         setCopied]         = useState(false)
   const [showPicker,     setShowPicker]     = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
-  const [form, setForm] = useState({ niveau: user?.niveau || '', pays: user?.pays || 'Cameroun' })
-
+  const [niveaux, setNiveaux] = useState([])
+  const [form, setForm] = useState({ niveau_label: user?.niveau_label || user?.niveau || '', pays: user?.pays || 'Cameroun' })
+  useEffect(() => {
+  api.get('/api/admin/referentiel')
+    .then(({ data }) => {
+      const allNiveaux = data.flatMap(c => c.niveaux || [])
+      setNiveaux(allNiveaux)
+    })
+    .catch(() => {})
+}, [])
   const initiales = `${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase()
   const currentAv = AVATARS.find(a => a.id === selectedAvatar)
 
@@ -244,13 +251,20 @@ export default function Profil() {
 }
 
   async function saveProfile() {
-    setLoading(true)
-    try {
-    await api.put(`/auth/profil/${user.id}/update`, form)
-    const { data: fresh } = await api.get(`/auth/profil/${user.id}`)
-    dispatch(loginSuccess({ token, user: { ...user, ...fresh } }))
+  setLoading(true)
+  try {
+    const niveauChoisi = niveaux.find(n => n.nom === form.niveau_label)
+    const payload = {
+      ...form,
+      niveau_id: niveauChoisi?.id || user.niveau_id,
+    }
+    await api.put(`/auth/profil/${user.id}/update`, payload)
+    dispatch(loginSuccess({ token, user: { ...user, ...payload } }))
     toast.success('Profil mis à jour !'); setEditing(false)
-  } catch { toast.error('Erreur lors de la mise à jour') }
+  } catch (err) {
+    console.error('Erreur profil:', err.response?.data || err.message)
+    toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
+  }
   finally { setLoading(false) }
 }
 
@@ -372,7 +386,7 @@ export default function Profil() {
                   </button>
                 ) : (
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => { setForm({ niveau: user?.niveau || '', pays: user?.pays || 'Cameroun' }); setEditing(false) }} style={{ background: C.redPale, border: `1px solid #FCA5A5`, borderRadius: 9, padding: '7px 10px', cursor: 'pointer', color: C.red, display: 'flex' }}><X size={13}/></button>
+                    <button onClick={() => { setForm({ niveau_label: user?.niveau_label || user?.niveau || '', pays: user?.pays || 'Cameroun' }); setEditing(false) }} style={{ background: C.redPale, border: `1px solid #FCA5A5`, borderRadius: 9, padding: '7px 10px', cursor: 'pointer', color: C.red, display: 'flex' }}><X size={13}/></button>
                     <button onClick={saveProfile} disabled={loading} style={{ background: `linear-gradient(135deg,${C.brown},${C.brownLight})`, border: 'none', borderRadius: 9, padding: '7px 16px', cursor: 'pointer', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5, opacity: loading ? .7 : 1 }}>
                       <Save size={12}/> {loading ? 'Sauvegarde…' : 'Sauvegarder'}
                     </button>
@@ -384,10 +398,23 @@ export default function Profil() {
                 <InfoRow icon={User}          label="Nom"            value={user?.nom} />
                 <InfoRow icon={Mail}          label="Email"          value={user?.email} />
                 <InfoRow icon={GraduationCap} label="Niveau scolaire">
-                  {editing
-                    ? <SelectField value={form.niveau} onChange={e => setForm(f => ({ ...f, niveau: e.target.value }))} options={NIVEAUX} />
-                    : <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>{user?.niveau || '—'}</p>}
-                </InfoRow>
+  {editing ? (
+    <select
+      value={form.niveau_label || ''}
+      onChange={e => setForm(f => ({ ...f, niveau_label: e.target.value }))}
+      style={{ padding: '7px 12px', border: `2px solid ${C.brownLight}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', cursor: 'pointer', background: C.surface, color: C.brown }}
+    >
+      <option value="">— Choisir un niveau —</option>
+      {niveaux.map(n => (
+        <option key={n.id} value={n.nom}>{n.nom}</option>
+      ))}
+    </select>
+  ) : (
+    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>
+      {user?.niveau_label || user?.niveau || '—'}
+    </p>
+  )}
+</InfoRow>
                 <div style={{ borderBottom: 'none' }}>
                   <InfoRow icon={Globe} label="Pays">
                     {editing
