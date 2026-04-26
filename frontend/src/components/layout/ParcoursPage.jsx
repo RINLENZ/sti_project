@@ -8,6 +8,7 @@ import {
   ChevronDown, BookMarked, Layers, Star
 } from 'lucide-react'
 import { C } from '../../styles/theme'
+import { Spinner } from '../Skeleton'
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -366,22 +367,17 @@ export default function ParcoursPage({ onBack }) {
   const overallPct = totalUnits > 0 ? Math.round(totalDone / totalUnits * 100) : 0
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', background: C.bg }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 14px', animation: 'spin 1s linear infinite' }} />
-        <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600, margin: 0 }}>Chargement du parcours…</p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', background: C.bg, gap: 12 }}>
+      <Spinner size={40} />
+      <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600, margin: 0 }}>Chargement du parcours…</p>
     </div>
   )
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh' }}>
       <style>{`
-        @keyframes spin    { to { transform: rotate(360deg) } }
         @keyframes fadeIn  { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
         @keyframes pulse   { 0%,100%{box-shadow:0 0 0 0 ${C.gold}55} 50%{box-shadow:0 0 0 12px ${C.gold}00} }
-        * { box-sizing: border-box; }
       `}</style>
 
       {/* ── HERO ── */}
@@ -495,9 +491,8 @@ export default function ParcoursPage({ onBack }) {
       <div style={{ padding: '28px', maxWidth: 760, margin: '0 auto' }}>
 
         {loadingFam ? (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <style>{`@keyframes spin2{to{transform:rotate(360deg)}}`}</style>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto', animation: 'spin2 1s linear infinite' }} />
+          <div style={{ textAlign: 'center', padding: '60px 0', display: 'flex', justifyContent: 'center' }}>
+            <Spinner size={36} />
           </div>
         ) : familles.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>

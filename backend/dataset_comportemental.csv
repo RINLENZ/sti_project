@@ -1,6 +1,7 @@
 session_id,nb_idles,nb_responses,nb_correct,nb_help,taux_reussite,temps_moyen_reponse,duree_secondes,nb_interactions,score_engagement,etat_affectif
-1271cfed-1fc4-4f99-b669-d5d93a7f6ccd,0,3,3,0,1.0,5.3,27,8,0.874,engagement_eleve
-a2144080-ab32-4edb-af2b-940da754074e,0,5,5,0,1.0,4.8,34,11,0.886,engagement_eleve
-e5a77724-612f-488e-97aa-250860a3bbba,0,3,0,0,0.0,65.7,220,43,0.719,ennui
-af43e66f-ff35-4c04-bfa2-f51717017f45,0,3,2,4,0.667,15.7,54,18,0.836,neutre
-27ed70af-9bc2-459f-b886-ce81758a8909,0,3,0,6,0.0,11.0,39,16,0.686,frustration
+6df393b1-595d-441c-8e55-a4826069eca7,0,3,2,0,0.667,12.3,43,9,0.829,neutre
+6caf4f9f-152d-4881-bde1-e8520605a4db,0,5,3,0,0.6,7.0,48,12,0.886,neutre
+3d694c9c-911d-4247-9f48-4e7d99d5e380,0,3,2,0,0.667,6.7,27,15,0.816,neutre
+b29caf62-1dc2-4c35-9179-0bb25ae2ca8b,0,3,2,2,0.667,13.7,62,17,0.9,neutre
+3681d430-1246-4f8d-b084-eda00da22385,0,5,3,0,0.6,4.8,34,11,0.943,neutre
+65131a99-dfc5-494a-9d84-e0b913f0c8ba,0,5,3,2,0.6,6.2,67,38,0.514,ennui

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
-import { SkList } from '../../components/Skeleton'
+import { SkList, Spinner } from '../../components/Skeleton'
 
 // ── UI de base ──────────────────────────────────────────────────
 const inputBase = {
@@ -725,8 +725,8 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
       )}
 
       {loadingEx ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto', animation: 'spin 1s linear infinite' }} />
+        <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
+          <Spinner size={36} />
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1031,8 +1031,8 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
 
       {/* Liste */}
       {loadingRes ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto', animation: 'spin 1s linear infinite' }} />
+        <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
+          <Spinner size={36} />
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 20px', background: C.surface, borderRadius: 16, border: `1px dashed ${C.brownLight}` }}>

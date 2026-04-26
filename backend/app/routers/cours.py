@@ -869,4 +869,33 @@ def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
     if not ex: raise HTTPException(404, "Exercice introuvable")
     # Exercice n'a pas de colonne actif — on supprime vraiment
     db.delete(ex); db.commit()
+
+
+@router.get("/sessions/historique/{user_id}")
+def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depends(get_db)):
+    """
+    Retourne l'historique des sessions d'apprentissage d'un apprenant,
+    utilisé pour tracer la courbe d'engagement dans le dashboard enseignant.
+    """
+    from ..models.session import LearningSession
+    sessions = (
+        db.query(LearningSession)
+        .filter(
+            LearningSession.user_id == user_id,
+            LearningSession.ended_at.isnot(None),
+        )
+        .order_by(LearningSession.started_at.asc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "date":             s.started_at.strftime("%d/%m") if s.started_at else "",
+            "engagement":       round((s.score_engagement or 0) * 100),
+            "score_exercices":  round((s.score_final or 0) * 100),
+            "duree_min":        round((s.duree_secondes or 0) / 60, 1),
+            "etat":             s.etat_affectif or "neutre",
+        }
+        for s in sessions
+    ]
     return {"message": "Exercice supprimé"}

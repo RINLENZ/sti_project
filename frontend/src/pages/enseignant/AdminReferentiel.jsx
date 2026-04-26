@@ -387,23 +387,14 @@ export default function AdminReferentiel() {
   const pad = xs ? 12 : mobile ? 16 : 28
 
   if (loading) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 14px', animation: 'spin 1s linear infinite' }} />
-        <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement…</p>
-      </div>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg, gap: 12 }}>
+      <Spinner size={44} />
+      <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement…</p>
     </div>
   )
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box', overflowX: 'hidden' }}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg) } }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px) } to { opacity: 1; transform: translateY(0) } }
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        * { box-sizing: border-box; }
-      `}</style>
 
       {/* ── Hero ── */}
       <div style={{

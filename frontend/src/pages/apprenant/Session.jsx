@@ -651,12 +651,9 @@ if (resos.length === 0) setPhase('exercices')
 
   /* ── Chargement ──────────────────────────────────────────── */
   if (!ua || exercices.length === 0) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bg }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', border: `3px solid ${C.brownPale}`, borderTopColor: C.brown, margin: '0 auto 12px', animation: 'spin 1s linear infinite' }}/>
-        <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement…</p>
-      </div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: C.bg, gap: 12 }}>
+      <Spinner size={44} />
+      <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement…</p>
     </div>
   )
 
@@ -821,12 +818,7 @@ if (resos.length === 0) setPhase('exercices')
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
 
       <style>{`
-        @keyframes pulse      { 0%,100%{opacity:1} 50%{opacity:.35} }
-        @keyframes slideDown  { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes slideUp    { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes fadeUp     { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes confettiFall{ 0%{transform:translateY(-20px) rotate(0deg);opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
-        @keyframes spin       { to{transform:rotate(360deg)} }
         @keyframes shake      { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-4px)} 40%,80%{transform:translateX(4px)} }
       `}</style>
 
@@ -1031,7 +1023,7 @@ if (resos.length === 0) setPhase('exercices')
                             minHeight: 38
                           }}>
                             {loadingIA
-                              ? <><div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'white', animation: 'spin 1s linear infinite' }}/> Réflexion…</>
+                              ? <><Spinner size={12} color="white" /> Réflexion…</>
                               : <>💡 Expliquer autrement</>}
                           </button>
                         )}

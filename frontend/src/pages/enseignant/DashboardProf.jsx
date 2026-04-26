@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  PolarRadiusAxis, ResponsiveContainer, Tooltip
+  PolarRadiusAxis, ResponsiveContainer, Tooltip,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
@@ -59,11 +60,17 @@ const StatCard = ({ label, value, subtitle, color, Icon, trend }) => (
 )
 
 function BKTModal({ apprenant, onClose }) {
-  const [bkt, setBkt] = useState(null)
+  const [bkt, setBkt]         = useState(null)
+  const [history, setHistory] = useState(null)
+  const [tab, setTab]         = useState('radar')
+
   useEffect(() => {
     api.get(`/api/bkt/apprenant/${apprenant.user_id}`)
       .then(({ data }) => setBkt(data))
       .catch(() => {})
+    api.get(`/api/cours/sessions/historique/${apprenant.user_id}?limit=20`)
+      .then(({ data }) => setHistory(data))
+      .catch(() => setHistory([]))
   }, [apprenant.user_id])
 
   const data = bkt ? Object.entries(bkt.competences).map(([comp, val]) => ({
@@ -73,57 +80,131 @@ function BKTModal({ apprenant, onClose }) {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#6B3A2A', margin: 0 }}>
-            🧠 BKT — {apprenant.prenom} {apprenant.nom}
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.brown, margin: 0 }}>
+            🧠 {apprenant.prenom} {apprenant.nom}
           </h2>
-          <p style={{ fontSize: 11, color: '#6B5744', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 11, color: C.textSec, margin: '4px 0 0' }}>
             {bkt?.nb_competences_maitrisees || 0} compétence(s) maîtrisée(s)
           </p>
         </div>
-        <button onClick={onClose} style={{ background: '#F5EDE5', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6B3A2A' }}>✕</button>
+        <button onClick={onClose} style={{ background: C.brownPale, border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.brown }}>✕</button>
       </div>
 
-      {!bkt ? (
-        <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
-          <Spinner />
-        </div>
-      ) : data.length === 0 ? (
-        <p style={{ textAlign: 'center', color: '#6B5744', fontSize: 13, padding: '32px 0' }}>
-          Aucune compétence enregistrée — cet apprenant n'a pas encore fait d'exercices.
-        </p>
-      ) : (
-        <>
-          <ResponsiveContainer width="100%" height={220}>
-            <RadarChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <PolarGrid stroke="#E5E7EB" />
-              <PolarAngleAxis dataKey="subject" tick={{ fill: '#6B5744', fontSize: 10, fontWeight: 700 }} />
-              <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-              <Radar dataKey="A" stroke="#6B3A2A" fill="#6B3A2A" fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: '#6B3A2A' }} />
-              <Tooltip formatter={(v, _, p) => [`${v}%`, p.payload.fullName]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-            </RadarChart>
-          </ResponsiveContainer>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-            {Object.entries(bkt.competences).map(([comp, val]) => {
-              const color = val.pourcentage >= 95 ? '#0D9373' : val.pourcentage >= 70 ? '#2563EB' : val.pourcentage >= 40 ? '#F59E0B' : '#DC2626'
-              return (
-                <div key={comp} style={{ padding: '6px 10px', background: '#F5EDE5', borderRadius: 8, borderLeft: `3px solid ${color}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#1A1207', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{comp}</span>
-                    <span style={{ fontSize: 11, color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{val.pourcentage}%</span>
-                  </div>
-                  <div style={{ height: 4, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${val.pourcentage}%`, background: color, borderRadius: 4, transition: 'width .6s ease' }} />
-                  </div>
-                  <p style={{ fontSize: 10, color: '#6B5744', margin: '3px 0 0' }}>
-                    {val.nb_correct}/{val.nb_tentatives} réussis · {val.label}
-                  </p>
-                </div>
-              )
-            })}
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#E5E7EB', padding: 4, borderRadius: 10 }}>
+        {[
+          { key: 'radar',   label: '🎯 Compétences' },
+          { key: 'history', label: '📈 Engagement' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)} style={{
+            flex: 1, padding: '8px', border: 'none', borderRadius: 7,
+            cursor: 'pointer', fontSize: 12, fontWeight: tab === t.key ? 800 : 500,
+            background: tab === t.key ? C.surface : 'transparent',
+            color: tab === t.key ? C.brown : C.textSec,
+            boxShadow: tab === t.key ? '0 2px 8px rgba(107,58,42,0.12)' : 'none',
+            transition: 'all .15s',
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab: Compétences BKT */}
+      {tab === 'radar' && (
+        !bkt ? (
+          <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
+            <Spinner />
           </div>
-        </>
+        ) : data.length === 0 ? (
+          <p style={{ textAlign: 'center', color: C.textSec, fontSize: 13, padding: '32px 0' }}>
+            Aucune compétence — cet apprenant n'a pas encore fait d'exercices.
+          </p>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={200}>
+              <RadarChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+                <PolarGrid stroke="#E5E7EB" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: C.textSec, fontSize: 10, fontWeight: 700 }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                <Radar dataKey="A" stroke={C.brown} fill={C.brown} fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: C.brown }} />
+                <Tooltip formatter={(v, _, p) => [`${v}%`, p.payload.fullName]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              </RadarChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+              {Object.entries(bkt.competences).map(([comp, val]) => {
+                const color = val.pourcentage >= 95 ? C.emerald : val.pourcentage >= 70 ? '#2563EB' : val.pourcentage >= 40 ? C.orange : C.red
+                return (
+                  <div key={comp} style={{ padding: '6px 10px', background: C.brownPale, borderRadius: 8, borderLeft: `3px solid ${color}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{comp}</span>
+                      <span style={{ fontSize: 11, color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{val.pourcentage}%</span>
+                    </div>
+                    <div style={{ height: 4, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${val.pourcentage}%`, background: color, borderRadius: 4, transition: 'width .6s ease' }} />
+                    </div>
+                    <p style={{ fontSize: 10, color: C.textSec, margin: '3px 0 0' }}>
+                      {val.nb_correct}/{val.nb_tentatives} réussis · {val.label}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )
+      )}
+
+      {/* Tab: Historique engagement */}
+      {tab === 'history' && (
+        history === null ? (
+          <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
+            <Spinner />
+          </div>
+        ) : history.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <p style={{ fontSize: 32, marginBottom: 8 }}>📊</p>
+            <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600 }}>Aucune session terminée pour l'instant.</p>
+            <p style={{ color: C.textSec, fontSize: 11, marginTop: 4 }}>Les données apparaîtront après la première session complète.</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[
+                { label: 'Sessions', value: history.length, color: C.brown },
+                { label: 'Engagement moy.', value: `${Math.round(history.reduce((s,h) => s + h.engagement, 0) / history.length)}%`, color: C.emerald },
+                { label: 'Score moy.', value: `${Math.round(history.reduce((s,h) => s + h.score_exercices, 0) / history.length)}%`, color: C.orange },
+              ].map(s => (
+                <div key={s.label} style={{ flex: 1, background: C.brownPale, borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                  <p style={{ fontSize: 15, fontWeight: 900, color: s.color, margin: 0 }}>{s.value}</p>
+                  <p style={{ fontSize: 9, color: C.textSec, fontWeight: 700, margin: 0 }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={history} margin={{ top: 5, right: 8, bottom: 5, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey="date" tick={{ fontSize: 9, fill: C.textSec }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: C.textSec }} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: `1px solid ${C.brownPale}` }}
+                  formatter={(v, name) => [`${v}%`, name === 'engagement' ? 'Engagement' : 'Score exercices']}
+                />
+                <Line type="monotone" dataKey="engagement" stroke={C.emerald} strokeWidth={2} dot={{ r: 3, fill: C.emerald }} name="engagement" />
+                <Line type="monotone" dataKey="score_exercices" stroke={C.brown} strokeWidth={2} dot={{ r: 3, fill: C.brown }} strokeDasharray="4 2" name="score_exercices" />
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 8 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: C.textSec }}>
+                <div style={{ width: 16, height: 2, background: C.emerald, borderRadius: 1 }} /> Engagement
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: C.textSec }}>
+                <div style={{ width: 16, height: 2, background: C.brown, borderRadius: 1, borderTop: '2px dashed ' + C.brown }} /> Score exercices
+              </span>
+            </div>
+          </>
+        )
       )}
     </>
   )
@@ -153,9 +234,23 @@ export default function DashboardProf() {
     return referentiel.find(c => c.cycle_id === choisi.cycle_id)?.filieres || []
   })()
 
+  const prevScoresRef = useRef({})
+
   const fetchData = useCallback(async () => {
     try {
       const { data: res } = await api.get(`/api/cours/dashboard/enseignant?enseignant_id=${user.id}`)
+
+      // Alerte décrochage : notifie si un apprenant passe sous 0.4 pour la première fois
+      const prevScores = prevScoresRef.current
+      for (const a of (res.apprenants || [])) {
+        const prev = prevScores[a.user_id]
+        const curr = a.engagement.score
+        if (prev !== undefined && prev >= 0.4 && curr < 0.4) {
+          toast.error(`⚠️ ${a.prenom} ${a.nom} est en décrochage !`, { duration: 6000 })
+        }
+        prevScores[a.user_id] = curr
+      }
+
       setData(res)
       setLastUpdate(new Date())
     } catch {
@@ -486,7 +581,7 @@ export default function DashboardProf() {
         </div>
 
         {/* ── Panneau droit ── */}
-        <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ width: mobile ? '100%' : 280, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Lier un apprenant */}
           <div style={{ backgroundColor: C.surface, borderRadius: 18, padding: 22, boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}` }}>

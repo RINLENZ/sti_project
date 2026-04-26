@@ -178,7 +178,6 @@ export default function Onboarding() {
         <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid rgba(255,255,255,.2)', borderTopColor: C.gold, margin: '0 auto 16px', animation: 'spin 1s linear infinite' }}/>
         <p style={{ fontSize: 14, opacity: .7 }}>Chargement du référentiel…</p>
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
@@ -194,7 +193,6 @@ export default function Onboarding() {
         @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(212,168,83,0.3)}50%{box-shadow:0 0 24px rgba(212,168,83,0.7)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
 
       {/* Motif adinkra */}

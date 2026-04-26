@@ -287,7 +287,6 @@ dispatch(loginSuccess({
 
   if (loadingRef) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:`linear-gradient(135deg,${C.brown},#1A0A05)` }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ textAlign:'center', color:'white' }}>
         <div style={{ width:44,height:44,borderRadius:'50%',border:'3px solid rgba(255,255,255,.2)',borderTopColor:C.gold,margin:'0 auto 16px',animation:'spin 1s linear infinite' }}/>
         <p style={{ fontSize:14, opacity:.7 }}>Chargement…</p>
@@ -312,7 +311,6 @@ dispatch(loginSuccess({
         @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes glow     {0%,100%{box-shadow:0 0 8px rgba(212,168,83,.3)}50%{box-shadow:0 0 24px rgba(212,168,83,.7)}}
         @keyframes fadeIn   {from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin     {to{transform:rotate(360deg)}}
         .input-ens:focus{outline:none;border-color:${C.brown}!important;box-shadow:0 0 0 3px ${C.brown}18!important}
         button{font-family:inherit;cursor:pointer}
       `}</style>

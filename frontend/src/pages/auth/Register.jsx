@@ -163,7 +163,6 @@ dispatch(loginSuccess({
         input::placeholder { color:#C8B8B0; font-weight:400; }
         @keyframes fadeUp    { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
         @keyframes floatY    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
-        @keyframes spin      { to{transform:rotate(360deg)} }
         @keyframes glowPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
         button { font-family:inherit; cursor:pointer }
       `}</style>
