@@ -214,7 +214,7 @@ function FormFamille({ initial = {}, modules = [], onSubmit, onClose }) {
   )
 }
 
-function TabStructure({ structure, niveaux, onReload }) {
+function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload }) {
   const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [expanded, setExpanded] = useState({})
@@ -276,53 +276,84 @@ function TabStructure({ structure, niveaux, onReload }) {
     <div>
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        <button onClick={() => setModal({ type: 'matiere' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Plus size={13} /> Matière
-        </button>
-        <button onClick={() => setModal({ type: 'module' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.gold}, ${C.orange})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Plus size={13} /> Module
-        </button>
-        <button onClick={() => setModal({ type: 'famille' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Plus size={13} /> Famille de situations
-        </button>
-      </div>
+  {/* Filtres */}
+  <select value={filterNiveau} onChange={e => setFilterNiveau(e.target.value)}
+    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
+    <option value="all">Tous les niveaux</option>
+    {niveaux.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
+  </select>
+  <select value={filterMat} onChange={e => setFilterMat(e.target.value)}
+    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
+    <option value="all">Toutes les matières</option>
+    {structure.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+  </select>
+  {(filterNiveau !== 'all' || filterMat !== 'all') && (
+    <button onClick={() => { setFilterNiveau('all'); setFilterMat('all') }}
+      style={{ padding: '8px 14px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+      ✕ Réinitialiser
+    </button>
+  )}
+  {/* Boutons créer */}
+  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+    <button onClick={() => setModal({ type: 'matiere' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <Plus size={13} /> Matière
+    </button>
+    <button onClick={() => setModal({ type: 'module' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.gold}, ${C.orange})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <Plus size={13} /> Module
+    </button>
+    <button onClick={() => setModal({ type: 'famille' })} style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <Plus size={13} /> Famille
+    </button>
+  </div>
+</div>
 
-      {/* Arbre hiérarchique */}
-      {structure.map(mat => (
-        <div key={mat.id} style={{ marginBottom: 12, background: C.surface, borderRadius: 16, border: `1px solid ${C.brownPale}`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
-
-          {/* Matière */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: `linear-gradient(135deg, ${C.brownPale}, white)`, cursor: 'pointer' }}
-            onClick={() => toggle(`mat-${mat.id}`)}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 16, color: 'white' }}>📚</span>
-            </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 800, color: C.brown, margin: 0 }}>{mat.nom}</p>
-              <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{mat.code} · {(mat.modules || []).length} module(s)</p>
-            </div>
-            <ActionBtns
-              onEdit={() => setModal({ type: 'matiere', editMatiere: mat })}
-              onDelete={() => setDeleting({ type: 'matiere', id: mat.id, nom: mat.nom })}
-            />
-            <ChevronDown size={16} color={C.brown} style={{ transform: expanded[`mat-${mat.id}`] ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }} />
+   {/* Arbre hiérarchique */}
+{structure
+  .filter(mat => filterMat === 'all' || mat.id === filterMat)
+  .map(mat => {
+    // filtre les modules par niveau
+    const modulesFiltres = (mat.modules || []).filter(mod =>
+      filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id
+    )
+    
+    // Si aucun module après filtre, ne rien rendre (skip)
+    if (filterNiveau !== 'all' && modulesFiltres.length === 0) return null
+    
+    // S'il y a des modules, on rend la matière
+    return (
+      <div key={mat.id} style={{ marginBottom: 12, background: C.surface, borderRadius: 16, border: `1px solid ${C.brownPale}`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
+        {/* Matière */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: `linear-gradient(135deg, ${C.brownPale}, white)`, cursor: 'pointer' }}
+          onClick={() => toggle(`mat-${mat.id}`)}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${C.brownDark || '#8B5A3A'}, ${C.brown})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ fontSize: 16, color: 'white' }}>📚</span>
           </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: C.brown, margin: 0 }}>{mat.nom}</p>
+            <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{mat.code} · {(mat.modules || []).length} module(s)</p>
+          </div>
+          <ActionBtns
+            onEdit={() => setModal({ type: 'matiere', editMatiere: mat })}
+            onDelete={() => setDeleting({ type: 'matiere', id: mat.id, nom: mat.nom })}
+          />
+          <ChevronDown size={16} color={C.brown} style={{ transform: expanded[`mat-${mat.id}`] ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }} />
+        </div>
 
-          {/* Modules */}
-          {expanded[`mat-${mat.id}`] && (
-            <div style={{ padding: '8px 18px 14px 52px' }}>
-              {(mat.modules || []).length === 0 && (
-                <p style={{ fontSize: 12, color: C.textSec, fontStyle: 'italic', padding: '8px 0' }}>
-                  Aucun module — créez-en un avec le bouton "+ Module" ci-dessus.
-                </p>
-              )}
-              {(mat.modules || []).map(mod => (
+        {/* Modules */}
+        {expanded[`mat-${mat.id}`] && (
+          <div style={{ padding: '8px 18px 14px 52px' }}>
+            {/* Afficher les modules filtrés */}
+            {modulesFiltres.length === 0 ? (
+              <p style={{ fontSize: 12, color: C.textSec, fontStyle: 'italic', padding: '8px 0' }}>
+                Aucun module — créez-en un avec le bouton "+ Module" ci-dessus.
+              </p>
+            ) : (
+              modulesFiltres.map(mod => (
                 <div key={mod.id} style={{ marginBottom: 8, background: `${C.brownPale}60`, borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.brownPale}` }}>
-
                   {/* Module header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => toggle(`mod-${mod.id}`)}>
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${C.gold}, ${C.orange})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${C.gold || '#D4A853'}, ${C.orange})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <span style={{ fontSize: 11, fontWeight: 900, color: 'white' }}>M{mod.numero}</span>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -341,32 +372,35 @@ function TabStructure({ structure, niveaux, onReload }) {
                   {/* Familles */}
                   {expanded[`mod-${mod.id}`] && (
                     <div style={{ padding: '4px 14px 12px 52px' }}>
-                      {(mod.familles || []).length === 0 && (
+                      {(mod.familles || []).length === 0 ? (
                         <p style={{ fontSize: 11, color: C.textSec, fontStyle: 'italic', padding: '6px 0' }}>
                           Aucune famille — créez-en une avec "+ Famille de situations".
                         </p>
-                      )}
-                      {(mod.familles || []).map(fam => (
-                        <div key={fam.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: C.surface, borderRadius: 10, marginBottom: 6, border: `1px solid ${C.brownPale}` }}>
-                          <div style={{ width: 24, height: 24, borderRadius: 6, background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12 }}>🗂️</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fam.titre}</p>
-                            <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>{(fam.unites || []).length} UA</p>
+                      ) : (
+                        (mod.familles || []).map(fam => (
+                          <div key={fam.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: C.surface, borderRadius: 10, marginBottom: 6, border: `1px solid ${C.brownPale}` }}>
+                            <div style={{ width: 24, height: 24, borderRadius: 6, background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12 }}>🗂️</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fam.titre}</p>
+                              <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>{(fam.unites || []).length} UA</p>
+                            </div>
+                            <ActionBtns
+                              onEdit={() => setModal({ type: 'famille', editFamille: { ...fam, module_id: mod.id } })}
+                              onDelete={() => setDeleting({ type: 'famille', id: fam.id, nom: fam.titre })}
+                            />
                           </div>
-                          <ActionBtns
-                            onEdit={() => setModal({ type: 'famille', editFamille: { ...fam, module_id: mod.id } })}
-                            onDelete={() => setDeleting({ type: 'famille', id: fam.id, nom: fam.titre })}
-                          />
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    )
+  })}
 
       {structure.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px', color: C.textSec, background: C.surface, borderRadius: 16, border: `1px dashed ${C.brownLight}` }}>
@@ -441,19 +475,22 @@ function FormUA({ initial = {}, familles = [], onSubmit, onClose }) {
   )
 }
 
-function TabUA({ structure, onReload }) {
+function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
   const [search, setSearch] = useState('')
-  const [filterMat, setFilterMat] = useState('all')
   const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const { mobile } = useBreakpoint()
 
-  const allUAs = structure.flatMap(m =>
-    (m.modules || []).flatMap(mod =>
-      (mod.familles || []).flatMap(fam =>
-        (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
+  const allUAs = structure
+  .filter(m => filterMat === 'all' || m.id === filterMat)
+  .flatMap(m =>
+    (m.modules || [])
+      .filter(mod => filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id)
+      .flatMap(mod =>
+        (mod.familles || []).flatMap(fam =>
+          (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
+        )
       )
-    )
   )
   const familles = structure.flatMap(m => (m.modules || []).flatMap(mod => mod.familles || []))
   const matiereOpts = [{ value: 'all', label: 'Toutes les matières' }, ...structure.map(m => ({ value: m.id, label: m.nom }))]
@@ -485,9 +522,6 @@ function TabUA({ structure, onReload }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une UA…" style={{ ...inputBase, paddingLeft: 30 }}
             onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
         </div>
-        <select value={filterMat} onChange={e => setFilterMat(e.target.value)} style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
-          {matiereOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
         <button onClick={() => setModal('create')} style={{ padding: '9px 16px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
           <Plus size={13} /> Nouvelle UA
         </button>
@@ -608,7 +642,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
   )
 }
 
-function TabExercices({ structure, onReload }) {
+function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
   const [exercices, setExercices] = useState([])
   const [loadingEx, setLoadingEx] = useState(true)
   const [search, setSearch] = useState('')
@@ -620,8 +654,16 @@ function TabExercices({ structure, onReload }) {
   const [genForm, setGenForm] = useState({ nb: 3, type: 'qcm', difficulte: 1 })
   const { mobile } = useBreakpoint()
 
-  const allUAs = structure.flatMap(m =>
-    (m.modules || []).flatMap(mod => (mod.familles || []).flatMap(fam => fam.unites || []))
+  const allUAs = structure
+  .filter(m => filterMat === 'all' || m.id === filterMat)
+  .flatMap(m =>
+    (m.modules || [])
+      .filter(mod => filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id)
+      .flatMap(mod =>
+        (mod.familles || []).flatMap(fam =>
+          (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
+        )
+      )
   )
 
   const loadExercices = useCallback(async () => {
@@ -919,7 +961,7 @@ function MarkdownPreview({ content }) {
   )
 }
 
-function TabContenu({ structure, onReload }) {
+function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
   const [ressources,   setRessources]   = useState([])
   const [loadingRes,   setLoadingRes]   = useState(true)
   const [modal,        setModal]        = useState(null)
@@ -928,12 +970,16 @@ function TabContenu({ structure, onReload }) {
   const [search,       setSearch]       = useState('')
   const { mobile } = useBreakpoint()
 
-  const allUAs = structure.flatMap(m =>
-    (m.modules || []).flatMap(mod =>
-      (mod.familles || []).flatMap(fam =>
-        (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, famille_titre: fam.titre }))
+  const allUAs = structure
+  .filter(m => filterMat === 'all' || m.id === filterMat)
+  .flatMap(m =>
+    (m.modules || [])
+      .filter(mod => filterNiveau === 'all' || mod.niveau_id === filterNiveau || !mod.niveau_id)
+      .flatMap(mod =>
+        (mod.familles || []).flatMap(fam =>
+          (fam.unites || []).map(u => ({ ...u, matiere_nom: m.nom, matiere_id: m.id, famille_id: fam.id, famille_titre: fam.titre }))
+        )
       )
-    )
   )
 
   const loadRessources = useCallback(async () => {
@@ -1085,6 +1131,8 @@ export default function AdminCours() {
   const [niveaux,   setNiveaux]   = useState([])
   const [loading,   setLoading]   = useState(true)
   const [activeTab, setActiveTab] = useState('structure')
+  const [filterNiveau, setFilterNiveau] = useState('all')
+  const [filterMat,    setFilterMat]    = useState('all')
   const { mobile, xs } = useBreakpoint()
 
   const loadAll = useCallback(async () => {
@@ -1179,12 +1227,37 @@ export default function AdminCours() {
         })}
       </div>
 
+      {/* Filtres globaux */}
+<div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+  <select value={filterNiveau} onChange={e => setFilterNiveau(e.target.value)}
+    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
+    <option value="all">Tous les niveaux</option>
+    {niveaux.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
+  </select>
+  <select value={filterMat} onChange={e => setFilterMat(e.target.value)}
+    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
+    <option value="all">Toutes les matières</option>
+    {structure.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+  </select>
+  {(filterNiveau !== 'all' || filterMat !== 'all') && (
+    <button onClick={() => { setFilterNiveau('all'); setFilterMat('all') }}
+      style={{ padding: '8px 14px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+      ✕ Réinitialiser filtres
+    </button>
+  )}
+  {filterNiveau !== 'all' && (
+    <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>
+      Niveau : <strong style={{ color: C.brown }}>{niveaux.find(n => n.id === filterNiveau)?.nom}</strong>
+    </span>
+  )}
+</div>
+
       {/* Contenu */}
       <div style={{ animation: 'fadeIn .25s ease' }}>
-        {activeTab === 'structure'  && <TabStructure  structure={structure} niveaux={niveaux} onReload={loadAll} />}
-        {activeTab === 'ua'         && <TabUA         structure={structure} onReload={loadAll} />}
-        {activeTab === 'exercices'  && <TabExercices  structure={structure} onReload={loadAll} />}
-        {activeTab === 'contenu'    && <TabContenu    structure={structure} onReload={loadAll} />}
+        {activeTab === 'structure'  && <TabStructure  structure={structure} niveaux={niveaux} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
+        {activeTab === 'ua'         && <TabUA         structure={structure} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
+        {activeTab === 'exercices'  && <TabExercices  structure={structure} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
+        {activeTab === 'contenu'    && <TabContenu    structure={structure} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
       </div>
     </div>
   )

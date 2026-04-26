@@ -111,6 +111,10 @@ def get_profil(user_id: str, db: Session = Depends(get_db)):
         "pays":            user.pays,
         "code_invitation": user.code_invitation,
         "created_at":      str(user.created_at),
+        "niveau_id":       str(user.niveau_id) if user.niveau_id else None,
+        "avatar":          user.avatar if hasattr(user, "avatar") else None,
+        "niveau_label":    user.niveau_label,
+        "filiere_label":   user.filiere_label if hasattr(user, "filiere_label") else None,
     }
 
 
@@ -170,7 +174,7 @@ def lier_par_code_classe(
     from ..models.user import TuteurSuivi
 
     code_classe = body.get("code_classe",
-        "avatar", "pays", "").upper().strip()
+        "avatar", "pays", "niveau_id", "").upper().strip()
     if not code_classe:
         raise HTTPException(400, "code_classe requis")
 
@@ -259,7 +263,7 @@ def update_mon_profil(
         "etablissement", "ville",
         "matieres_enseignees", "niveaux_enseignes",
         "code_classe",
-        "avatar", "pays",
+        "avatar", "pays", "niveau_id",
     ]
 
     for field, value in body.items():

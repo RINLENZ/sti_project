@@ -233,24 +233,26 @@ export default function Profil() {
   async function handleAvatarSelect(id) {
     setSelectedAvatar(id)
     try {
-      await api.put(`/auth/profil/${user.id}/update`, { avatar: id })
-      dispatch(loginSuccess({ token, user: { ...user, avatar: id } }))
-      toast.success('Avatar mis à jour !')
-    } catch {
-      toast.error("Erreur lors de la mise à jour")
-      setSelectedAvatar(user?.avatar || null)
-    }
+    await api.put(`/auth/profil/${user.id}/update`, { avatar: id })
+    const { data: fresh } = await api.get(`/auth/profil/${user.id}`)
+    dispatch(loginSuccess({ token, user: { ...user, ...fresh } }))
+    toast.success('Avatar mis à jour !')
+  } catch {
+    toast.error("Erreur lors de la mise à jour")
+    setSelectedAvatar(user?.avatar || null)
   }
+}
 
   async function saveProfile() {
     setLoading(true)
     try {
-      await api.put(`/auth/profil/${user.id}/update`, form)
-      dispatch(loginSuccess({ token, user: { ...user, ...form } }))
-      toast.success('Profil mis à jour !'); setEditing(false)
-    } catch { toast.error('Erreur lors de la mise à jour') }
-    finally { setLoading(false) }
-  }
+    await api.put(`/auth/profil/${user.id}/update`, form)
+    const { data: fresh } = await api.get(`/auth/profil/${user.id}`)
+    dispatch(loginSuccess({ token, user: { ...user, ...fresh } }))
+    toast.success('Profil mis à jour !'); setEditing(false)
+  } catch { toast.error('Erreur lors de la mise à jour') }
+  finally { setLoading(false) }
+}
 
   const pad = mobile ? 14 : 28
 
