@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     anthropic_api_key: str = ""
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    supabase_url: str = ""
+    supabase_service_key: str = ""
 
     @property
     def cors_origins(self) -> List[str]:
