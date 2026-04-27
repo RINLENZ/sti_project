@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import SensiaLogo from '../components/SensiaLogo'
 
 /* ═══════════════════════════════════════════════════════════════
    DESIGN TOKENS
@@ -149,13 +150,8 @@ function Navbar({ onLogin }) {
       <div style={{ maxWidth:1200, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
 
         {/* Logo */}
-        <div style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }} onClick={() => window.scrollTo({top:0, behavior:'smooth'})}>
-          <div style={{ width:36, height:36, borderRadius:10, background:gGold, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, boxShadow:`0 0 20px ${T.gold}40` }}>
-            🧠</div>
-          <div>
-            <span style={{ fontSize:17, fontWeight:800, color:T.text }}>SenSia</span>
-            <span style={{ fontSize:15, fontWeight:800, background:gHero, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}> StudS</span>
-          </div>
+        <div style={{ cursor:'pointer' }} onClick={() => window.scrollTo({top:0, behavior:'smooth'})}>
+          <SensiaLogo size={32} light={true} />
         </div>
 
         {/* Desktop links */}
@@ -371,7 +367,7 @@ function FeaturesSection() {
         <div style={{ textAlign:'center', marginBottom:56, opacity:vis?1:0, transform:vis?'translateY(0)':'translateY(28px)', transition:'all .6s ease' }}>
           <Badge color={T.gold}>✨ Super pouvoirs</Badge>
           <h2 style={{ fontSize:'clamp(28px, 5vw, 44px)', fontWeight:900, color:T.text, margin:'0 0 14px', letterSpacing:'-1px' }}>
-            Ce qui rend SenSia StudS unique
+            Ce qui rend SenSia unique
           </h2>
           <p style={{ fontSize:16, color:T.textSec, maxWidth:480, margin:'0 auto', lineHeight:1.6 }}>
             Une stack technologique moderne au service de l'apprentissage africain.
@@ -581,10 +577,10 @@ function TestimonialsSection() {
   const [active, setActive] = useState(0)
 
   const testimonials = [
-    { name:'Sarah Mboua', role:'Lycéenne · Terminale D', text:'SenSia StudS m\'a permis de passer de la moyenne à 16 en informatique en 3 semaines. Les exercices adaptatifs sont vraiment efficaces.', rating:5, avatar:'👩‍🎓', school:'Lycée de Mendong' },
+    { name:'Sarah Mboua', role:'Lycéenne · Terminale D', text:'SenSia m\'a permis de passer de la moyenne à 16 en informatique en 3 semaines. Les exercices adaptatifs sont vraiment efficaces.', rating:5, avatar:'👩‍🎓', school:'Lycée de Mendong' },
     { name:'Prof. Emmanuel N.', role:'Enseignant NSI · 12 ans d\'expérience', text:'Le tableau de bord me permet de suivre chaque élève en temps réel. Je peux intervenir avant même qu\'ils décrochent.', rating:5, avatar:'👨‍🏫', school:'ENSET Ebolowa' },
     { name:'David Kamga', role:'Étudiant · Première C', text:'Les indices progressifs sont géniaux. Je n\'ai jamais l\'impression d\'être bloqué car l\'aide arrive exactement au bon moment.', rating:5, avatar:'🧑‍💻', school:'Lycée Général Leclerc' },
-    { name:'Fatima Oumarou', role:'Étudiante · Seconde', text:'J\'avais peur de l\'algorithmique mais avec SenSia StudS, les concepts s\'apprennent à travers des exercices ludiques. C\'est addictif !', rating:5, avatar:'👩‍💼', school:'Lycée de Ngoa-Ekele' },
+    { name:'Fatima Oumarou', role:'Étudiante · Seconde', text:'J\'avais peur de l\'algorithmique mais avec SenSia, les concepts s\'apprennent à travers des exercices ludiques. C\'est addictif !', rating:5, avatar:'👩‍💼', school:'Lycée de Ngoa-Ekele' },
   ]
 
   useEffect(() => {
@@ -670,7 +666,7 @@ function FAQSection() {
     { q:'Comment l\'IA mesure ma progression ?', a:'Grâce au modèle BKT (Bayesian Knowledge Tracing), chaque bonne ou mauvaise réponse met à jour une probabilité de maîtrise par compétence. Le système choisit ensuite les exercices optimaux.' },
     { q:'Ai-je besoin d\'une webcam ?', a:'Non. La webcam est optionnelle et sert uniquement pour l\'analyse d\'attention. Toutes les autres fonctionnalités fonctionnent sans caméra.' },
     { q:'Les enseignants peuvent-ils accéder à l\'outil ?', a:'Oui ! Un espace enseignant dédié permet de suivre la progression de chaque élève, d\'assigner des parcours et de recevoir des alertes en temps réel.' },
-    { q:'Sur quels appareils puis-je utiliser SenSia StudS ?', a:'Sur tous ! L\'application est responsive et fonctionne sur ordinateur, tablette et smartphone. Chrome, Firefox et Edge sont supportés.' },
+    { q:'Sur quels appareils puis-je utiliser SenSia ?', a:'Sur tous ! L\'application est responsive et fonctionne sur ordinateur, tablette et smartphone. Chrome, Firefox et Edge sont supportés.' },
   ]
 
   return (
@@ -724,7 +720,9 @@ function CTASection({ onLogin }) {
         opacity:vis?1:0, transform:vis?'scale(1)':'scale(.97)',
         transition:'all .7s cubic-bezier(.22,1,.36,1)',
       }}>
-        <div style={{ width:72, height:72, borderRadius:22, background:gGold, display:'flex', alignItems:'center', justifyContent:'center', fontSize:32, margin:'0 auto 24px', boxShadow:`0 8px 32px ${T.gold}40` }}>🧠</div>
+        <div style={{ margin:'0 auto 24px', display:'flex', justifyContent:'center' }}>
+          <SensiaLogo size={52} light={true} />
+        </div>
         <h2 style={{ fontSize:'clamp(30px, 5vw, 52px)', fontWeight:900, color:T.text, margin:'0 0 16px', letterSpacing:'-1.5px' }}>
           Prêt à transformer<br/>ton apprentissage ?
         </h2>
@@ -766,12 +764,8 @@ function Footer() {
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:40, marginBottom:48 }}>
           {/* Brand */}
           <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-              <div style={{ width:38, height:38, borderRadius:10, background:gGold, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>🧠</div>
-              <div>
-                <span style={{ fontSize:16, fontWeight:800, color:T.text }}>SenSia</span>
-                <span style={{ fontSize:14, fontWeight:800, background:gHero, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}> StudS</span>
-              </div>
+            <div style={{ marginBottom:16 }}>
+              <SensiaLogo size={28} light={true} />
             </div>
             <p style={{ fontSize:13, color:T.textSec, lineHeight:1.7, margin:'0 0 20px' }}>L'intelligence artificielle au service de l'éducation camerounaise.</p>
             <p style={{ fontSize:11, fontWeight:700, color:T.textMuted }}>🏛️ ENSET Ebolowa — Département GI</p>
@@ -793,7 +787,7 @@ function Footer() {
         </div>
 
         <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:24, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:16 }}>
-          <p style={{ fontSize:12, color:T.textMuted, margin:0 }}>© 2025 SenSia Studs · STI ADAPTATIF · Master II</p>
+          <p style={{ fontSize:12, color:T.textMuted, margin:0 }}>© 2025 SenSia · STI ADAPTATIF · Master II</p>
           <div style={{ display:'flex', gap:16 }}>
             {['Confidentialité','Conditions','Mentions légales'].map(l => (
               <span key={l} style={{ fontSize:11, color:T.textMuted, cursor:'pointer', transition:'color .2s' }}
