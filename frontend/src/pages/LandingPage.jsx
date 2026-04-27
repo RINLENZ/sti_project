@@ -371,7 +371,7 @@ function FeaturesSection() {
         <div style={{ textAlign:'center', marginBottom:56, opacity:vis?1:0, transform:vis?'translateY(0)':'translateY(28px)', transition:'all .6s ease' }}>
           <Badge color={T.gold}>✨ Super pouvoirs</Badge>
           <h2 style={{ fontSize:'clamp(28px, 5vw, 44px)', fontWeight:900, color:T.text, margin:'0 0 14px', letterSpacing:'-1px' }}>
-            Ce qui rend EduSmart unique
+            Ce qui rend SenSia StudS unique
           </h2>
           <p style={{ fontSize:16, color:T.textSec, maxWidth:480, margin:'0 auto', lineHeight:1.6 }}>
             Une stack technologique moderne au service de l'apprentissage africain.
@@ -581,10 +581,10 @@ function TestimonialsSection() {
   const [active, setActive] = useState(0)
 
   const testimonials = [
-    { name:'Sarah Mboua', role:'Lycéenne · Terminale D', text:'EduSmart m\'a permis de passer de la moyenne à 16 en informatique en 3 semaines. Les exercices adaptatifs sont vraiment efficaces.', rating:5, avatar:'👩‍🎓', school:'Lycée de Mendong' },
+    { name:'Sarah Mboua', role:'Lycéenne · Terminale D', text:'SenSia StudS m\'a permis de passer de la moyenne à 16 en informatique en 3 semaines. Les exercices adaptatifs sont vraiment efficaces.', rating:5, avatar:'👩‍🎓', school:'Lycée de Mendong' },
     { name:'Prof. Emmanuel N.', role:'Enseignant NSI · 12 ans d\'expérience', text:'Le tableau de bord me permet de suivre chaque élève en temps réel. Je peux intervenir avant même qu\'ils décrochent.', rating:5, avatar:'👨‍🏫', school:'ENSET Ebolowa' },
     { name:'David Kamga', role:'Étudiant · Première C', text:'Les indices progressifs sont géniaux. Je n\'ai jamais l\'impression d\'être bloqué car l\'aide arrive exactement au bon moment.', rating:5, avatar:'🧑‍💻', school:'Lycée Général Leclerc' },
-    { name:'Fatima Oumarou', role:'Étudiante · Seconde', text:'J\'avais peur de l\'algorithmique mais avec EduSmart, les concepts s\'apprennent à travers des exercices ludiques. C\'est addictif !', rating:5, avatar:'👩‍💼', school:'Lycée de Ngoa-Ekele' },
+    { name:'Fatima Oumarou', role:'Étudiante · Seconde', text:'J\'avais peur de l\'algorithmique mais avec SenSia StudS, les concepts s\'apprennent à travers des exercices ludiques. C\'est addictif !', rating:5, avatar:'👩‍💼', school:'Lycée de Ngoa-Ekele' },
   ]
 
   useEffect(() => {
@@ -670,7 +670,7 @@ function FAQSection() {
     { q:'Comment l\'IA mesure ma progression ?', a:'Grâce au modèle BKT (Bayesian Knowledge Tracing), chaque bonne ou mauvaise réponse met à jour une probabilité de maîtrise par compétence. Le système choisit ensuite les exercices optimaux.' },
     { q:'Ai-je besoin d\'une webcam ?', a:'Non. La webcam est optionnelle et sert uniquement pour l\'analyse d\'attention. Toutes les autres fonctionnalités fonctionnent sans caméra.' },
     { q:'Les enseignants peuvent-ils accéder à l\'outil ?', a:'Oui ! Un espace enseignant dédié permet de suivre la progression de chaque élève, d\'assigner des parcours et de recevoir des alertes en temps réel.' },
-    { q:'Sur quels appareils puis-je utiliser EduSmart ?', a:'Sur tous ! L\'application est responsive et fonctionne sur ordinateur, tablette et smartphone. Chrome, Firefox et Edge sont supportés.' },
+    { q:'Sur quels appareils puis-je utiliser SenSia StudS ?', a:'Sur tous ! L\'application est responsive et fonctionne sur ordinateur, tablette et smartphone. Chrome, Firefox et Edge sont supportés.' },
   ]
 
   return (
