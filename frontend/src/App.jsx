@@ -22,6 +22,7 @@ import Profil       from './pages/apprenant/Profil'
 import DashboardProf    from './pages/enseignant/DashboardProf'
 import AdminCours       from './pages/enseignant/AdminCours'
 import AdminReferentiel from './pages/enseignant/AdminReferentiel'
+import DataCollection   from './pages/DataCollection'
 
 import AppLayout from './components/layout/AppLayout'
 
@@ -129,6 +130,13 @@ export default function App() {
       <Route path="/admin/referentiel" element={
         <PrivateRoute role="super_admin">
           <AppLayout><AdminReferentiel/></AppLayout>
+        </PrivateRoute>
+      }/>
+
+      {/* ── Collecte données émotions (super_admin) ── */}
+      <Route path="/collect-emotions" element={
+        <PrivateRoute role="super_admin">
+          <DataCollection/>
         </PrivateRoute>
       }/>
 
