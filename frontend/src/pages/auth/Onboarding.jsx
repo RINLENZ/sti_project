@@ -188,12 +188,6 @@ export default function Onboarding() {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24, position: 'relative', overflow: 'hidden'
     }}>
-      <style>{`
-        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-        @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(212,168,83,0.3)}50%{box-shadow:0 0 24px rgba(212,168,83,0.7)}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-      `}</style>
 
       {/* Motif adinkra */}
       <svg style={{ position:'absolute',inset:0,width:'100%',height:'100%',opacity:.07,pointerEvents:'none' }}>
@@ -224,7 +218,7 @@ export default function Onboarding() {
         padding: '36px 40px', maxWidth: 520, width: '100%',
         boxShadow: '0 32px 80px rgba(0,0,0,.5)',
         border: '1px solid rgba(255,255,255,.08)',
-        animation: 'fadeIn .5s ease', position: 'relative'
+        animation: 'fadeUp .5s ease', position: 'relative'
       }}>
 
         {/* Logo */}

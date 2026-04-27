@@ -318,7 +318,7 @@ export default function DashboardProf() {
 
   if (loading) return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: pad, boxSizing: 'border-box' }}>
-      <div style={{ background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`, borderRadius: xs ? 16 : 20, height: 120, marginBottom: 24, borderRadius: 20 }} />
+      <div style={{ background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`, borderRadius: xs ? 16 : 20, height: 120, marginBottom: 24 }} />
       <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
         {[0,1,2,3].map(i => (
           <div key={i} style={{ background: C.surface, borderRadius: 16, height: 90, border: `1px solid ${C.brownPale}` }} />

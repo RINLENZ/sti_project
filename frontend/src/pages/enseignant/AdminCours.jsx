@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Edit3, BookOpen, X, Save,
   Search, ChevronDown, ChevronRight,
   Clock, Zap, Layers, FolderOpen, Grid,
-  FileText, AlertTriangle, Sparkles, Loader
+  FileText, AlertTriangle, Sparkles, Loader, Upload
 } from 'lucide-react'
 import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
@@ -160,7 +160,7 @@ function FormModule({ initial = {}, matieres = [], niveaux = [], onSubmit, onClo
   const [form, setForm] = useState({
     titre: initial.titre || '', numero: initial.numero || 1, description: initial.description || '',
     matiere_id: initial.matiere_id || matieres[0]?.id || '',
-    niveau_id: initial.niveau_id || niveaux[0]?.id || '',
+    niveau_id: initial.niveau_id || '',
     ordre: initial.ordre || 1,
   })
   const [loading, setLoading] = useState(false)
@@ -169,7 +169,7 @@ function FormModule({ initial = {}, matieres = [], niveaux = [], onSubmit, onClo
     <form onSubmit={handle}>
       <FSelect label="Matière" value={form.matiere_id} onChange={e => setForm(f => ({ ...f, matiere_id: e.target.value }))} required
         options={matieres.map(m => ({ value: m.id, label: m.nom }))} />
-      <FSelect label="Niveau" value={form.niveau_id} onChange={e => setForm(f => ({ ...f, niveau_id: e.target.value }))} required
+      <FSelect label="Niveau" value={form.niveau_id} onChange={e => setForm(f => ({ ...f, niveau_id: e.target.value }))}
         options={[{ value: '', label: '— Tous niveaux (générique) —' }, ...niveaux.map(n => ({ value: n.id, label: n.nom }))]} />
       <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 12 }}>
         <FInput label="N°" value={form.numero} type="number" onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} required />
@@ -322,9 +322,18 @@ function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload })
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mod.titre}</p>
-                      <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>
-                        {mod.niveau_id ? niveaux.find(n => n.id === mod.niveau_id)?.nom || 'Niveau lié' : 'Tous niveaux'} · {(mod.familles || []).length} famille(s)
-                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, flexWrap: 'wrap' }}>
+                        {mod.niveau_id ? (
+                          <span style={{ background: C.brownPale, color: C.brown, fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 20, border: `1px solid ${C.brownLight}40` }}>
+                            🎓 {niveaux.find(n => n.id === mod.niveau_id)?.nom || 'Niveau'}
+                          </span>
+                        ) : (
+                          <span style={{ background: '#E5E7EB', color: C.textSec, fontSize: 10, fontWeight: 600, padding: '1px 8px', borderRadius: 20, fontStyle: 'italic' }}>
+                            tous niveaux
+                          </span>
+                        )}
+                        <span style={{ fontSize: 10, color: C.textSec }}>{(mod.familles || []).length} famille(s)</span>
+                      </div>
                     </div>
                     <ActionBtns
                       onEdit={() => setModal({ type: 'module', editModule: { ...mod, matiere_id: mat.id } })}
@@ -443,6 +452,10 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [pdfModal, setPdfModal] = useState(false)
+  const [pdfFile, setPdfFile] = useState(null)
+  const [pdfFamille, setPdfFamille] = useState('')
+  const [pdfLoading, setPdfLoading] = useState(false)
   const { mobile } = useBreakpoint()
 
   const allUAs = structure
@@ -476,6 +489,26 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
     catch { toast.error('Erreur') }
   }
 
+  async function handlePdfImport() {
+    if (!pdfFile) return toast.error('Sélectionnez un fichier PDF')
+    if (!pdfFamille) return toast.error('Sélectionnez une famille')
+    setPdfLoading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', pdfFile)
+      const { data } = await api.post(
+        `/api/admin/import/pdf?famille_id=${pdfFamille}`,
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      )
+      toast.success(`UA importée : ${data.titre || 'succès'} (${data.nb_exercices_crees || 0} exercice(s))`)
+      setPdfModal(false); setPdfFile(null); setPdfFamille(''); onReload()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || "Erreur d'import PDF"
+      toast.error(msg)
+    } finally { setPdfLoading(false) }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -484,6 +517,9 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une UA…" style={{ ...inputBase, paddingLeft: 30 }}
             onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
         </div>
+        <button onClick={() => { setPdfModal(true); setPdfFamille(familles[0]?.id || '') }} style={{ padding: '9px 14px', background: `linear-gradient(135deg, #7C3AED, #5B21B6)`, color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+          <Upload size={13} /> Import PDF
+        </button>
         <button onClick={() => setModal('create')} style={{ padding: '9px 16px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
           <Plus size={13} /> Nouvelle UA
         </button>
@@ -525,6 +561,69 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
         </Modal>
       )}
       {deleting && <ConfirmDelete item={deleting.titre} onConfirm={handleDelete} onCancel={() => setDeleting(null)} />}
+
+      {/* Modal Import PDF */}
+      {pdfModal && (
+        <Modal title="📄 Import PDF — Fiche de préparation" onClose={() => { setPdfModal(false); setPdfFile(null) }} accentColor="#7C3AED">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ background: '#F5F3FF', borderRadius: 10, padding: '12px 14px', border: '1px solid #DDD6FE' }}>
+              <p style={{ fontSize: 12, color: '#5B21B6', fontWeight: 700, margin: '0 0 4px' }}>Comment ça marche ?</p>
+              <p style={{ fontSize: 11, color: '#7C3AED', margin: 0, lineHeight: 1.5 }}>
+                Uploadez une fiche de préparation PDF. Claude Sonnet analysera le document et créera automatiquement une UA complète (titre, leçon, compétences, exercices).
+              </p>
+            </div>
+
+            <div>
+              <FieldLabel required>Famille de destination</FieldLabel>
+              <select value={pdfFamille} onChange={e => setPdfFamille(e.target.value)} style={inputBase}
+                onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = C.brownPale}>
+                <option value="">— Sélectionner une famille —</option>
+                {familles.map(f => <option key={f.id} value={f.id}>{f.titre}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <FieldLabel required>Fichier PDF</FieldLabel>
+              <label style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                border: `2px dashed ${pdfFile ? '#7C3AED' : C.brownPale}`,
+                borderRadius: 10, padding: '24px 16px', cursor: 'pointer',
+                background: pdfFile ? '#F5F3FF' : C.brownGhost, transition: 'all .2s',
+              }}>
+                <Upload size={24} color={pdfFile ? '#7C3AED' : C.textSec} style={{ marginBottom: 8 }} />
+                <p style={{ fontSize: 13, fontWeight: 700, color: pdfFile ? '#7C3AED' : C.textSec, margin: '0 0 4px' }}>
+                  {pdfFile ? pdfFile.name : 'Cliquer pour sélectionner un PDF'}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>
+                  {pdfFile ? `${(pdfFile.size / 1024).toFixed(0)} Ko` : 'PDF uniquement · max 10 Mo'}
+                </p>
+                <input type="file" accept=".pdf" style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files[0]) setPdfFile(e.target.files[0]) }} />
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <CancelBtn onClose={() => { setPdfModal(false); setPdfFile(null) }} />
+              <button
+                onClick={handlePdfImport}
+                disabled={pdfLoading || !pdfFile || !pdfFamille}
+                style={{
+                  flex: 2, padding: '10px', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800,
+                  background: pdfLoading || !pdfFile || !pdfFamille
+                    ? '#E5E7EB' : 'linear-gradient(135deg, #7C3AED, #5B21B6)',
+                  color: pdfLoading || !pdfFile || !pdfFamille ? C.textSec : 'white',
+                  cursor: pdfLoading || !pdfFile || !pdfFamille ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                {pdfLoading
+                  ? <><Spinner size={14} color="white" /> Analyse en cours…</>
+                  : <><Upload size={14} /> Importer et créer l'UA</>}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -664,7 +763,10 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
       toast.success(data.message)
       setGenModal(null)
       loadExercices()
-    } catch { toast.error('Erreur de génération — vérifiez ANTHROPIC_API_KEY') }
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Erreur de génération IA'
+      toast.error(msg)
+    }
     finally { setGenLoading(false) }
   }
 
@@ -1184,29 +1286,40 @@ export default function AdminCours() {
       </div>
 
       {/* Filtres globaux */}
-<div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-  <select value={filterNiveau} onChange={e => setFilterNiveau(e.target.value)}
-    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
-    <option value="all">Tous les niveaux</option>
-    {niveaux.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
-  </select>
-  <select value={filterMat} onChange={e => setFilterMat(e.target.value)}
-    style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
-    <option value="all">Toutes les matières</option>
-    {structure.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
-  </select>
-  {(filterNiveau !== 'all' || filterMat !== 'all') && (
-    <button onClick={() => { setFilterNiveau('all'); setFilterMat('all') }}
-      style={{ padding: '8px 14px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-      ✕ Réinitialiser filtres
-    </button>
-  )}
-  {filterNiveau !== 'all' && (
-    <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>
-      Niveau : <strong style={{ color: C.brown }}>{niveaux.find(n => String(n.id) === filterNiveau)?.nom}</strong>
-    </span>
-  )}
-</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: filterNiveau !== 'all' ? 8 : 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={filterNiveau} onChange={e => setFilterNiveau(e.target.value)}
+          style={{ ...inputBase, width: 'auto', minWidth: 170 }}>
+          <option value="all">🎓 Tous les niveaux</option>
+          {niveaux.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
+        </select>
+        <select value={filterMat} onChange={e => setFilterMat(e.target.value)}
+          style={{ ...inputBase, width: 'auto', minWidth: 170 }}>
+          <option value="all">📚 Toutes les matières</option>
+          {structure.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+        </select>
+        {(filterNiveau !== 'all' || filterMat !== 'all') && (
+          <button onClick={() => { setFilterNiveau('all'); setFilterMat('all') }}
+            style={{ padding: '8px 14px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <X size={12}/> Réinitialiser
+          </button>
+        )}
+      </div>
+      {/* Bandeau informatif filtre actif */}
+      {filterNiveau !== 'all' && (() => {
+        const nomNiveau = niveaux.find(n => String(n.id) === filterNiveau)?.nom || '…'
+        const nbGeneriques = structure.flatMap(m => m.modules || []).filter(mod => !mod.niveau_id).length
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 14px', background: C.brownPale, borderRadius: 10, border: `1px solid ${C.brownLight}40`, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.brown }}>🎯 Filtre actif :</span>
+            <span style={{ background: C.brown, color: 'white', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 20 }}>{nomNiveau}</span>
+            {nbGeneriques > 0 && (
+              <span style={{ fontSize: 11, color: C.textSec, fontStyle: 'italic' }}>
+                + {nbGeneriques} module{nbGeneriques > 1 ? 's' : ''} sans niveau (tous niveaux)
+              </span>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Contenu */}
       <div style={{ animation: 'fadeIn .25s ease' }}>

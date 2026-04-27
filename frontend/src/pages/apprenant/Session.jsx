@@ -668,11 +668,7 @@ if (resos.length === 0) setPhase('exercices')
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         {confetti && <Confetti/>}
-        <style>{`
-          @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
-          @keyframes fadeIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        `}</style>
-        <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? 24 : 40, boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, maxWidth: 480, width: '100%', textAlign: 'center', animation: 'fadeIn .5s ease' }}>
+        <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? 24 : 40, boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, maxWidth: 480, width: '100%', textAlign: 'center', animation: 'fadeUp .5s ease' }}>
           <div style={{ fontSize: isMobile ? 52 : 68, marginBottom: 10 }}>{pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '💪'}</div>
           <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: C.brown, margin: '0 0 6px' }}>Session terminée !</h2>
           <p style={{ color: C.textSec, fontSize: 13, margin: '0 0 24px' }}>{ua.titre}</p>

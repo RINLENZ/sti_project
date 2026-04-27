@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
 from ..database import get_db
-from ..models.user import User, TuteurSuivi
+from ..models.user import User
 from ..models.cours import Matiere, Module, FamilleSituation, UniteApprentissage, Exercice, RessourcePedagogique
 from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
 
@@ -122,7 +122,7 @@ def update_apprenant(user_id: UUID, body: UserUpdate,
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Utilisateur introuvable")
-    for field, value in body.dict(exclude_none=True).items():
+    for field, value in body.model_dump(exclude_none=True).items():
         setattr(user, field, value)
     db.commit()
     return {"message": "Profil mis à jour"}
@@ -174,10 +174,11 @@ def get_structure_complete(db: Session = Depends(get_db),
                     "unites":  ua_list
                 })
             mods.append({
-                "id":       str(mod.id),
-                "numero":   mod.numero,
-                "titre":    mod.titre,
-                "familles": fams
+                "id":        str(mod.id),
+                "numero":    mod.numero,
+                "titre":     mod.titre,
+                "niveau_id": str(mod.niveau_id) if mod.niveau_id else None,
+                "familles":  fams
             })
         result.append({
             "id":      str(mat.id),
@@ -193,7 +194,7 @@ def get_structure_complete(db: Session = Depends(get_db),
 @router.post("/famille", status_code=201)
 def create_famille(body: FamilleCreate, db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
-    famille = FamilleSituation(**body.dict())
+    famille = FamilleSituation(**body.model_dump())
     db.add(famille)
     db.commit()
     db.refresh(famille)
@@ -205,7 +206,7 @@ def create_famille(body: FamilleCreate, db: Session = Depends(get_db),
 @router.post("/ua", status_code=201)
 def create_ua(body: UACreate, db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
-    ua = UniteApprentissage(**body.dict())
+    ua = UniteApprentissage(**body.model_dump())
     db.add(ua)
     db.commit()
     db.refresh(ua)
@@ -219,7 +220,7 @@ def update_ua(ua_id: UUID, body: UAUpdate, db: Session = Depends(get_db),
     ).first()
     if not ua:
         raise HTTPException(404, "UA introuvable")
-    for field, value in body.dict(exclude_none=True).items():
+    for field, value in body.model_dump(exclude_none=True).items():
         setattr(ua, field, value)
     db.commit()
     return {"message": "UA mise à jour"}
@@ -264,7 +265,7 @@ def get_exercices(ua_id: UUID, db: Session = Depends(get_db),
 @router.post("/exercice", status_code=201)
 def create_exercice(body: ExerciceCreate, db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
-    ex = Exercice(**body.dict())
+    ex = Exercice(**body.model_dump())
     db.add(ex)
     db.commit()
     db.refresh(ex)
@@ -277,7 +278,7 @@ def update_exercice(exercice_id: UUID, body: ExerciceUpdate,
     ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
     if not ex:
         raise HTTPException(404, "Exercice introuvable")
-    for field, value in body.dict(exclude_none=True).items():
+    for field, value in body.model_dump(exclude_none=True).items():
         setattr(ex, field, value)
     db.commit()
     return {"message": "Exercice mis à jour"}
@@ -298,7 +299,7 @@ def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db),
 @router.post("/ressource", status_code=201)
 def create_ressource(body: RessourceCreate, db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
-    res = RessourcePedagogique(**body.dict())
+    res = RessourcePedagogique(**body.model_dump())
     db.add(res)
     db.commit()
     db.refresh(res)
@@ -313,7 +314,7 @@ def update_ressource(ressource_id: UUID, body: RessourceCreate,
     ).first()
     if not res:
         raise HTTPException(404, "Ressource introuvable")
-    for field, value in body.dict(exclude_none=True).items():
+    for field, value in body.model_dump(exclude_none=True).items():
         setattr(res, field, value)
     db.commit()
     return {"message": "Ressource mise à jour"}
@@ -366,7 +367,7 @@ def get_referentiel(db: Session = Depends(get_db),
 def create_filiere(body: FiliereCreate, db: Session = Depends(get_db),
                    _: UserModel = Depends(require_super_admin)):
     """Crée une nouvelle filière — accessible uniquement au super admin."""
-    filiere = Filiere(**body.dict())
+    filiere = Filiere(**body.model_dump())
     db.add(filiere); db.commit(); db.refresh(filiere)
     return {"id": str(filiere.id), "nom": filiere.nom, "message": "Filière créée"}
 
@@ -385,7 +386,7 @@ def delete_filiere(filiere_id: UUID, db: Session = Depends(get_db),
 def create_niveau(body: NiveauCreate, db: Session = Depends(get_db),
                   _: UserModel = Depends(require_super_admin)):
     """Crée un nouveau niveau — accessible uniquement au super admin."""
-    niveau = Niveau(**body.dict())
+    niveau = Niveau(**body.model_dump())
     db.add(niveau); db.commit(); db.refresh(niveau)
     return {"id": str(niveau.id), "nom": niveau.nom, "message": "Niveau créé"}
 
@@ -400,7 +401,7 @@ async def import_from_pdf(
     _: UserModel = Depends(require_super_admin)
 ):
     """Importe une fiche de préparation PDF via l'API Claude."""
-    import anthropic, base64, json
+    import anthropic, base64, json, os
 
     if not file.filename.endswith('.pdf'):
         raise HTTPException(400, "Seuls les fichiers PDF sont acceptés")
@@ -408,9 +409,13 @@ async def import_from_pdf(
     pdf_bytes = await file.read()
     pdf_b64   = base64.standard_b64encode(pdf_bytes).decode("utf-8")
 
-    client = anthropic.Anthropic()
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "ANTHROPIC_API_KEY non configurée dans le .env")
+
+    client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=4000,
         messages=[{
             "role": "user",
@@ -647,8 +652,8 @@ def update_module(module_id: UUID, body: dict, db: Session = Depends(get_db),
     if not mod: raise HTTPException(404, "Module introuvable")
     for k in ["titre", "description", "numero", "ordre"]:
         if k in body: setattr(mod, k, body[k])
-    if body.get("niveau_id"):
-        mod.niveau_id = UUID(body["niveau_id"])
+    if "niveau_id" in body:
+        mod.niveau_id = UUID(body["niveau_id"]) if body["niveau_id"] else None
     if body.get("matiere_id"):
         mod.matiere_id = UUID(body["matiere_id"])
     db.commit()
@@ -706,13 +711,17 @@ async def generer_exercices_ia(
     _: UserModel = Depends(require_super_admin)
 ):
     """
-    Génère N exercices QCM pour une UA via Claude Haiku.
+    Génère N exercices pour une UA via Claude Haiku (Anthropic).
     body: { "nb": 3, "type": "qcm", "difficulte": 1 }
     """
-    import httpx, json as _json, os
+    import anthropic, json as _json, os
 
     ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
     if not ua: raise HTTPException(404, "UA introuvable")
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "ANTHROPIC_API_KEY non configurée dans le .env")
 
     nb         = int(body.get("nb", 3))
     type_ex    = body.get("type", "qcm")
@@ -721,15 +730,15 @@ async def generer_exercices_ia(
 
     competences_str = "\n".join(f"- {c}" for c in (ua.competences or []))
 
-    prompt = f"""Tu es un enseignant camerounais expert en informatique. 
-Génère exactement {nb} exercice(s) de type {type_ex} de niveau {diff_label} 
+    prompt = f"""Tu es un enseignant camerounais expert en informatique.
+Génère exactement {nb} exercice(s) de type {type_ex} de niveau {diff_label}
 pour l'unité d'apprentissage : "{ua.titre}".
 
-Contexte : {ua.situation_probleme or 'Apprentissage des bases de l informatique'}
+Contexte : {ua.situation_probleme or "Apprentissage des bases de l'informatique"}
 Compétences visées :
-{competences_str or '- Maîtriser les concepts fondamentaux'}
+{competences_str or "- Maîtriser les concepts fondamentaux"}
 
-Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après, 
+Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après,
 sans balises markdown. Format exact :
 {{
   "exercices": [
@@ -747,29 +756,23 @@ sans balises markdown. Format exact :
   ]
 }}"""
 
-    api_key = os.environ.get("GOOGLE_API_KEY", "")
-    if not api_key:
-        raise HTTPException(500, "GOOGLE_API_KEY non configurée")
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={api_key}",
-            headers={"Content-Type": "application/json"},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.7,
-                    "maxOutputTokens": 2000,
-                }
-            }
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}],
         )
-    if resp.status_code != 200:
-        raise HTTPException(500, f"Erreur IA : {resp.text}")
-    content = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except anthropic.APIError as e:
+        raise HTTPException(500, f"Erreur API Claude : {str(e)}")
+
+    content = message.content[0].text.strip()
     # Nettoie les éventuels backticks markdown
     if content.startswith("```"):
         content = content.split("```")[1]
         if content.startswith("json"):
             content = content[4:]
+    content = content.strip()
 
     try:
         data = _json.loads(content)

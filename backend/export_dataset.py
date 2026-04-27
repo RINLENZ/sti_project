@@ -6,10 +6,12 @@ import sys, os, csv, json
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
-os.environ["DATABASE_URL"] = os.environ.get(
-    "DATABASE_URL_LOCAL",
-    "postgresql://sti_user:sti_pass_2024@localhost:5432/sti_db"
-)
+# Priorité : DATABASE_URL déjà dans l'env (Supabase/Render) > DATABASE_URL_LOCAL > défaut docker
+if not os.environ.get("DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ.get(
+        "DATABASE_URL_LOCAL",
+        "postgresql://sti_user:sti_pass_2024@localhost:5432/sti_db"
+    )
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app.database import SessionLocal
@@ -17,13 +19,17 @@ from app.models.session import LearningSession
 from app.models.interaction import Interaction
 from app.models.cours import ProgressionApprenant
 
+db_url = os.environ.get("DATABASE_URL", "")
+host = db_url.split("@")[-1].split("/")[0] if "@" in db_url else db_url
+print(f"\n🔌 Connexion : {host}")
+
 db = SessionLocal()
 
 sessions = db.query(LearningSession).filter(
     LearningSession.score_engagement != None
 ).all()
 
-print(f"\n{len(sessions)} sessions trouvées\n")
+print(f"📊 {len(sessions)} sessions terminées trouvées\n")
 
 # ── Dataset comportemental (pour Random Forest) ──────────────────
 with open("dataset_comportemental.csv", "w", newline="") as f:

@@ -823,7 +823,6 @@ export default function LandingPage() {
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #0D1628; }
         ::-webkit-scrollbar-thumb { background: ${T.gold}50; border-radius: 3px; }
-        @keyframes pulse       { 0%,100%{opacity:1} 50%{opacity:.35} }
         @keyframes blink       { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes orbFloat1   { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(30px,-20px) scale(1.05)} 66%{transform:translate(-20px,15px) scale(.95)} }
         @keyframes orbFloat2   { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-25px,20px) scale(1.04)} 66%{transform:translate(20px,-15px) scale(.96)} }

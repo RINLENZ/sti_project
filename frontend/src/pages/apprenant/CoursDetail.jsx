@@ -187,7 +187,12 @@ export default function CoursDetail() {
     </div>
   )
 
-  if (!ua) return null
+  if (!ua) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: C.bg, gap: 12 }}>
+      <p style={{ fontSize: 32 }}>😕</p>
+      <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Cours introuvable</p>
+    </div>
+  )
 
   const lecons    = ua.ressources?.filter(r => r.type === 'lecon') || []
   const lecon     = lecons[ressourceIdx]
@@ -297,7 +302,7 @@ export default function CoursDetail() {
                 background: `linear-gradient(135deg, ${C.brownPale}, ${C.emeraldPale})`,
                 borderRadius: 14, padding: isMobile ? '16px' : '20px 24px',
                 marginBottom: 20, border: `1px solid ${C.brownLight}30`,
-                animation: 'fadeUp.4s ease'
+                animation: 'fadeUp .4s ease'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <Star size={14} color={C.gold} fill={C.gold}/>
@@ -338,7 +343,7 @@ export default function CoursDetail() {
 
             {/* ── Leçon ── */}
             {tab === 'lecon' && (
-              <div style={{ animation: 'fadeUp.3s ease' }}>
+              <div style={{ animation: 'fadeUp .3s ease' }}>
                 {lecons.length > 1 && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     {lecons.map((l, i) => (
@@ -406,7 +411,7 @@ export default function CoursDetail() {
 
             {/* ── Exercices ── */}
             {tab === 'exercices' && (
-              <div style={{ animation: 'fadeUp.3s ease' }}>
+              <div style={{ animation: 'fadeUp .3s ease' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
                   {ua.exercices?.map((ex, i) => (
                     <div key={ex.id} style={{

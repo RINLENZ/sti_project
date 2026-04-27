@@ -305,12 +305,7 @@ dispatch(loginSuccess({
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <style>{`
-        *,*::before,*::after{box-sizing:border-box}
         input::placeholder{color:#C8B8B0;font-weight:400}
-        @keyframes float    {0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-        @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes glow     {0%,100%{box-shadow:0 0 8px rgba(212,168,83,.3)}50%{box-shadow:0 0 24px rgba(212,168,83,.7)}}
-        @keyframes fadeIn   {from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         .input-ens:focus{outline:none;border-color:${C.brown}!important;box-shadow:0 0 0 3px ${C.brown}18!important}
         button{font-family:inherit;cursor:pointer}
       `}</style>
@@ -339,7 +334,7 @@ dispatch(loginSuccess({
         padding: mobile ? '24px 20px' : '32px 38px',
         maxWidth:540, width:'100%',
         boxShadow:'0 32px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.07)',
-        animation:'fadeIn .5s ease', position:'relative',
+        animation:'fadeUp .5s ease', position:'relative',
         maxHeight: mobile ? '95vh' : 'none', overflowY: mobile ? 'auto' : 'visible',
       }}>
         {/* Bande top */}

@@ -633,7 +633,6 @@ export default function Dashboard() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box', maxWidth: '100vw', overflowX: 'hidden' }}>
       <style>{`
-        * { box-sizing: border-box; margin: 0; }
         button:focus-visible { outline: 2px solid ${C.emerald}; outline-offset: 2px; }
       `}</style>
 
