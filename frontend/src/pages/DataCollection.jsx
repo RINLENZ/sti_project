@@ -65,7 +65,7 @@ const ETATS = [
   },
 ]
 
-const TARGET = 500
+const TARGET = 1000   // minimum pour entraînement ; cap backend = 1500
 
 export default function DataCollection() {
   const navigate   = useNavigate()
