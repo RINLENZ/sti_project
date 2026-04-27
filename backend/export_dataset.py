@@ -49,9 +49,9 @@ with open("dataset_comportemental.csv", "w", newline="") as f:
 
         nb_idles     = sum(1 for e in events if e.type == "idle")
         nb_responses = sum(1 for e in events if e.type == "response")
-        nb_correct   = sum(1 for e in events if e.type == "response" and e.data.get("correct"))
+        nb_correct   = sum(1 for e in events if e.type == "response" and (e.data or {}).get("correct"))
         nb_help      = sum(1 for e in events if e.type == "help_requested")
-        temps_list   = [e.data.get("time_seconds", 0) for e in events if e.type == "response"]
+        temps_list   = [(e.data or {}).get("time_seconds", 0) for e in events if e.type == "response"]
         temps_moyen  = sum(temps_list) / len(temps_list) if temps_list else 0
         taux         = nb_correct / nb_responses if nb_responses > 0 else 0
 
@@ -82,7 +82,7 @@ with open("dataset_visuel.csv", "w", newline="") as f:
         for e in events:
             d = e.data or {}
             writer.writerow([
-                str(s.id), str(e.created_at) if hasattr(e, 'created_at') else "",
+                str(s.id), str(e.timestamp) if e.timestamp else "",
                 d.get("ear", ""), d.get("yaw", ""), d.get("pitch", ""),
                 d.get("visual_score", ""), d.get("emotion", ""),
                 s.etat_affectif,

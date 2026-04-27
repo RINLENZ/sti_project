@@ -35,13 +35,17 @@ const ETATS = {
 
 /* ── Emotion detection ───────────────────────────────────────── */
 function detecterEmotion(lm, ear, yaw, pitch) {
-  const sourire = (lm[0].y - lm[61].y + lm[0].y - lm[291].y) / 2
-  const joie = sourire > 0.015
+  // Sourire : coins de bouche au-dessus du centre labial (lm[13/14] = lèvres)
+  const lipCenterY = (lm[13].y + lm[14].y) / 2
+  const sourire = lipCenterY - (lm[61].y + lm[291].y) / 2
+  const joie = sourire > 0.005
   const hBouche = Math.abs(lm[13].y - lm[14].y)
   const lBouche = Math.abs(lm[61].x - lm[291].x)
   const mar = lBouche > 0 ? hBouche / lBouche : 0
-  const sourcilsLeves = (lm[9].y - lm[70].y + lm[9].y - lm[300].y) / 2 > 0.06
-  const sourcilsFronced = Math.abs(lm[21].x - lm[22].x) < 0.025
+  // Sourcils levés : distance sourcil externe–œil supérieur augmente (lm[159/386] = œil haut)
+  const sourcilsLeves = ((lm[159].y - lm[70].y) + (lm[386].y - lm[300].y)) / 2 > 0.02
+  // Sourcils froncés : sourcils intérieurs (lm[107/336]) rapprochés
+  const sourcilsFronced = Math.abs(lm[107].x - lm[336].x) < 0.035
   if (ear < 0.22 && Math.abs(pitch) > 12) return 'ennui'
   if (mar > 0.45 && sourcilsLeves) return 'confusion'
   if (joie) return 'engagement_eleve'
@@ -136,15 +140,17 @@ const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }
 }
 
 /* ── Confetti ────────────────────────────────────────────────── */
+const CONFETTI_PIECES = Array.from({ length: 40 }, (_, i) => ({
+  id: i,
+  color: [C.brown, C.brownLight, C.emerald, C.gold, '#FCD34D', '#EC4899'][i % 6],
+  left: `${(i * 2.56 + 3) % 100}%`,
+  delay: `${(i * 0.053) % 2}s`,
+  duration: `${2.5 + (i % 4) * 0.5}s`,
+  size: 5 + (i % 3) * 4,
+}))
+
 const Confetti = () => {
-  const pieces = Array.from({ length: 40 }, (_, i) => ({
-    id: i,
-    color: [C.brown, C.brownLight, C.emerald, C.gold, '#FCD34D', '#EC4899'][i % 6],
-    left: `${Math.random() * 100}%`,
-    delay: `${Math.random() * 2}s`,
-    duration: `${2.5 + Math.random() * 2}s`,
-    size: Math.random() * 10 + 5,
-  }))
+  const pieces = CONFETTI_PIECES
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999 }}>
       {pieces.map(p => (
@@ -211,9 +217,17 @@ const CameraBanner = ({ onActivate, onDismiss }) => (
 
 // LECON READER
 
-function LeconReader({ ua, ressources, onStart }) {
+function LeconReader({ ua, ressources, onStart, onResourceView }) {
   const [idx, setIdx] = useState(0)
+  const readStartRef  = useRef(Date.now())
   const res = ressources[idx]
+
+  function logAndGo(newIdx) {
+    const secs = Math.round((Date.now() - readStartRef.current) / 1000)
+    onResourceView?.(res.id, secs)
+    readStartRef.current = Date.now()
+    setIdx(newIdx)
+  }
 
   const typeLabel = {
     lecon:   { icon: '📖', label: 'Leçon',   color: '#6B3A2A' },
@@ -244,7 +258,7 @@ function LeconReader({ ua, ressources, onStart }) {
             {ressources.map((r, i) => {
               const t = { lecon: '📖', tp: '🔬', resume: '📋', video: '🎬' }[r.type] || '📄'
               return (
-                <button key={r.id} onClick={() => setIdx(i)} style={{
+                <button key={r.id} onClick={() => logAndGo(i)} style={{
                   padding: '4px 12px', borderRadius: 20,
                   background: i === idx ? 'rgba(255,255,255,.3)' : 'rgba(255,255,255,.12)',
                   border: `1px solid ${i === idx ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.2)'}`,
@@ -314,16 +328,16 @@ function LeconReader({ ua, ressources, onStart }) {
         {/* Navigation + bouton démarrer */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {idx > 0 && (
-            <button onClick={() => setIdx(i => i - 1)} style={{ padding: '12px 20px', background: '#F5EDE5', color: '#6B3A2A', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => logAndGo(idx - 1)} style={{ padding: '12px 20px', background: '#F5EDE5', color: '#6B3A2A', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               ← Précédent
             </button>
           )}
           {idx < ressources.length - 1 ? (
-            <button onClick={() => setIdx(i => i + 1)} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #6B3A2A, #C4865A)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <button onClick={() => logAndGo(idx + 1)} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #6B3A2A, #C4865A)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               Ressource suivante → ({idx + 2}/{ressources.length})
             </button>
           ) : (
-            <button onClick={onStart} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #0D9373, #0A7A5E)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(13,147,115,0.4)' }}>
+            <button onClick={() => { logAndGo(idx); onStart() }} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #0D9373, #0A7A5E)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(13,147,115,0.4)' }}>
               ✅ J'ai compris — Commencer les exercices !
             </button>
           )}
@@ -431,7 +445,7 @@ export default function Session() {
   const [showPanel, setShowPanel] = useState(false)
   const [showCameraBanner, setShowCameraBanner] = useState(false)
 
-  const [engagementScore, setEngagementScore] = useState(0.85)
+  const [engagementScore, setEngagementScore] = useState(0.5)
   const [emotion, setEmotion]   = useState('neutre')
   const [cameraActive, setCameraActive] = useState(false)
   const [audioActive,  setAudioActive]  = useState(false)
@@ -441,13 +455,19 @@ export default function Session() {
   const [loadingIA,     setLoadingIA]     = useState(false)
   const [ressources, setRessources] = useState([])
   const [phase,      setPhase]      = useState('lecon')
-  const [elapsedMin, setElapsedMin]       = useState(0)
+  const [elapsedMin, setElapsedMin] = useState(0)
+  const [loading,         setLoading]         = useState(true)
+  const [questionElapsed, setQuestionElapsed] = useState(0)
 
-  const videoRef    = useRef(null)
-  const canvasRef   = useRef(null)
-  const displayRef  = useRef(null)
-  const faceMeshRef = useRef(null)
-  const lastSendRef = useRef(0)
+  const [submitting, setSubmitting] = useState(false)
+
+  const videoRef         = useRef(null)
+  const canvasRef        = useRef(null)
+  const displayRef       = useRef(null)
+  const faceMeshRef      = useRef(null)
+  const lastSendRef      = useRef(0)
+  const earBufferRef     = useRef([])
+  const termineeRef      = useRef(false)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
   const audioIntervalRef = useRef(null)
@@ -469,14 +489,15 @@ export default function Session() {
     async function init() {
       try {
         const { data: uaData } = await api.get(`/api/cours/ua/${uaId}`)
-setUA(uaData)
-setExercices(uaData.exercices || [])
-const resos = uaData.ressources || []
-setRessources(resos)
-if (resos.length === 0) setPhase('exercices')
+        setUA(uaData)
+        setExercices(uaData.exercices || [])
+        const resos = uaData.ressources || []
+        setRessources(resos)
+        if (resos.length === 0) setPhase('exercices')
         const { data: sess } = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
         sessionIdRef.current = sess.session_id
       } catch { toast.error('Erreur de chargement') }
+      finally { setLoading(false) }
     }
     init()
   }, [uaId, user.id])
@@ -487,8 +508,8 @@ if (resos.length === 0) setPhase('exercices')
       clearTimeout(timer)
       timer = setTimeout(() => {
         const sid = sessionIdRef.current
-        if (sid) api.post('/api/interaction', { session_id: sid, user_id: user.id, type: 'idle', data: { duration_seconds: 120 } }).catch(() => {})
-      }, 120000)
+        if (sid) api.post('/api/interaction', { session_id: sid, user_id: user.id, type: 'idle', data: { duration_seconds: 30 } }).catch(() => {})
+      }, 30000)
     }
     const evts = ['mousedown', 'mousemove', 'keydown', 'scroll', 'click', 'touchstart']
     evts.forEach(e => window.addEventListener(e, reset)); reset()
@@ -500,6 +521,23 @@ if (resos.length === 0) setPhase('exercices')
     if (audioContextRef.current) audioContextRef.current.close()
   }, [])
 
+  // Chrono par question — reset à chaque nouvelle question, s'arrête après réponse
+  useEffect(() => {
+    setQuestionElapsed(0)
+    if (resultat) return
+    const t = setInterval(() => setQuestionElapsed(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [current, resultat])
+
+  // Clôture silencieuse si l'utilisateur quitte sans terminer
+  useEffect(() => {
+    return () => {
+      if (sessionIdRef.current && !termineeRef.current) {
+        api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
+      }
+    }
+  }, [])
+
   const sendEvent = useCallback(async (type, data = {}) => {
     const sid = sessionIdRef.current
     if (!sid) return
@@ -509,6 +547,15 @@ if (resos.length === 0) setPhase('exercices')
       if (res.adaptation) setAdaptation(res.adaptation)
     } catch {}
   }, [user.id])
+
+  // Page Visibility : log si l'utilisateur cache l'onglet (déclaré après sendEvent)
+  useEffect(() => {
+    function onVisibility() {
+      if (document.hidden) sendEvent('visibility_change', { visible: false })
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [sendEvent])
 
   async function startCamera() {
     setShowCameraBanner(false)
@@ -550,13 +597,14 @@ if (resos.length === 0) setPhase('exercices')
       audioContextRef.current = ctx
       analyserRef.current     = analyser
       audioIntervalRef.current = setInterval(() => {
-        const data = new Uint8Array(analyser.frequencyBinCount)
-        analyser.getByteFrequencyData(data)
-        const rms     = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length)
+        // Signal temporel centré sur 128 → RMS physiquement correct
+        const buf = new Uint8Array(analyser.fftSize)
+        analyser.getByteTimeDomainData(buf)
+        const rms     = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length)
         const db      = Math.round(rms)
-        const perturb = db > 60
+        const perturb = db > 20   // ~60 dB SPL sur signal 0-128
         setNiveauBruit(db); setBruitPerturb(perturb)
-        sendEvent('audio_analysis', { rms_level: db, db_normalise: Math.round(db / 1.28), bruit_perturb: perturb, contexte: perturb ? 'bruit_eleve' : 'calme' })
+        sendEvent('audio_analysis', { rms_level: db, db_normalise: Math.min(100, Math.round(db * 100 / 128)), bruit_perturb: perturb, contexte: perturb ? 'bruit_eleve' : 'calme' })
       }, 3000)
       setAudioActive(true)
       toast.success('Analyse audio activée ✓')
@@ -574,15 +622,12 @@ if (resos.length === 0) setPhase('exercices')
   }
 
   function onFaceResults(results) {
-    const canvas = canvasRef.current; const video = videoRef.current
-    if (!canvas || !video || !video.videoWidth || !video.videoHeight) return
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const video = videoRef.current
+    if (!video || !video.videoWidth || !video.videoHeight) return
     const display = displayRef.current
     if (display) {
-      display.width = canvas.width; display.height = canvas.height
-      display.getContext('2d').drawImage(canvas, 0, 0)
+      display.width = video.videoWidth; display.height = video.videoHeight
+      display.getContext('2d').drawImage(video, 0, 0, display.width, display.height)
     }
     if (!results.multiFaceLandmarks?.length) {
       const now = Date.now()
@@ -593,7 +638,11 @@ if (resos.length === 0) setPhase('exercices')
       return
     }
     const lm    = results.multiFaceLandmarks[0]
-    const ear   = (computeEAR(lm, [362, 385, 387, 263, 373, 380]) + computeEAR(lm, [33, 160, 158, 133, 153, 144])) / 2
+    const earRaw = (computeEAR(lm, [362, 385, 387, 263, 373, 380]) + computeEAR(lm, [33, 160, 158, 133, 153, 144])) / 2
+    // Lissage EAR sur 8 frames pour éliminer les clignements parasites
+    earBufferRef.current.push(earRaw)
+    if (earBufferRef.current.length > 8) earBufferRef.current.shift()
+    const ear = earBufferRef.current.reduce((a, b) => a + b, 0) / earBufferRef.current.length
     const yaw   = (lm[1].x - 0.5) * 180
     const pitch = (lm[1].y - lm[152].y) * 200
     let score   = 1.0
@@ -611,22 +660,29 @@ if (resos.length === 0) setPhase('exercices')
   }
 
   async function soumettre() {
-    if (!reponse) { toast.error('Choisis une réponse'); return }
+    if (!reponse || submitting) return
+    const sid = sessionIdRef.current
+    if (!sid) { toast.error('Session non initialisée, patiente…'); return }
     const ex = exercices[current]
     const tempsReponse = Math.round((Date.now() - questionTime) / 1000)
+    setSubmitting(true)
     try {
       const { data } = await api.post('/api/cours/exercice/verifier', { exercice_id: ex.id, user_id: user.id, reponse })
       setResultat(data); setScores(prev => [...prev, data.points_gagnes])
       await sendEvent('response', { exercice_id: ex.id, correct: data.correct, time_seconds: tempsReponse, emotion })
       if (data.correct) toast.success(`+${data.points_gagnes} points !`)
     } catch { toast.error('Erreur de vérification') }
+    finally { setSubmitting(false) }
   }
 
   function suivant() {
     if (current + 1 >= exercices.length) {
       const r = scores.filter(s => s > 0).length + (resultat?.correct ? 1 : 0)
       if (Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
-      if (sessionIdRef.current) api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
+      if (sessionIdRef.current) {
+        termineeRef.current = true
+        api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
+      }
       setTermine(true)
     } else {
       setCurrent(c => c + 1); setReponse(null); setResultat(null)
@@ -650,15 +706,31 @@ if (resos.length === 0) setPhase('exercices')
   }
 
   /* ── Chargement ──────────────────────────────────────────── */
-  if (!ua || exercices.length === 0) return (
+  if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: C.bg, gap: 12 }}>
       <Spinner size={44} />
       <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Chargement…</p>
     </div>
   )
+  if (!ua) return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: C.bg, gap: 12 }}>
+      <p style={{ color: C.red, fontSize: 14, fontWeight: 700 }}>Unité d'apprentissage introuvable.</p>
+      <button onClick={() => navigate('/dashboard')} style={{ padding: '10px 20px', background: C.brown, color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}>Retour</button>
+    </div>
+  )
+  if (exercices.length === 0) return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: C.bg, gap: 12 }}>
+      <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Aucun exercice disponible pour cette unité.</p>
+      <button onClick={() => navigate('/dashboard')} style={{ padding: '10px 20px', background: C.brown, color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}>Retour</button>
+    </div>
+  )
 
-   if (phase === 'lecon' && ua) {
-    return <LeconReader ua={ua} ressources={ressources} onStart={() => setPhase('exercices')} />
+  if (phase === 'lecon' && ua) {
+    return <LeconReader
+      ua={ua} ressources={ressources}
+      onStart={() => setPhase('exercices')}
+      onResourceView={(ressourceId, secs) => sendEvent('resource_read', { ressource_id: ressourceId, temps_secondes: secs })}
+    />
   }
 
   /* ── Fin de session ──────────────────────────────────────── */
@@ -775,10 +847,10 @@ if (resos.length === 0) setPhase('exercices')
                 <span style={{ fontSize: 11, fontWeight: 700, color: bruitPerturb ? C.red : C.emerald }}>
                   {bruitPerturb ? '🔊 Bruit élevé' : '🎤 Ambiance calme'}
                 </span>
-                <span style={{ fontSize: 9, color: C.textSec }}>{Math.round(niveauBruit / 1.28)}%</span>
+                <span style={{ fontSize: 9, color: C.textSec }}>{Math.min(100, Math.round(niveauBruit * 100 / 128))}%</span>
               </div>
               <div style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: 3, width: `${Math.min(100, Math.round(niveauBruit / 1.28))}%`, backgroundColor: bruitPerturb ? C.red : C.emerald, transition: 'width .5s ease' }}/>
+                <div style={{ height: '100%', borderRadius: 3, width: `${Math.min(100, Math.round(niveauBruit * 100 / 128))}%`, backgroundColor: bruitPerturb ? C.red : C.emerald, transition: 'width .5s ease' }}/>
               </div>
             </div>
           )}
@@ -839,8 +911,17 @@ if (resos.length === 0) setPhase('exercices')
             </p>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, height: 5, backgroundColor: '#E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
-              <div style={{ height: '100%', borderRadius: 5, backgroundColor: C.brown, width: `${progressPct}%`, transition: 'width .4s ease' }}/>
+            <div style={{ flex: 1, height: 5, borderRadius: 5, overflow: 'hidden', display: 'flex', gap: 1 }}>
+              {exercices.map((_, i) => (
+                <div key={i} style={{
+                  flex: 1, height: '100%',
+                  background: i < scores.length
+                    ? (scores[i] > 0 ? C.emerald : C.red)
+                    : i === current ? C.brown : '#E5E7EB',
+                  borderRadius: i === 0 ? '5px 0 0 5px' : i === exercices.length - 1 ? '0 5px 5px 0' : 0,
+                  transition: 'background .3s ease'
+                }}/>
+              ))}
             </div>
             <span style={{ fontSize: 11, fontWeight: 800, color: C.brown, flexShrink: 0 }}>
               {current + 1}/{exercices.length}
@@ -933,6 +1014,11 @@ if (resos.length === 0) setPhase('exercices')
               <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>
                 Q{current + 1}/{exercices.length}
               </span>
+              {!resultat && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: questionElapsed > 60 ? C.orange : C.textSec, fontWeight: 700 }}>
+                  <Clock size={12}/> {questionElapsed}s
+                </span>
+              )}
               <span style={{ marginLeft: 'auto', fontSize: 12, color: C.brownLight, fontWeight: 800, background: C.brownPale, padding: '4px 12px', borderRadius: 20 }}>
                 {ex.points} pts
               </span>
@@ -998,6 +1084,21 @@ if (resos.length === 0) setPhase('exercices')
                       <p style={{ fontSize: 13, color: C.emerald, margin: '7px 0 0' }}>
                         <strong>Bonne réponse :</strong> {resultat.reponse_correcte}
                       </p>
+                    )}
+                    {/* BKT mastery bar */}
+                    {resultat.bkt && (
+                      <div style={{ marginTop: 10, padding: '8px 12px', background: `${resultat.bkt.color}12`, borderRadius: 10, border: `1px solid ${resultat.bkt.color}30` }}>
+                        <p style={{ fontSize: 10, color: C.textSec, margin: '0 0 5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4 }}>
+                          Maîtrise — {resultat.bkt.competence}
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 5, background: '#E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', borderRadius: 5, width: `${resultat.bkt.pourcentage}%`, background: resultat.bkt.color, transition: 'width 1s ease' }}/>
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: resultat.bkt.color, flexShrink: 0 }}>{resultat.bkt.pourcentage}%</span>
+                          <span style={{ fontSize: 10, color: C.textSec, flexShrink: 0 }}>{resultat.bkt.label}</span>
+                        </div>
+                      </div>
                     )}
 
                     {/* Bouton Tuteur IA */}
@@ -1081,17 +1182,18 @@ if (resos.length === 0) setPhase('exercices')
 
             {/* Bouton action principal */}
             {!resultat ? (
-              <button onClick={soumettre} disabled={!reponse} style={{
+              <button onClick={soumettre} disabled={!reponse || submitting} style={{
                 width: '100%', padding: '15px',
-                background: reponse ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : '#E5E7EB',
-                color: reponse ? 'white' : C.textSec,
+                background: reponse && !submitting ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : '#E5E7EB',
+                color: reponse && !submitting ? 'white' : C.textSec,
                 border: 'none', borderRadius: 12,
                 fontSize: isMobile ? 14 : 15, fontWeight: 800,
-                cursor: reponse ? 'pointer' : 'not-allowed',
-                boxShadow: reponse ? `0 4px 18px ${C.brown}35` : 'none',
-                transition: 'all .2s ease', minHeight: 52
+                cursor: reponse && !submitting ? 'pointer' : 'not-allowed',
+                boxShadow: reponse && !submitting ? `0 4px 18px ${C.brown}35` : 'none',
+                transition: 'all .2s ease', minHeight: 52,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
               }}>
-                Valider ma réponse
+                {submitting ? <><Spinner size={14} color={C.textSec}/> Vérification…</> : 'Valider ma réponse'}
               </button>
             ) : (
               <button onClick={suivant} style={{

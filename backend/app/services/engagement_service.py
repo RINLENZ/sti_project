@@ -102,7 +102,7 @@ def compute_behavioral_score(events: list) -> dict:
         }
 
     # ── Extraction des scores par modalité ───────────────────────
-    score_comportemental = 1.0
+    score_comportemental = 0.5   # neutre par défaut
     score_visuel_list    = []
     nb_idles             = 0
     nb_responses         = 0
@@ -117,7 +117,7 @@ def compute_behavioral_score(events: list) -> dict:
 
         if t == "idle":
             nb_idles += 1
-            score_comportemental -= 0.20
+            score_comportemental -= 0.12   # pénalité modérée (base 0.5)
 
         elif t == "response":
             nb_responses += 1
@@ -127,18 +127,18 @@ def compute_behavioral_score(events: list) -> dict:
 
             if correct:
                 nb_correct += 1
-                score_comportemental += 0.05
+                score_comportemental += 0.08
             else:
-                score_comportemental -= 0.05
+                score_comportemental -= 0.06
 
             # Temps de réponse très long → signal de confusion
             if temps > 120:
-                score_comportemental -= 0.10
+                score_comportemental -= 0.08
 
         elif t == "help_requested":
             nb_help += 1
             level    = data.get("level", 1)
-            score_comportemental -= (0.05 * level)
+            score_comportemental -= (0.04 * level)
 
         elif t == "facial_analysis":
             # Score visuel MediaPipe
@@ -151,14 +151,10 @@ def compute_behavioral_score(events: list) -> dict:
                 etats_affectifs_list.append(etat)
 
         elif t == "audio_analysis":
-            # Analyse bruit ambiant — pénalité si environnement perturbateur
+            # Pénalité score si bruit perturbateur (une seule fois)
             perturb = data.get("bruit_perturb", False)
-            rms     = data.get("rms_level", 0)
             if perturb:
-                score_comportemental -= 0.08
-            # Signal proxy : bruit fort → ennui potentiel
-            if perturb:
-                etats_affectifs_list.append("ennui")
+                score_comportemental -= 0.06
 
     # Clamp score comportemental
     score_comportemental = max(0.0, min(1.0, score_comportemental))
@@ -262,14 +258,18 @@ def _etat_affectif_dominant(
     # Compte les états détectés visuellement
     compteur = {}
     for etat in etats_list:
-        # Mapping frontend → labels mémoire
+        # Mapping frontend → labels mémoire (labels directs + legacy)
         mapping = {
-            "joie":        "engagement_eleve",
-            "neutre":      "neutre",
-            "frustration": "frustration",
-            "ennui":       "ennui",
-            "surprise":    "confusion",   # surprise ≈ confusion en contexte scolaire
-            "absent":      "ennui",
+            "engagement_eleve":  "engagement_eleve",
+            "engagement_modere": "engagement_modere",
+            "engagement_faible": "engagement_faible",
+            "confusion":         "confusion",
+            "frustration":       "frustration",
+            "ennui":             "ennui",
+            "neutre":            "neutre",
+            "absent":            "ennui",
+            "joie":              "engagement_eleve",  # legacy
+            "surprise":          "confusion",          # legacy
         }
         label = mapping.get(etat, "neutre")
         compteur[label] = compteur.get(label, 0) + 1

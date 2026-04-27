@@ -766,18 +766,17 @@ sans balises markdown. Format exact :
     except anthropic.APIError as e:
         raise HTTPException(500, f"Erreur API Claude : {str(e)}")
 
+    import re as _re
     content = message.content[0].text.strip()
-    # Nettoie les éventuels backticks markdown
-    if content.startswith("```"):
-        content = content.split("```")[1]
-        if content.startswith("json"):
-            content = content[4:]
+    # Supprime les balises de code markdown (```json ... ``` ou ``` ... ```)
+    content = _re.sub(r'^```[a-zA-Z]*\n?', '', content)
+    content = _re.sub(r'\n?```\s*$', '', content)
     content = content.strip()
 
     try:
         data = _json.loads(content)
     except Exception:
-        raise HTTPException(500, "Réponse IA invalide — relancez")
+        raise HTTPException(500, f"Réponse IA invalide — relancez ({content[:60]}…)")
 
     # Sauvegarde les exercices générés en base
     created = []
