@@ -813,11 +813,6 @@ if (resos.length === 0) setPhase('exercices')
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none', position: 'absolute' }}/>
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
 
-      <style>{`
-        @keyframes slideUp    { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes shake      { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-4px)} 40%,80%{transform:translateX(4px)} }
-      `}</style>
-
       {/* ── Header sticky ── */}
       <div style={{
         backgroundColor: C.surface, borderBottom: `1px solid ${C.brownPale}`,
