@@ -67,9 +67,13 @@ with open("dataset_visuel.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow([
         "session_id", "timestamp",
-        "ear", "yaw", "pitch",          # landmarks calculés
+        "ear", "yaw", "pitch",           # landmarks MediaPipe
         "visual_score",                  # score EAR+pose
-        "emotion_detectee",              # état frontend
+        "emotion_detectee",              # état fusionné final
+        "source",                        # 'cnn+geometry' ou 'geometry'
+        "cnn_dominant",                  # expression CNN brute
+        "cnn_happy", "cnn_neutral", "cnn_sad",
+        "cnn_angry", "cnn_fearful", "cnn_surprised", "cnn_disgusted",
         "etat_affectif_final",           # ground truth session
     ])
 
@@ -85,6 +89,10 @@ with open("dataset_visuel.csv", "w", newline="") as f:
                 str(s.id), str(e.timestamp) if e.timestamp else "",
                 d.get("ear", ""), d.get("yaw", ""), d.get("pitch", ""),
                 d.get("visual_score", ""), d.get("emotion", ""),
+                d.get("source", "geometry"),
+                d.get("cnn_dominant", ""),
+                d.get("cnn_happy", ""), d.get("cnn_neutral", ""), d.get("cnn_sad", ""),
+                d.get("cnn_angry", ""), d.get("cnn_fearful", ""), d.get("cnn_surprised", ""), d.get("cnn_disgusted", ""),
                 s.etat_affectif,
             ])
 

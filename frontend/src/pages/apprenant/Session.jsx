@@ -33,23 +33,48 @@ const ETATS = {
   decrochage:        { label: '⚠️ Décroché',    color: '#7F1D1D'    },
 }
 
-/* ── Emotion detection ───────────────────────────────────────── */
-function detecterEmotion(lm, ear, yaw, pitch) {
-  // Sourire : coins de bouche au-dessus du centre labial (lm[13/14] = lèvres)
-  const lipCenterY = (lm[13].y + lm[14].y) / 2
-  const sourire = lipCenterY - (lm[61].y + lm[291].y) / 2
-  const joie = sourire > 0.005
-  const hBouche = Math.abs(lm[13].y - lm[14].y)
-  const lBouche = Math.abs(lm[61].x - lm[291].x)
-  const mar = lBouche > 0 ? hBouche / lBouche : 0
-  // Sourcils levés : distance sourcil externe–œil supérieur augmente (lm[159/386] = œil haut)
-  const sourcilsLeves = ((lm[159].y - lm[70].y) + (lm[386].y - lm[300].y)) / 2 > 0.02
-  // Sourcils froncés : sourcils intérieurs (lm[107/336]) rapprochés
-  const sourcilsFronced = Math.abs(lm[107].x - lm[336].x) < 0.035
-  if (ear < 0.22 && Math.abs(pitch) > 12) return 'ennui'
-  if (mar > 0.45 && sourcilsLeves) return 'confusion'
-  if (joie) return 'engagement_eleve'
-  if (sourcilsFronced && Math.abs(yaw) < 20) return 'frustration'
+/* ── face-api.js : chargement des modèles CNN ────────────────── */
+const FACEAPI_MODELS_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'
+let faceApiReady = false
+async function loadFaceApiModels() {
+  if (faceApiReady || !window.faceapi) return false
+  try {
+    await Promise.all([
+      window.faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODELS_URL),
+      window.faceapi.nets.faceExpressionNet.loadFromUri(FACEAPI_MODELS_URL),
+    ])
+    faceApiReady = true
+    return true
+  } catch { return false }
+}
+
+/* ── Mapping expressions CNN → états affectifs académiques ─────
+   Basé sur Ekman & Friesen (FACS) adapté au contexte scolaire :
+   fearful ≈ confusion (stress cognitif, pas danger physique)
+   surprised ≈ confusion (inattendu = incompréhension)          */
+const CNN_TO_ETAT = {
+  happy:     'engagement_eleve',
+  neutral:   'neutre',
+  sad:       'ennui',
+  angry:     'frustration',
+  fearful:   'confusion',
+  surprised: 'confusion',
+  disgusted: 'frustration',
+}
+
+/* ── Fusion CNN + signal géométrique MediaPipe ───────────────── */
+function fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch) {
+  // Signal géométrique : attention (EAR) + orientation tête (pose)
+  const earSignal  = ear < 0.18   // yeux très fermés → somnolence
+  const poseSignal = Math.abs(yaw) > 28  // tête tournée → désengagement
+
+  // Si somnolence forte → ennui (priorité physiologique)
+  if (earSignal && Math.abs(pitch) > 10) return 'ennui'
+  // Si tête très tournée → engagement_faible
+  if (poseSignal && (!cnnProbs || (cnnProbs.neutral || 0) > 0.5)) return 'engagement_faible'
+  // Sinon, confiance au CNN si disponible
+  if (cnnEmotion) return cnnEmotion
+  // Fallback géométrique si CNN indisponible
   if (Math.abs(yaw) > 25) return 'engagement_faible'
   return 'neutre'
 }
@@ -468,6 +493,8 @@ export default function Session() {
   const lastSendRef      = useRef(0)
   const earBufferRef     = useRef([])
   const termineeRef      = useRef(false)
+  const cnnEmotionRef    = useRef({ emotion: null, probs: null })  // dernière détection CNN
+  const faceApiIntervalRef = useRef(null)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
   const audioIntervalRef = useRef(null)
@@ -517,8 +544,9 @@ export default function Session() {
   }, [user.id])
 
   useEffect(() => () => {
-    if (audioIntervalRef.current) clearInterval(audioIntervalRef.current)
-    if (audioContextRef.current) audioContextRef.current.close()
+    if (audioIntervalRef.current)   clearInterval(audioIntervalRef.current)
+    if (faceApiIntervalRef.current) clearInterval(faceApiIntervalRef.current)
+    if (audioContextRef.current)    audioContextRef.current.close()
   }, [])
 
   // Chrono par question — reset à chaque nouvelle question, s'arrête après réponse
@@ -583,6 +611,25 @@ export default function Session() {
       await new Promise(r => setTimeout(r, 1000))
       setCameraActive(true)
       toast.success('Analyse visuelle activée ✓')
+
+      // Charger face-api.js en arrière-plan puis lancer la détection CNN toutes les 3s
+      const ok = await loadFaceApiModels()
+      if (ok) {
+        toast.success('Modèle CNN expression chargé ✓', { duration: 2000 })
+        faceApiIntervalRef.current = setInterval(async () => {
+          const vid = videoRef.current
+          if (!vid || !vid.videoWidth || !faceApiReady) return
+          try {
+            const opts = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 })
+            const det  = await window.faceapi.detectSingleFace(vid, opts).withFaceExpressions()
+            if (det?.expressions) {
+              const probs = det.expressions
+              const dominant = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0]
+              cnnEmotionRef.current = { emotion: CNN_TO_ETAT[dominant] || 'neutre', probs, dominant }
+            }
+          } catch {}
+        }, 3000)
+      }
     } catch { toast.error('Caméra non disponible') }
   }
 
@@ -637,24 +684,47 @@ export default function Session() {
       }
       return
     }
-    const lm    = results.multiFaceLandmarks[0]
+    const lm     = results.multiFaceLandmarks[0]
     const earRaw = (computeEAR(lm, [362, 385, 387, 263, 373, 380]) + computeEAR(lm, [33, 160, 158, 133, 153, 144])) / 2
-    // Lissage EAR sur 8 frames pour éliminer les clignements parasites
+    // Lissage EAR sur 8 frames
     earBufferRef.current.push(earRaw)
     if (earBufferRef.current.length > 8) earBufferRef.current.shift()
-    const ear = earBufferRef.current.reduce((a, b) => a + b, 0) / earBufferRef.current.length
+    const ear   = earBufferRef.current.reduce((a, b) => a + b, 0) / earBufferRef.current.length
     const yaw   = (lm[1].x - 0.5) * 180
     const pitch = (lm[1].y - lm[152].y) * 200
-    let score   = 1.0
+
+    // Score visuel (attention + pose)
+    let score = 1.0
     if (ear < 0.15) score -= 0.5; else if (ear < 0.20) score -= 0.4; else if (ear < 0.25) score -= 0.2
     if (Math.abs(yaw) > 45) score -= 0.4; else if (Math.abs(yaw) > 30) score -= 0.3; else if (Math.abs(yaw) > 15) score -= 0.1
     if (Math.abs(pitch) > 30) score -= 0.2; else if (Math.abs(pitch) > 15) score -= 0.1
     score = Math.max(0, Math.min(1, score))
-    const em = detecterEmotion(lm, ear, yaw, pitch)
+
+    // Fusion CNN (face-api.js) + géométrie (MediaPipe)
+    const { emotion: cnnEmotion, probs: cnnProbs, dominant: cnnDominant } = cnnEmotionRef.current
+    const em = fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch)
     setEmotion(em)
+
     const now = Date.now()
     if (now - lastSendRef.current > 5000) {
-      sendEvent('facial_analysis', { visual_score: Math.round(score * 100) / 100, ear: Math.round(ear * 100) / 100, yaw: Math.round(yaw), pitch: Math.round(pitch), face_detected: true, emotion: em })
+      sendEvent('facial_analysis', {
+        visual_score:    Math.round(score * 100) / 100,
+        ear:             Math.round(ear * 100) / 100,
+        yaw:             Math.round(yaw),
+        pitch:           Math.round(pitch),
+        face_detected:   true,
+        emotion:         em,
+        // Données CNN brutes pour le dataset
+        cnn_dominant:    cnnDominant  || null,
+        cnn_happy:       cnnProbs ? Math.round((cnnProbs.happy    || 0) * 100) / 100 : null,
+        cnn_neutral:     cnnProbs ? Math.round((cnnProbs.neutral  || 0) * 100) / 100 : null,
+        cnn_sad:         cnnProbs ? Math.round((cnnProbs.sad      || 0) * 100) / 100 : null,
+        cnn_angry:       cnnProbs ? Math.round((cnnProbs.angry    || 0) * 100) / 100 : null,
+        cnn_fearful:     cnnProbs ? Math.round((cnnProbs.fearful  || 0) * 100) / 100 : null,
+        cnn_surprised:   cnnProbs ? Math.round((cnnProbs.surprised|| 0) * 100) / 100 : null,
+        cnn_disgusted:   cnnProbs ? Math.round((cnnProbs.disgusted|| 0) * 100) / 100 : null,
+        source:          cnnDominant ? 'cnn+geometry' : 'geometry',
+      })
       lastSendRef.current = now
     }
   }
@@ -819,8 +889,15 @@ export default function Session() {
             </div>
           )}
           {cameraActive && (
-            <div style={{ position: 'absolute', bottom: 6, left: 6, backgroundColor: C.emerald, borderRadius: 20, padding: '2px 8px', fontSize: 9, fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 4, height: 4, borderRadius: '50%', backgroundColor: 'white', animation: 'pulse 1.5s infinite' }}/>LIVE
+            <div style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4 }}>
+              <div style={{ backgroundColor: C.emerald, borderRadius: 20, padding: '2px 8px', fontSize: 9, fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', backgroundColor: 'white', animation: 'pulse 1.5s infinite' }}/>LIVE
+              </div>
+              {faceApiReady && (
+                <div style={{ backgroundColor: '#7C3AED', borderRadius: 20, padding: '2px 8px', fontSize: 9, fontWeight: 800, color: 'white' }}>
+                  CNN ✓
+                </div>
+              )}
             </div>
           )}
         </div>
