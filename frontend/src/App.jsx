@@ -23,6 +23,7 @@ import DashboardProf    from './pages/enseignant/DashboardProf'
 import AdminCours       from './pages/enseignant/AdminCours'
 import AdminReferentiel from './pages/enseignant/AdminReferentiel'
 import DataCollection   from './pages/DataCollection'
+import AudioCollection  from './pages/AudioCollection'
 
 import AppLayout from './components/layout/AppLayout'
 
@@ -137,6 +138,13 @@ export default function App() {
       <Route path="/collect-emotions" element={
         <PrivateRoute role="super_admin">
           <DataCollection/>
+        </PrivateRoute>
+      }/>
+
+      {/* ── Collecte clips audio KWS (super_admin) ── */}
+      <Route path="/collect-audio" element={
+        <PrivateRoute role="super_admin">
+          <AudioCollection/>
         </PrivateRoute>
       }/>
 

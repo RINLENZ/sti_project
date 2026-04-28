@@ -12,3 +12,5 @@ numpy>=1.24
 pandas>=2.0
 matplotlib>=3.7
 tqdm>=4.66
+librosa>=0.10
+soundfile>=0.12
