@@ -447,6 +447,30 @@ function renderInline(text) {
 }
 
 
+/* ── Sélection de la meilleure voix française disponible ────────
+   Ordre de préférence : voix neuronales (Denise, Amélie, Thomas)
+   > voix Google > n'importe quelle voix fr > défaut système.
+   Résultat mis en cache après le premier appel.               */
+let _cachedFrVoice = undefined   // undefined = pas encore cherché, null = aucune trouvée
+function getBestFrenchVoice() {
+  if (_cachedFrVoice !== undefined) return _cachedFrVoice
+  const voices = window.speechSynthesis?.getVoices() || []
+  const PREF = ['Denise', 'Amélie', 'Thomas', 'Google français',
+                'Hortense', 'Julie', 'Virginie', 'Nicolas']
+  for (const name of PREF) {
+    const v = voices.find(v => v.name.includes(name))
+    if (v) { _cachedFrVoice = v; return v }
+  }
+  _cachedFrVoice = voices.find(v => v.lang?.startsWith('fr')) || null
+  return _cachedFrVoice
+}
+// Recharge la liste quand le navigateur finit de charger les voix
+if (typeof window !== 'undefined' && window.speechSynthesis) {
+  window.speechSynthesis.addEventListener('voiceschanged', () => {
+    _cachedFrVoice = undefined   // force re-sélection au prochain tts()
+  })
+}
+
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Session() {
   const { uaId }   = useParams()
@@ -484,9 +508,11 @@ export default function Session() {
   const [loading,         setLoading]         = useState(true)
   const [questionElapsed, setQuestionElapsed] = useState(0)
 
-  const [submitting, setSubmitting] = useState(false)
-  const [speaking,   setSpeaking]   = useState(false)
-  const [ttsRate,    setTtsRate]    = useState(0.9)
+  const [submitting,     setSubmitting]     = useState(false)
+  const [speaking,       setSpeaking]       = useState(false)
+  const [ttsRate,        setTtsRate]        = useState(0.9)
+  const [noiseAdaptatif, setNoiseAdaptatif] = useState(null)  // null|'eleve'|'tres_eleve'
+  const [picModal,       setPicModal]       = useState(false)
 
   const videoRef         = useRef(null)
   const canvasRef        = useRef(null)
@@ -500,6 +526,8 @@ export default function Session() {
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
   const audioIntervalRef = useRef(null)
+  const baselineRmsRef   = useRef(0)    // bruit ambiant mesuré à l'activation micro
+  const lastSpikeRef     = useRef(0)    // timestamp du dernier pic soudain (anti-spam)
 
   /* Afficher le banner caméra 4s après le chargement (mobile seulement) */
   useEffect(() => {
@@ -586,6 +614,10 @@ export default function Session() {
     const utt    = new SpeechSynthesisUtterance(text)
     utt.lang     = 'fr-FR'
     utt.rate     = rate ?? ttsRate
+    utt.pitch    = 1.08    // légèrement plus haut → ton chaleureux et engageant
+    utt.volume   = 1.0
+    const voice  = getBestFrenchVoice()
+    if (voice) utt.voice = voice
     utt.onstart  = () => setSpeaking(true)
     utt.onend    = () => setSpeaking(false)
     utt.onerror  = () => setSpeaking(false)
@@ -672,16 +704,64 @@ export default function Session() {
       source.connect(analyser)
       audioContextRef.current = ctx
       analyserRef.current     = analyser
+
+      // ── Calibration baseline 3s ──────────────────────────────
+      toast('🎙 Calibration du micro… (3s)', { duration: 3200, icon: '⏳' })
+      const calibBuf = new Uint8Array(analyser.fftSize)
+      const calibSamples = []
+      const calibId = setInterval(() => {
+        analyser.getByteTimeDomainData(calibBuf)
+        const rms = Math.sqrt(calibBuf.reduce((s, v) => s + (v - 128) ** 2, 0) / calibBuf.length)
+        calibSamples.push(rms)
+      }, 150)
+      await new Promise(r => setTimeout(r, 3000))
+      clearInterval(calibId)
+      const baseline = calibSamples.length
+        ? calibSamples.reduce((a, b) => a + b, 0) / calibSamples.length
+        : 5
+      baselineRmsRef.current = Math.max(3, baseline)   // plancher évite division par zéro
+
+      // ── Analyse continue (toutes les 3s) ────────────────────
       audioIntervalRef.current = setInterval(() => {
-        // Signal temporel centré sur 128 → RMS physiquement correct
         const buf = new Uint8Array(analyser.fftSize)
         analyser.getByteTimeDomainData(buf)
-        const rms     = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length)
-        const db      = Math.round(rms)
-        const perturb = db > 20   // ~60 dB SPL sur signal 0-128
-        setNiveauBruit(db); setBruitPerturb(perturb)
-        sendEvent('audio_analysis', { rms_level: db, db_normalise: Math.min(100, Math.round(db * 100 / 128)), bruit_perturb: perturb, contexte: perturb ? 'bruit_eleve' : 'calme' })
+        const rms  = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length)
+        const db   = Math.round(rms)
+        const base = baselineRmsRef.current
+        const ratio = base > 0 ? rms / base : 1
+
+        const perturb    = ratio > 2.5
+        const tresEleve  = ratio > 4.5
+        const picSoudain = ratio > 6 && Date.now() - lastSpikeRef.current > 15000
+
+        setNiveauBruit(db)
+        setBruitPerturb(perturb)
+
+        if (picSoudain) {
+          lastSpikeRef.current = Date.now()
+          setPicModal(true)
+          tts('Une interruption a été détectée. Es-tu toujours là ?')
+        } else if (tresEleve) {
+          setNoiseAdaptatif('tres_eleve')
+        } else if (perturb) {
+          setNoiseAdaptatif('eleve')
+        } else {
+          setNoiseAdaptatif(null)
+        }
+
+        sendEvent('audio_analysis', {
+          rms_level:    db,
+          rms_ratio:    Math.round(ratio * 100) / 100,
+          baseline:     Math.round(base),
+          db_normalise: Math.min(100, Math.round(db * 100 / 128)),
+          bruit_perturb: perturb,
+          contexte:     picSoudain ? 'pic_soudain'
+                       : tresEleve ? 'bruit_tres_eleve'
+                       : perturb   ? 'bruit_eleve'
+                       : 'calme',
+        })
       }, 3000)
+
       setAudioActive(true)
       toast.success('Analyse audio activée ✓')
     } catch { toast.error('Micro non disponible') }
@@ -1020,6 +1100,24 @@ export default function Session() {
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none', position: 'absolute' }}/>
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
 
+      {/* ── Modal pic sonore — confirmation présence ── */}
+      {picModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: C.surface, borderRadius: 20, padding: '32px 24px', maxWidth: 340, width: '100%', textAlign: 'center', boxShadow: '0 16px 48px rgba(0,0,0,0.3)', animation: 'fadeUp .3s ease' }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>👋</div>
+            <h3 style={{ fontSize: 18, fontWeight: 900, color: C.text, margin: '0 0 10px' }}>Tu es toujours là ?</h3>
+            <p style={{ fontSize: 13, color: C.textSec, margin: '0 0 24px', lineHeight: 1.7 }}>
+              Une interruption a été détectée dans ton environnement.<br/>Prends le temps qu'il te faut — la session t'attend.
+            </p>
+            <button
+              onClick={() => { setPicModal(false); setNoiseAdaptatif(null); tts('Bienvenue ! On continue.') }}
+              style={{ width: '100%', padding: '13px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: `0 4px 18px ${C.brown}35` }}>
+              ✅ Je suis là, on continue !
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header sticky ── */}
       <div style={{
         backgroundColor: C.surface, borderBottom: `1px solid ${C.brownPale}`,
@@ -1113,6 +1211,28 @@ export default function Session() {
       {/* ── Body ── */}
       <div style={{ maxWidth: 1060, margin: '0 auto', padding: `16px ${isMobile ? 12 : 20}px`, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
+
+          {/* Bannière bruit adaptatif */}
+          {noiseAdaptatif && !picModal && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 12, marginBottom: 10,
+              background: noiseAdaptatif === 'tres_eleve' ? '#FEE2E2' : '#FFFBEB',
+              border: `1px solid ${noiseAdaptatif === 'tres_eleve' ? '#FCA5A5' : '#FDE68A'}`,
+              display: 'flex', alignItems: 'center', gap: 10, animation: 'slideDown .3s ease'
+            }}>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>
+                {noiseAdaptatif === 'tres_eleve' ? '🔇' : '🔊'}
+              </span>
+              <p style={{ fontSize: 12, fontWeight: 700, margin: 0, flex: 1,
+                color: noiseAdaptatif === 'tres_eleve' ? C.red : '#92400E', lineHeight: 1.5 }}>
+                {noiseAdaptatif === 'tres_eleve'
+                  ? 'Environnement très bruyant — les consignes sont lues automatiquement'
+                  : 'Bruit de fond détecté — utilise le bouton 🔊 si tu n\'entends pas bien'}
+              </p>
+              <button onClick={() => setNoiseAdaptatif(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: C.textSec, flexShrink: 0, padding: 4 }}>✕</button>
+            </div>
+          )}
 
           {/* Bannière adaptation */}
           {adaptation && (
