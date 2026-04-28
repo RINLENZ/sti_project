@@ -104,6 +104,7 @@ def compute_behavioral_score(events: list) -> dict:
     # ── Extraction des scores par modalité ───────────────────────
     score_comportemental = 0.5   # neutre par défaut
     score_visuel_list    = []
+    score_audio_list     = []    # scores VAD pour le calcul de β
     nb_idles             = 0
     nb_responses         = 0
     nb_correct           = 0
@@ -150,49 +151,77 @@ def compute_behavioral_score(events: list) -> dict:
             if etat:
                 etats_affectifs_list.append(etat)
 
+        elif t == "vad_speech":
+            # Parole active détectée → signal positif d'engagement
+            # Plus la durée de parole est longue, plus le score est élevé
+            if data.get("event") == "end":
+                duration = data.get("duration_seconds", 0)
+                if duration >= 1:   # ignore les clips < 1s (bruit parasites)
+                    audio_score = min(1.0, 0.55 + min(duration, 10) * 0.04)
+                    score_audio_list.append(audio_score)
+
         elif t == "audio_analysis":
-            # Pénalité score si bruit perturbateur (une seule fois)
+            # Pénalité comportementale si bruit perturbateur
             perturb = data.get("bruit_perturb", False)
             if perturb:
                 score_comportemental -= 0.06
+            # Contexte très bruité pénalise aussi le score audio
+            contexte = data.get("contexte", "calme")
+            if contexte in ("bruit_tres_eleve", "pic_soudain"):
+                score_audio_list.append(0.15)   # environnement hostile
+            elif contexte == "bruit_eleve":
+                score_audio_list.append(0.35)
 
     # Clamp score comportemental
     score_comportemental = max(0.0, min(1.0, score_comportemental))
 
-    # ── Pondérations dynamiques ───────────────────────────────────
-    # Audio désactivé en prototype → β=0, renormalisation α+γ
-    alpha_raw = WEIGHTS_DEFAULT["alpha"]
-    beta_raw  = 0.0   # audio désactivé
+    # ── Pondérations dynamiques (modalités actives) ──────────────
+    alpha_raw = WEIGHTS_DEFAULT["alpha"] if score_visuel_list  else 0.0
+    beta_raw  = WEIGHTS_DEFAULT["beta"]  if score_audio_list   else 0.0
     gamma_raw = WEIGHTS_DEFAULT["gamma"]
-
-    # Si pas de données visuelles → α=0 également
-    if not score_visuel_list:
-        alpha_raw = 0.0
 
     poids = renormaliser_poids(alpha_raw, beta_raw, gamma_raw)
     alpha = poids["alpha"]
+    beta  = poids["beta"]
     gamma = poids["gamma"]
 
-    # ── Fusion selon modalités disponibles ───────────────────────
+    # ── Scores par modalité ───────────────────────────────────────
+    score_visuel = None
+    score_audio  = None
+
     if score_visuel_list:
-        # Moyenne glissante sur les 5 derniers scores visuels
         recent_visual = score_visuel_list[-5:]
         score_visuel  = round(sum(recent_visual) / len(recent_visual), 3)
 
-        # Score fusionné : α·facial + γ·comportemental (β=0)
-        score_fusionne = alpha * score_visuel + gamma * score_comportemental
-        fusion_info    = (
+    if score_audio_list:
+        score_audio = round(sum(score_audio_list) / len(score_audio_list), 3)
+
+    # ── Fusion multimodale ────────────────────────────────────────
+    if score_visuel is not None and score_audio is not None:
+        score_fusionne = alpha * score_visuel + beta * score_audio + gamma * score_comportemental
+        fusion_info = (
             f"α={alpha:.2f}·facial({score_visuel:.2f}) + "
-            f"γ={gamma:.2f}·comport.({score_comportemental:.2f}) | "
-            f"β=0 (audio désactivé)"
+            f"β={beta:.2f}·audio({score_audio:.2f}) + "
+            f"γ={gamma:.2f}·comport.({score_comportemental:.2f})"
+        )
+    elif score_visuel is not None:
+        score_fusionne = alpha * score_visuel + gamma * score_comportemental
+        fusion_info = (
+            f"α={alpha:.2f}·facial({score_visuel:.2f}) + "
+            f"γ={gamma:.2f}·comport.({score_comportemental:.2f}) | β=0 (pas de données VAD)"
+        )
+    elif score_audio is not None:
+        score_fusionne = beta * score_audio + gamma * score_comportemental
+        fusion_info = (
+            f"β={beta:.2f}·audio({score_audio:.2f}) + "
+            f"γ={gamma:.2f}·comport.({score_comportemental:.2f}) | α=0 (caméra inactive)"
         )
     else:
-        # Pas de données visuelles → comportemental seul (γ=1.0)
         score_visuel   = None
         score_fusionne = score_comportemental
-        fusion_info    = (
+        fusion_info = (
             f"comportemental seul γ=1.0 ({score_comportemental:.2f}) | "
-            f"α=0 (caméra inactive), β=0 (audio désactivé)"
+            f"α=0 (caméra inactive), β=0 (audio inactif)"
         )
 
     score_fusionne = round(max(0.0, min(1.0, score_fusionne)), 3)
@@ -222,10 +251,10 @@ def compute_behavioral_score(events: list) -> dict:
         "level":              level,
         "behavioral_score":   round(score_comportemental, 3),
         "visual_score":       score_visuel,
-        "audio_score":        None,   # désactivé en prototype
+        "audio_score":        score_audio,
         "etat_affectif":      etat_dominant,
         "fusion_info":        fusion_info,
-        "poids":              {"alpha": alpha, "beta": 0.0, "gamma": gamma},
+        "poids":              {"alpha": alpha, "beta": beta, "gamma": gamma},
         "adaptation":         adaptation,
         "stats": {
             "nb_idles":      nb_idles,

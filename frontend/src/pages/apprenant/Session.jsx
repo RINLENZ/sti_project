@@ -513,6 +513,7 @@ export default function Session() {
   const [ttsRate,        setTtsRate]        = useState(0.9)
   const [noiseAdaptatif, setNoiseAdaptatif] = useState(null)  // null|'eleve'|'tres_eleve'
   const [picModal,       setPicModal]       = useState(false)
+  const [vadSpeech,      setVadSpeech]      = useState(false) // parole active détectée
 
   const videoRef         = useRef(null)
   const canvasRef        = useRef(null)
@@ -528,6 +529,10 @@ export default function Session() {
   const audioIntervalRef = useRef(null)
   const baselineRmsRef   = useRef(0)    // bruit ambiant mesuré à l'activation micro
   const lastSpikeRef     = useRef(0)    // timestamp du dernier pic soudain (anti-spam)
+  const vadBufferRef     = useRef([])   // fenêtre glissante RMS pour VAD (8 × 300ms = 2.4s)
+  const vadIntervalRef   = useRef(null) // intervalle rapide VAD
+  const vadSpeechRef     = useRef(false)// état courant parole (sans re-render)
+  const vadSpeechStart   = useRef(0)    // timestamp début de parole (durée)
 
   /* Afficher le banner caméra 4s après le chargement (mobile seulement) */
   useEffect(() => {
@@ -575,6 +580,7 @@ export default function Session() {
 
   useEffect(() => () => {
     if (audioIntervalRef.current)   clearInterval(audioIntervalRef.current)
+    if (vadIntervalRef.current)     clearInterval(vadIntervalRef.current)
     if (faceApiIntervalRef.current) clearInterval(faceApiIntervalRef.current)
     if (audioContextRef.current)    audioContextRef.current.close()
     if (window.speechSynthesis)     window.speechSynthesis.cancel()
@@ -750,17 +756,54 @@ export default function Session() {
         }
 
         sendEvent('audio_analysis', {
-          rms_level:    db,
-          rms_ratio:    Math.round(ratio * 100) / 100,
-          baseline:     Math.round(base),
-          db_normalise: Math.min(100, Math.round(db * 100 / 128)),
-          bruit_perturb: perturb,
-          contexte:     picSoudain ? 'pic_soudain'
-                       : tresEleve ? 'bruit_tres_eleve'
-                       : perturb   ? 'bruit_eleve'
-                       : 'calme',
+          rms_level:      db,
+          rms_ratio:      Math.round(ratio * 100) / 100,
+          baseline:       Math.round(base),
+          db_normalise:   Math.min(100, Math.round(db * 100 / 128)),
+          bruit_perturb:  perturb,
+          speech_detected: vadSpeechRef.current,
+          contexte:       picSoudain ? 'pic_soudain'
+                         : tresEleve ? 'bruit_tres_eleve'
+                         : perturb   ? 'bruit_eleve'
+                         : 'calme',
         })
       }, 3000)
+
+      // ── VAD — fenêtre glissante 300ms × 8 = 2.4s ────────────
+      // Critère parole : amplitude > 1.3× baseline (signal présent)
+      //                  ET < 4.5× baseline (pas bruit constant)
+      //                  ET variance élevée  (rythme vocal)
+      const vadBuf = new Uint8Array(analyser.fftSize)
+      vadIntervalRef.current = setInterval(() => {
+        analyser.getByteTimeDomainData(vadBuf)
+        const rms  = Math.sqrt(vadBuf.reduce((s, v) => s + (v - 128) ** 2, 0) / vadBuf.length)
+        const base = baselineRmsRef.current
+
+        vadBufferRef.current.push(rms)
+        if (vadBufferRef.current.length > 8) vadBufferRef.current.shift()
+        const win = vadBufferRef.current
+        if (win.length < 5) return
+
+        const mean = win.reduce((a, b) => a + b, 0) / win.length
+        const variance = win.reduce((s, v) => s + (v - mean) ** 2, 0) / win.length
+        const varianceThreshold = (base * 0.25) ** 2
+
+        const isSpeech = mean > base * 1.3
+                      && mean < base * 4.5
+                      && variance > varianceThreshold
+
+        if (isSpeech !== vadSpeechRef.current) {
+          vadSpeechRef.current = isSpeech
+          setVadSpeech(isSpeech)
+          if (isSpeech) {
+            vadSpeechStart.current = Date.now()
+            sendEvent('vad_speech', { event: 'start', mean_rms: Math.round(mean), baseline: Math.round(base) })
+          } else {
+            const duration = Math.round((Date.now() - vadSpeechStart.current) / 1000)
+            sendEvent('vad_speech', { event: 'end', duration_seconds: duration })
+          }
+        }
+      }, 300)
 
       setAudioActive(true)
       toast.success('Analyse audio activée ✓')
@@ -1042,6 +1085,18 @@ export default function Session() {
               </div>
               <div style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
                 <div style={{ height: '100%', borderRadius: 3, width: `${Math.min(100, Math.round(niveauBruit * 100 / 128))}%`, backgroundColor: bruitPerturb ? C.red : C.emerald, transition: 'width .5s ease' }}/>
+              </div>
+              {/* Indicateur VAD */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                  background: vadSpeech ? C.emerald : '#D1D5DB',
+                  animation: vadSpeech ? 'pulse 1s infinite' : 'none',
+                  transition: 'background .3s'
+                }}/>
+                <span style={{ fontSize: 10, fontWeight: 700, color: vadSpeech ? C.emerald : C.textSec }}>
+                  {vadSpeech ? 'Parole détectée' : 'Silence / bruit'}
+                </span>
               </div>
             </div>
           )}
