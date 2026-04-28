@@ -1,0 +1,548 @@
+import { useState, useEffect } from 'react'
+import { useSelector, useDispatch } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
+import { loginSuccess } from '../../store/authSlice'
+import api from '../../services/api'
+import toast from 'react-hot-toast'
+import {
+  Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe,
+  Building2, BookOpen, Users, Hash, Camera, ChevronRight,
+  LayoutDashboard, GraduationCap, RefreshCw,
+} from 'lucide-react'
+import { C } from '../../styles/theme'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+
+// ── Parsing JSON stocké en DB ─────────────────────────────────────
+function parseListe(val) {
+  if (!val) return []
+  if (Array.isArray(val)) return val
+  try { return JSON.parse(val) } catch { return [] }
+}
+
+// ── Matières (même fallback qu'OnboardingEnseignant) ─────────────
+const MATIERES = [
+  { id:1,  nom:'Mathématiques',      code:'MATH',  icon:'📐', couleur:'#3B82F6' },
+  { id:2,  nom:'Physique-Chimie',    code:'PC',    icon:'⚗️',  couleur:'#8B5CF6' },
+  { id:3,  nom:'Informatique',       code:'INFO',  icon:'💻', couleur:'#0D9373' },
+  { id:4,  nom:'Sciences de la Vie', code:'SVT',   icon:'🧬', couleur:'#10B981' },
+  { id:5,  nom:'Français',           code:'FR',    icon:'📝', couleur:'#F59E0B' },
+  { id:6,  nom:'Anglais',            code:'ANG',   icon:'🇬🇧', couleur:'#EF4444' },
+  { id:7,  nom:'Histoire-Géo',       code:'HG',    icon:'🌍', couleur:'#6B3A2A' },
+  { id:8,  nom:'Philosophie',        code:'PHILO', icon:'💡', couleur:'#7C3AED' },
+  { id:9,  nom:'Économie',           code:'ECO',   icon:'📊', couleur:'#D4A853' },
+  { id:10, nom:'Comptabilité',       code:'COMPT', icon:'🧾', couleur:'#C4865A' },
+  { id:11, nom:'Arts plastiques',    code:'ART',   icon:'🎨', couleur:'#EC4899' },
+  { id:12, nom:'Éducation physique', code:'EPS',   icon:'⚽', couleur:'#14B8A6' },
+]
+
+const PAYS = ['Cameroun', "Côte d'Ivoire", 'Sénégal', 'Mali', 'Burkina Faso', 'Congo', 'Gabon', 'Autre']
+
+// ── Avatars enseignant (sous-ensemble pertinent) ──────────────────
+const AVATARS = [
+  { id:'teacher_m',  emoji:'👨🏿‍🏫', label:'Enseignant',   bg:'#FFFBEB', ring:'#D97706' },
+  { id:'teacher_f',  emoji:'👩🏾‍🏫', label:'Enseignante',  bg:'#FDF4FF', ring:'#A855F7' },
+  { id:'scholar_1',  emoji:'🧑🏿‍🎓', label:'Diplômé',      bg:'#EDE9FE', ring:'#8B5CF6' },
+  { id:'scholar_2',  emoji:'👩🏾‍🎓', label:'Diplômée',     bg:'#FFE4E6', ring:'#F43F5E' },
+  { id:'coder_1',    emoji:'🧑🏿‍💻', label:'Codeur',       bg:'#F0FDF4', ring:'#22C55E' },
+  { id:'scientist_1',emoji:'🧑🏿‍🔬', label:'Scientifique', bg:'#F0FDFA', ring:'#14B8A6' },
+  { id:'books',      emoji:'📚',    label:'Livres',        bg:'#DBEAFE', ring:'#60A5FA' },
+  { id:'brain',      emoji:'🧠',    label:'Génie',         bg:'#FCE7F3', ring:'#DB2777' },
+  { id:'globe',      emoji:'🌍',    label:'Afrique',       bg:'#ECFDF5', ring:'#0D9373' },
+  { id:'trophy',     emoji:'🏆',    label:'Champion',      bg:'#FFF7ED', ring:'#D4A853' },
+  { id:'rocket',     emoji:'🚀',    label:'Explorateur',   bg:'#EDE9FE', ring:'#7C3AED' },
+  { id:'star',       emoji:'⭐',    label:'Étoile',        bg:'#FEF9C3', ring:'#FBBF24' },
+]
+
+// ── AvatarDisplay ─────────────────────────────────────────────────
+function AvatarDisplay({ avatarId, initiales, size = 80, editable, onClick }) {
+  const [hovering, setHovering] = useState(false)
+  const av = AVATARS.find(a => a.id === avatarId)
+  const br = size > 60 ? 22 : 14
+  return (
+    <div
+      style={{
+        width: size, height: size, borderRadius: br, flexShrink: 0,
+        background: av ? av.bg : 'rgba(255,255,255,0.18)',
+        border: av ? `2.5px solid ${av.ring}60` : '2px solid rgba(255,255,255,0.30)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: av ? Math.round(size * 0.48) : Math.round(size * 0.36),
+        fontWeight: 900, color: av ? 'inherit' : 'white',
+        cursor: editable ? 'pointer' : 'default', position: 'relative', overflow: 'hidden',
+        transition: 'transform .18s, box-shadow .18s',
+        transform: hovering && editable ? 'scale(1.05)' : 'scale(1)',
+        boxShadow: av ? `0 6px 20px ${av.ring}35` : '0 4px 16px rgba(107,58,42,0.25)',
+      }}
+      onClick={editable ? onClick : undefined}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      {av ? av.emoji : initiales}
+      {editable && hovering && (
+        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.42)', borderRadius:br, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3 }}>
+          <Camera size={size > 60 ? 18 : 13} color="white" />
+          {size > 60 && <span style={{ fontSize:9, color:'white', fontWeight:700 }}>Changer</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── AvatarPicker ──────────────────────────────────────────────────
+function AvatarPicker({ current, onSelect, onClose }) {
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(26,18,7,0.55)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:24, width:'100%', maxWidth:480, maxHeight:'80vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 28px 70px rgba(26,18,7,0.32)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'18px 22px', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+          <h2 style={{ fontSize:16, fontWeight:900, color:C.brown, margin:0 }}>Choisis ton avatar</h2>
+          <button onClick={onClose} style={{ background:C.brownPale, border:'none', borderRadius:9, padding:8, cursor:'pointer', display:'flex' }}><X size={15} color={C.brown}/></button>
+        </div>
+        <div style={{ overflowY:'auto', padding:'16px 20px 22px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(80px, 1fr))', gap:8 }}>
+            {AVATARS.map(av => {
+              const isSel = current === av.id
+              return (
+                <button key={av.id} onClick={() => { onSelect(av.id); onClose() }} style={{ background: isSel ? av.bg : C.brownGhost, border:`2.5px solid ${isSel ? av.ring : C.border}`, borderRadius:14, padding:'10px 6px 8px', cursor:'pointer', textAlign:'center', transition:'all .16s ease', transform: isSel ? 'scale(1.07)' : 'scale(1)', position:'relative' }}>
+                  {isSel && <div style={{ position:'absolute', top:-5, right:-5, width:18, height:18, borderRadius:'50%', background:av.ring, display:'flex', alignItems:'center', justifyContent:'center' }}><CheckCircle size={11} color="white"/></div>}
+                  <div style={{ fontSize:26, lineHeight:1, marginBottom:5 }}>{av.emoji}</div>
+                  <p style={{ fontSize:9, fontWeight:700, color: isSel ? av.ring : C.textSec, margin:0 }}>{av.label}</p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── MatièresPicker (modal) ────────────────────────────────────────
+function MatieresPicker({ selected, onSave, onClose }) {
+  const [local, setLocal] = useState([...selected])
+  const toggle = nom => setLocal(prev => prev.includes(nom) ? prev.filter(x => x !== nom) : [...prev, nom])
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(26,18,7,0.55)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:22, width:'100%', maxWidth:500, maxHeight:'80vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 28px 70px rgba(26,18,7,0.32)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 20px', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+          <div>
+            <h2 style={{ fontSize:15, fontWeight:900, color:C.brown, margin:0 }}>Matières enseignées</h2>
+            <p style={{ fontSize:11, color:C.textSec, margin:'3px 0 0' }}>{local.length} sélectionnée(s)</p>
+          </div>
+          <button onClick={onClose} style={{ background:C.brownPale, border:'none', borderRadius:9, padding:8, cursor:'pointer' }}><X size={15} color={C.brown}/></button>
+        </div>
+        <div style={{ overflowY:'auto', padding:'14px 18px', display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
+          {MATIERES.map(m => {
+            const isSel = local.includes(m.nom)
+            return (
+              <div key={m.id} onClick={() => toggle(m.nom)} style={{ padding:'10px 12px', borderRadius:11, border:`2px solid ${isSel ? (m.couleur||C.brown) : C.brownPale}`, background: isSel ? `${m.couleur||C.brown}12` : C.surface, cursor:'pointer', display:'flex', alignItems:'center', gap:9, transition:'all .16s' }}>
+                <span style={{ fontSize:18, flexShrink:0 }}>{m.icon}</span>
+                <span style={{ fontSize:12, fontWeight: isSel ? 800 : 600, color: isSel ? (m.couleur||C.brown) : C.text, flex:1 }}>{m.nom}</span>
+                {isSel && <CheckCircle size={13} color={m.couleur||C.brown}/>}
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ padding:'14px 18px', borderTop:`1px solid ${C.border}`, flexShrink:0, display:'flex', gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, background:C.brownPale, border:'none', borderRadius:10, padding:'10px', cursor:'pointer', color:C.brown, fontSize:13, fontWeight:700 }}>Annuler</button>
+          <button onClick={() => { onSave(local); onClose() }} style={{ flex:2, background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:10, padding:'10px', cursor:'pointer', color:'white', fontSize:13, fontWeight:800 }}>
+            <Save size={13} style={{ marginRight:6, verticalAlign:'middle' }}/>Sauvegarder
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── InfoRow ───────────────────────────────────────────────────────
+function InfoRow({ icon: Icon, label, children, value }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 0', borderBottom:`1px solid ${C.border}` }}>
+      <div style={{ width:34, height:34, borderRadius:10, flexShrink:0, background:C.brownPale, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <Icon size={14} color={C.brownMid}/>
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontSize:10, fontWeight:700, color:C.textMuted, textTransform:'uppercase', letterSpacing:.6, margin:'0 0 2px' }}>{label}</p>
+        {children || <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</p>}
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PAGE PROFIL ENSEIGNANT
+// ════════════════════════════════════════════════════════════════
+export default function ProfilEnseignant() {
+  const { user, token } = useSelector(s => s.auth)
+  const dispatch        = useDispatch()
+  const navigate        = useNavigate()
+  const { mobile }      = useBreakpoint()
+
+  const [editing,        setEditing]        = useState(false)
+  const [loading,        setLoading]        = useState(false)
+  const [copied,         setCopied]         = useState(false)
+  const [showPicker,     setShowPicker]     = useState(false)
+  const [showMatieres,   setShowMatieres]   = useState(false)
+  const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
+  const [stats,          setStats]          = useState(null)
+
+  const [form, setForm] = useState({
+    etablissement: user?.etablissement || '',
+    ville:         user?.ville         || '',
+    pays:          user?.pays          || 'Cameroun',
+  })
+
+  const matieres = parseListe(user?.matieres_enseignees)
+  const niveaux  = parseListe(user?.niveaux_enseignes)
+  const initiales = `${user?.prenom?.[0] || ''}${user?.nom?.[0] || ''}`.toUpperCase()
+
+  useEffect(() => {
+    api.get(`/api/cours/dashboard/enseignant?enseignant_id=${user.id}`)
+      .then(({ data }) => setStats(data?.stats_classe || null))
+      .catch(() => {})
+  }, [user.id])
+
+  async function handleAvatarSelect(id) {
+    setSelectedAvatar(id)
+    try {
+      await api.put(`/auth/profil/${user.id}/update`, { avatar: id })
+      const { data: fresh } = await api.get(`/auth/profil/${user.id}`)
+      dispatch(loginSuccess({ token, user: { ...user, ...fresh } }))
+      toast.success('Avatar mis à jour !')
+    } catch {
+      toast.error('Erreur lors de la mise à jour')
+      setSelectedAvatar(user?.avatar || null)
+    }
+  }
+
+  async function saveInfos() {
+    setLoading(true)
+    try {
+      const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, {
+        etablissement: form.etablissement.trim(),
+        ville:         form.ville.trim(),
+        pays:          form.pays,
+      })
+      dispatch(loginSuccess({ token, user: { ...user, ...updated } }))
+      toast.success('Profil mis à jour !')
+      setEditing(false)
+    } catch (err) {
+      toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function saveMatieres(newList) {
+    try {
+      const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, {
+        matieres_enseignees: newList,
+      })
+      dispatch(loginSuccess({ token, user: { ...user, matieres_enseignees: updated.matieres_enseignees } }))
+      toast.success('Matières mises à jour !')
+    } catch {
+      toast.error('Erreur lors de la mise à jour')
+    }
+  }
+
+  function copyCode() {
+    navigator.clipboard.writeText(user?.code_classe || '')
+    setCopied(true)
+    toast.success('Code copié !')
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  const pad = mobile ? 14 : 28
+
+  return (
+    <div style={{ background:C.bg, minHeight:'100vh', padding:pad, boxSizing:'border-box' }}>
+      <style>{`
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:${C.brownPale};border-radius:5px}
+        .inp-prof{width:100%;padding:8px 12px;border-radius:9px;border:2px solid ${C.brownLight};font-size:13px;font-weight:600;font-family:inherit;outline:none;background:${C.surface};color:${C.brown};transition:border .2s}
+        .inp-prof:focus{border-color:${C.brown}!important}
+      `}</style>
+
+      {showPicker   && <AvatarPicker   current={selectedAvatar}  onSelect={handleAvatarSelect}  onClose={() => setShowPicker(false)}/>}
+      {showMatieres && <MatieresPicker selected={matieres}       onSave={saveMatieres}           onClose={() => setShowMatieres(false)}/>}
+
+      <div style={{ maxWidth:880, margin:'0 auto' }}>
+
+        {/* ══ HERO ══ */}
+        <div style={{
+          background:`linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 55%, ${C.brownLight} 100%)`,
+          borderRadius: mobile ? 18 : 24, padding: mobile ? '24px 20px' : '36px 36px 32px',
+          marginBottom: mobile ? 16 : 22, position:'relative', overflow:'hidden', color:'white',
+          animation:'fadeUp .4s ease both',
+        }}>
+          <svg width="100%" height="100%" style={{ position:'absolute',inset:0,opacity:.06,pointerEvents:'none' }}>
+            <defs><pattern id="pp" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+              <circle cx="30" cy="30" r="12" fill="none" stroke="white" strokeWidth="1.5"/>
+              <circle cx="30" cy="30" r="5"  fill="none" stroke="white" strokeWidth="1.5"/>
+              <line x1="30" y1="18" x2="30" y2="10" stroke="white" strokeWidth="1.5"/>
+              <line x1="18" y1="30" x2="10" y2="30" stroke="white" strokeWidth="1.5"/>
+              <line x1="42" y1="30" x2="50" y2="30" stroke="white" strokeWidth="1.5"/>
+              <line x1="30" y1="42" x2="30" y2="50" stroke="white" strokeWidth="1.5"/>
+            </pattern></defs>
+            <rect width="100%" height="100%" fill="url(#pp)"/>
+          </svg>
+
+          <div style={{ position:'relative', display:'flex', alignItems: mobile ? 'flex-start' : 'center', gap: mobile ? 16 : 24, flexWrap:'wrap' }}>
+            <div style={{ position:'relative', flexShrink:0 }}>
+              <AvatarDisplay avatarId={selectedAvatar} initiales={initiales} size={mobile ? 68 : 84} editable onClick={() => setShowPicker(true)}/>
+              <button onClick={() => setShowPicker(true)} style={{ position:'absolute', bottom:-5, right:-5, width:26, height:26, borderRadius:'50%', background:`linear-gradient(135deg,${C.gold},#F59E0B)`, border:'2px solid white', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>
+                <Camera size={11} color="white"/>
+              </button>
+            </div>
+
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:11, opacity:.65, fontWeight:600, margin:'0 0 3px' }}>Profil enseignant</p>
+              <h1 style={{ fontSize: mobile ? 20 : 26, fontWeight:900, margin:'0 0 4px', lineHeight:1.1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {user?.prenom} {user?.nom}
+              </h1>
+              <p style={{ fontSize:12, opacity:.7, margin:'0 0 10px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user?.email}</p>
+              <div style={{ display:'flex', gap:7, flexWrap:'wrap' }}>
+                {['Enseignant', user?.etablissement, user?.ville || user?.pays].filter(Boolean).map(tag => (
+                  <span key={tag} style={{ background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.22)', padding:'3px 11px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                    {tag}
+                  </span>
+                ))}
+                {matieres.slice(0, 3).map(m => {
+                  const mat = MATIERES.find(x => x.nom === m)
+                  return (
+                    <span key={m} style={{ background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.22)', padding:'3px 11px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                      {mat?.icon || '📚'} {m}
+                    </span>
+                  )
+                })}
+                {matieres.length > 3 && (
+                  <span style={{ background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.22)', padding:'3px 11px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                    +{matieres.length - 3}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ══ GRILLE ══ */}
+        <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 300px', gap: mobile ? 14 : 20, alignItems:'start' }}>
+
+          {/* ── Colonne gauche ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap: mobile ? 12 : 16 }}>
+
+            {/* Avatar */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', padding: mobile ? '14px 16px' : '16px 22px', animation:'fadeUp .4s .04s ease both' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+                  <AvatarDisplay avatarId={selectedAvatar} initiales={initiales} size={52}/>
+                  <div>
+                    <p style={{ fontSize:13, fontWeight:800, color:C.text, margin:'0 0 2px' }}>
+                      {AVATARS.find(a => a.id === selectedAvatar)?.label || 'Initiales'}
+                    </p>
+                    <p style={{ fontSize:11, color:C.textSec, margin:0 }}>Avatar · enseignant</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowPicker(true)} style={{ background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:11, padding:'9px 18px', cursor:'pointer', color:'white', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:6, whiteSpace:'nowrap' }}>
+                  <Camera size={13}/> Changer
+                </button>
+              </div>
+            </div>
+
+            {/* Infos personnelles */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', overflow:'hidden', animation:'fadeUp .4s .08s ease both' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding: mobile ? '14px 16px' : '18px 22px', borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:C.brownPale, display:'flex', alignItems:'center', justifyContent:'center' }}><User size={14} color={C.brown}/></div>
+                  <span style={{ fontSize:14, fontWeight:800, color:C.brown }}>Informations personnelles</span>
+                </div>
+                {!editing ? (
+                  <button onClick={() => setEditing(true)} style={{ background:C.brownPale, border:'none', borderRadius:9, padding:'7px 14px', cursor:'pointer', color:C.brown, fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+                    <Edit3 size={12}/> Modifier
+                  </button>
+                ) : (
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button onClick={() => { setForm({ etablissement:user?.etablissement||'', ville:user?.ville||'', pays:user?.pays||'Cameroun' }); setEditing(false) }} style={{ background:C.redPale, border:`1px solid #FCA5A5`, borderRadius:9, padding:'7px 10px', cursor:'pointer', color:C.red, display:'flex' }}><X size={13}/></button>
+                    <button onClick={saveInfos} disabled={loading} style={{ background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:9, padding:'7px 16px', cursor:'pointer', color:'white', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+                      <Save size={12}/>{loading ? 'Sauvegarde…' : 'Sauvegarder'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: mobile ? '4px 16px 8px' : '4px 22px 12px' }}>
+                <InfoRow icon={User} label="Prénom" value={user?.prenom}/>
+                <InfoRow icon={User} label="Nom"    value={user?.nom}/>
+                <InfoRow icon={Mail} label="Email"  value={user?.email}/>
+                <InfoRow icon={Building2} label="Établissement">
+                  {editing
+                    ? <input className="inp-prof" value={form.etablissement} onChange={e => setForm(f => ({ ...f, etablissement: e.target.value }))} placeholder="Ex : Lycée Général Leclerc"/>
+                    : <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0 }}>{user?.etablissement || '—'}</p>}
+                </InfoRow>
+                <InfoRow icon={GraduationCap} label="Ville">
+                  {editing
+                    ? <input className="inp-prof" value={form.ville} onChange={e => setForm(f => ({ ...f, ville: e.target.value }))} placeholder="Ex : Yaoundé"/>
+                    : <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0 }}>{user?.ville || '—'}</p>}
+                </InfoRow>
+                <div style={{ borderBottom:'none' }}>
+                  <InfoRow icon={Globe} label="Pays">
+                    {editing
+                      ? <select className="inp-prof" value={form.pays} onChange={e => setForm(f => ({ ...f, pays: e.target.value }))}>
+                          {PAYS.map(p => <option key={p}>{p}</option>)}
+                        </select>
+                      : <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0 }}>{user?.pays || 'Cameroun'}</p>}
+                  </InfoRow>
+                </div>
+              </div>
+            </div>
+
+            {/* Matières enseignées */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', overflow:'hidden', animation:'fadeUp .4s .12s ease both' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding: mobile ? '14px 16px' : '16px 22px', borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:'#EFF6FF', display:'flex', alignItems:'center', justifyContent:'center' }}><BookOpen size={14} color="#3B82F6"/></div>
+                  <span style={{ fontSize:14, fontWeight:800, color:C.brown }}>Matières enseignées</span>
+                </div>
+                <button onClick={() => setShowMatieres(true)} style={{ background:C.brownPale, border:'none', borderRadius:9, padding:'7px 14px', cursor:'pointer', color:C.brown, fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+                  <Edit3 size={12}/> Modifier
+                </button>
+              </div>
+              <div style={{ padding: mobile ? '14px 16px' : '14px 22px' }}>
+                {matieres.length === 0 ? (
+                  <p style={{ fontSize:13, color:C.textSec, margin:0, fontStyle:'italic' }}>Aucune matière renseignée</p>
+                ) : (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {matieres.map(m => {
+                      const mat = MATIERES.find(x => x.nom === m)
+                      return (
+                        <span key={m} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:20, background:`${mat?.couleur || C.brown}14`, border:`1.5px solid ${mat?.couleur || C.brown}40`, fontSize:12, fontWeight:700, color: mat?.couleur || C.brown }}>
+                          {mat?.icon || '📚'} {m}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Niveaux encadrés */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', overflow:'hidden', animation:'fadeUp .4s .16s ease both' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding: mobile ? '14px 16px' : '16px 22px', borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:C.emeraldPale, display:'flex', alignItems:'center', justifyContent:'center' }}><Users size={14} color={C.emerald}/></div>
+                  <span style={{ fontSize:14, fontWeight:800, color:C.brown }}>Niveaux encadrés</span>
+                </div>
+              </div>
+              <div style={{ padding: mobile ? '14px 16px' : '14px 22px' }}>
+                {niveaux.length === 0 ? (
+                  <p style={{ fontSize:13, color:C.textSec, margin:0, fontStyle:'italic' }}>Aucun niveau renseigné</p>
+                ) : (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {niveaux.map(n => (
+                      <span key={n} style={{ display:'inline-flex', alignItems:'center', padding:'6px 14px', borderRadius:20, background:C.brownPale, border:`1.5px solid ${C.brownLight}60`, fontSize:12, fontWeight:700, color:C.brown }}>
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p style={{ fontSize:11, color:C.textSec, margin:'10px 0 0' }}>Pour modifier les niveaux, refais la configuration dans <button onClick={() => navigate('/onboarding-enseignant')} style={{ background:'none', border:'none', color:C.brown, fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textDecoration:'underline' }}>l'onboarding</button>.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Colonne droite ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap: mobile ? 12 : 16, animation:'fadeUp .4s .2s ease both' }}>
+
+            {/* Code classe */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', overflow:'hidden' }}>
+              <div style={{ background:`linear-gradient(135deg,${C.emerald},${C.emeraldDark})`, padding: mobile ? '18px 18px 16px' : '22px 22px 18px', position:'relative', overflow:'hidden' }}>
+                <svg width="100%" height="100%" style={{ position:'absolute',inset:0,opacity:.08,pointerEvents:'none' }}>
+                  <defs><pattern id="dots-p" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.2" fill="white"/></pattern></defs>
+                  <rect width="100%" height="100%" fill="url(#dots-p)"/>
+                </svg>
+                <div style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
+                  <Hash size={16} color="white"/>
+                  <div>
+                    <p style={{ fontSize:13, fontWeight:800, color:'white', margin:0 }}>Code classe</p>
+                    <p style={{ fontSize:11, color:'rgba(255,255,255,.75)', margin:'2px 0 0' }}>Partage ce code à tes apprenants</p>
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: mobile ? '16px' : '20px 22px' }}>
+                {user?.code_classe ? (
+                  <>
+                    <div style={{ background:`linear-gradient(135deg,${C.emeraldPale},${C.brownGhost})`, borderRadius:12, padding:'16px 16px 12px', border:`1.5px solid ${C.emerald}25`, marginBottom:14, textAlign:'center' }}>
+                      <p style={{ fontSize:10, fontWeight:700, color:C.emerald, textTransform:'uppercase', letterSpacing:.8, margin:'0 0 8px' }}>Code de ta classe</p>
+                      <p style={{ fontFamily:'monospace', fontSize: mobile ? 24 : 28, fontWeight:900, color:C.brown, letterSpacing:5, margin:'0 0 12px', lineHeight:1 }}>
+                        {user.code_classe}
+                      </p>
+                      <button onClick={copyCode} style={{ width:'100%', padding:'9px 0', background: copied ? `linear-gradient(135deg,${C.emerald},${C.emeraldDark})` : `linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:9, cursor:'pointer', color:'white', fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', gap:7, transition:'all .25s' }}>
+                        {copied ? <CheckCircle size={14}/> : <Copy size={14}/>}
+                        {copied ? 'Code copié !' : 'Copier le code'}
+                      </button>
+                    </div>
+                    <p style={{ fontSize:11, color:C.textSec, lineHeight:1.6, margin:0 }}>
+                      L'apprenant entre ce code lors de son inscription pour apparaître dans ta liste de suivi.
+                    </p>
+                  </>
+                ) : (
+                  <div style={{ textAlign:'center', padding:'16px 0' }}>
+                    <p style={{ fontSize:13, color:C.textSec, margin:'0 0 12px' }}>Code non configuré</p>
+                    <button onClick={() => navigate('/onboarding-enseignant')} style={{ background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:10, padding:'10px 18px', cursor:'pointer', color:'white', fontSize:12, fontWeight:700 }}>
+                      Configurer maintenant
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Statistiques rapides */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', overflow:'hidden' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, padding: mobile ? '14px 16px' : '16px 22px', borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ width:32, height:32, borderRadius:9, background:'#FEF3C7', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <span style={{ fontSize:14 }}>📊</span>
+                </div>
+                <span style={{ fontSize:14, fontWeight:800, color:C.brown }}>Mes statistiques</span>
+              </div>
+              <div style={{ padding: mobile ? '12px 16px 14px' : '14px 22px 16px' }}>
+                {stats ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {[
+                      { label:'Apprenants suivis',  value: stats.nb_apprenants ?? '—',                       color:C.brown },
+                      { label:'Engagement moyen',   value: stats.score_moyen ? `${Math.round(stats.score_moyen * 100)}%` : '—', color:C.emerald },
+                      { label:'En décrochage',      value: stats.nb_decrocheurs ?? '—',                       color: stats.nb_decrocheurs > 0 ? C.red : C.emerald },
+                    ].map(row => (
+                      <div key={row.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${C.border}` }}>
+                        <span style={{ fontSize:12, color:C.textSec, fontWeight:600 }}>{row.label}</span>
+                        <span style={{ fontSize:14, fontWeight:900, color:row.color }}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {[1,2,3].map(i => <div key={i} style={{ height:32, background:C.brownPale, borderRadius:8, opacity: 1 - i*0.2 }}/>)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Navigation rapide */}
+            <div style={{ background:C.surface, borderRadius:18, border:`1px solid ${C.border}`, boxShadow:'0 2px 16px rgba(107,58,42,0.07)', padding: mobile ? '14px 16px' : '16px 22px' }}>
+              <p style={{ fontSize:13, fontWeight:800, color:C.brown, margin:'0 0 12px' }}>Navigation rapide</p>
+              {[
+                { label:'Tableau de bord',  path:'/prof',       icon:<LayoutDashboard size={15} color={C.brown}/> },
+                { label:'Gestion des cours',path:'/admin',      icon:<BookOpen size={15} color={C.brown}/> },
+                { label:'Référentiel',      path:'/admin/referentiel', icon:<GraduationCap size={15} color={C.brown}/> },
+              ].map(item => (
+                <button key={item.path} onClick={() => navigate(item.path)} style={{ width:'100%', background:C.brownPale, border:`1px solid ${C.brownPale}`, borderRadius:10, padding:'10px 14px', marginBottom:8, display:'flex', alignItems:'center', gap:10, cursor:'pointer', textAlign:'left', transition:'all .2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background='#EAD9CA'}
+                  onMouseLeave={e => e.currentTarget.style.background=C.brownPale}>
+                  {item.icon}
+                  <span style={{ fontSize:12, fontWeight:700, color:C.text }}>{item.label}</span>
+                  <ChevronRight size={14} color={C.textSec} style={{ marginLeft:'auto' }}/>
+                </button>
+              ))}
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -19,9 +19,10 @@ import CoursDetail  from './pages/apprenant/CoursDetail'
 import Session      from './pages/apprenant/Session'
 import Profil       from './pages/apprenant/Profil'
 
-import DashboardProf    from './pages/enseignant/DashboardProf'
-import AdminCours       from './pages/enseignant/AdminCours'
-import AdminReferentiel from './pages/enseignant/AdminReferentiel'
+import DashboardProf      from './pages/enseignant/DashboardProf'
+import AdminCours         from './pages/enseignant/AdminCours'
+import AdminReferentiel   from './pages/enseignant/AdminReferentiel'
+import ProfilEnseignant   from './pages/enseignant/ProfilEnseignant'
 import DataCollection   from './pages/DataCollection'
 import AudioCollection  from './pages/AudioCollection'
 
@@ -93,10 +94,14 @@ export default function App() {
         </PrivateRoute>
       }/>
 
-      {/* ── Profil : accessible à TOUS les rôles connectés ── */}
+      {/* ── Profil : apprenant ou enseignant selon le rôle ── */}
       <Route path="/profil" element={
         <PrivateRoute>
-          <AppLayout><Profil/></AppLayout>
+          <AppLayout>
+            {user?.role === 'enseignant' || user?.role === 'super_admin'
+              ? <ProfilEnseignant/>
+              : <Profil/>}
+          </AppLayout>
         </PrivateRoute>
       }/>
 
