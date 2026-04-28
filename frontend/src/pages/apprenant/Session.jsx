@@ -485,6 +485,8 @@ export default function Session() {
   const [questionElapsed, setQuestionElapsed] = useState(0)
 
   const [submitting, setSubmitting] = useState(false)
+  const [speaking,   setSpeaking]   = useState(false)
+  const [ttsRate,    setTtsRate]    = useState(0.9)
 
   const videoRef         = useRef(null)
   const canvasRef        = useRef(null)
@@ -547,6 +549,7 @@ export default function Session() {
     if (audioIntervalRef.current)   clearInterval(audioIntervalRef.current)
     if (faceApiIntervalRef.current) clearInterval(faceApiIntervalRef.current)
     if (audioContextRef.current)    audioContextRef.current.close()
+    if (window.speechSynthesis)     window.speechSynthesis.cancel()
   }, [])
 
   // Chrono par question — reset à chaque nouvelle question, s'arrête après réponse
@@ -575,6 +578,32 @@ export default function Session() {
       if (res.adaptation) setAdaptation(res.adaptation)
     } catch {}
   }, [user.id])
+
+  // ── TTS (Text-To-Speech) ─────────────────────────────────────────
+  const tts = useCallback((text, rate) => {
+    if (!window.speechSynthesis || !text) return
+    window.speechSynthesis.cancel()
+    const utt    = new SpeechSynthesisUtterance(text)
+    utt.lang     = 'fr-FR'
+    utt.rate     = rate ?? ttsRate
+    utt.onstart  = () => setSpeaking(true)
+    utt.onend    = () => setSpeaking(false)
+    utt.onerror  = () => setSpeaking(false)
+    window.speechSynthesis.speak(utt)
+  }, [ttsRate])
+
+  const stopTts = useCallback(() => {
+    window.speechSynthesis?.cancel()
+    setSpeaking(false)
+  }, [])
+
+  // Auto-lecture de l'énoncé quand le bruit devient perturbateur
+  useEffect(() => {
+    if (bruitPerturb && phase === 'exercices' && !resultat) {
+      const enonce = exercices[current]?.enonce
+      if (enonce) tts(enonce)
+    }
+  }, [bruitPerturb]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Page Visibility : log si l'utilisateur cache l'onglet (déclaré après sendEvent)
   useEffect(() => {
@@ -740,7 +769,12 @@ export default function Session() {
       const { data } = await api.post('/api/cours/exercice/verifier', { exercice_id: ex.id, user_id: user.id, reponse })
       setResultat(data); setScores(prev => [...prev, data.points_gagnes])
       await sendEvent('response', { exercice_id: ex.id, correct: data.correct, time_seconds: tempsReponse, emotion })
-      if (data.correct) toast.success(`+${data.points_gagnes} points !`)
+      if (data.correct) {
+        toast.success(`+${data.points_gagnes} points !`)
+        tts(`Correct ! ${data.explication || ''}`)
+      } else {
+        tts(`Pas tout à fait. La bonne réponse était : ${data.reponse_correcte}. ${data.explication || ''}`)
+      }
     } catch { toast.error('Erreur de vérification') }
     finally { setSubmitting(false) }
   }
@@ -933,6 +967,30 @@ export default function Session() {
           )}
         </div>
 
+        {/* Contrôles TTS */}
+        <div style={{ borderTop: `1px solid ${C.brownPale}`, paddingTop: 10, marginTop: 2 }}>
+          <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 7px' }}>Lecture vocale</p>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => speaking ? stopTts() : tts(exercices[current]?.enonce)}
+              style={{ flex: 1, padding: '7px 6px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: speaking ? C.red : C.brownPale, color: speaking ? 'white' : C.brown, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+              {speaking ? '⏹ Stop' : '🔊 Lire'}
+            </button>
+            <button
+              onClick={() => { setTtsRate(0.65); tts(exercices[current]?.enonce, 0.65) }}
+              title="Lire plus lentement"
+              style={{ padding: '7px 8px', borderRadius: 8, border: `1px solid ${ttsRate === 0.65 ? C.brown : C.brownPale}`, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: ttsRate === 0.65 ? C.brownPale : 'transparent', color: C.brown }}>
+              🐢
+            </button>
+            <button
+              onClick={() => setTtsRate(0.9)}
+              title="Vitesse normale"
+              style={{ padding: '7px 8px', borderRadius: 8, border: `1px solid ${ttsRate === 0.9 ? C.brown : C.brownPale}`, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: ttsRate === 0.9 ? C.brownPale : 'transparent', color: C.brown }}>
+              🐇
+            </button>
+          </div>
+        </div>
+
         <MiniGauge score={engagementScore} emotion={emotion} compact={false}/>
       </div>
 
@@ -1105,11 +1163,28 @@ export default function Session() {
             <div style={{
               backgroundColor: C.brownPale, borderRadius: 14,
               padding: isMobile ? '14px 16px' : '18px 22px',
-              marginBottom: 20, borderLeft: `4px solid ${C.brown}`
+              marginBottom: 20, borderLeft: `4px solid ${C.brown}`,
+              position: 'relative'
             }}>
-              <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, fontWeight: 700, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+              <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, fontWeight: 700, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', paddingRight: 36 }}>
                 {ex.enonce}
               </p>
+              {/* Bouton lecture TTS */}
+              <button
+                onClick={() => speaking ? stopTts() : tts(ex.enonce)}
+                title={speaking ? 'Arrêter la lecture' : 'Lire l\'énoncé'}
+                style={{
+                  position: 'absolute', top: 10, right: 10,
+                  width: 30, height: 30, borderRadius: '50%',
+                  background: speaking ? C.red : C.brown,
+                  border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, transition: 'background .2s',
+                  boxShadow: speaking ? `0 0 0 3px ${C.red}30` : 'none',
+                  animation: speaking ? 'pulse 1.5s infinite' : 'none',
+                }}>
+                {speaking ? '⏹' : '🔊'}
+              </button>
             </div>
 
             {/* Options QCM */}
