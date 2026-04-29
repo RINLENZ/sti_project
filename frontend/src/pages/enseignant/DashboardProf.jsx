@@ -12,7 +12,7 @@ import {
   PolarRadiusAxis, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { C } from '../../styles/theme'
+import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkList, Spinner } from '../../components/Skeleton'
 
@@ -20,11 +20,15 @@ const engColor = s => s >= 0.7 ? C.emerald : s >= 0.4 ? C.orange : C.red
 const engLabel = s => s >= 0.7 ? '🟢 Engagé' : s >= 0.4 ? '🟡 Modéré' : '🔴 Décroché'
 
 // ── Composants utilitaires ────────────────────────────────────────
-const ProgressBar = ({ value, color = C.emerald, h = 6 }) => (
-  <div style={{ height: h, backgroundColor: '#E5E7EB', borderRadius: h, overflow: 'hidden' }}>
-    <div style={{ height: '100%', width: `${Math.min(100, value)}%`, backgroundColor: color, borderRadius: h, transition: 'width .6s ease' }}/>
-  </div>
-)
+const ProgressBar = ({ value, color, h = 6 }) => {
+  const { C } = useTheme()
+  const c = color ?? C.emerald
+  return (
+    <div style={{ height: h, backgroundColor: C.border, borderRadius: h, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${Math.min(100, value)}%`, backgroundColor: c, borderRadius: h, transition: 'width .6s ease' }}/>
+    </div>
+  )
+}
 
 const Dot = ({ score }) => (
   <span style={{
@@ -35,31 +39,35 @@ const Dot = ({ score }) => (
   }}/>
 )
 
-const StatCard = ({ label, value, subtitle, color, Icon, trend }) => (
-  <div style={{
-    backgroundColor: C.surface, borderRadius: 16, padding: '20px 22px',
-    boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`,
-    display: 'flex', flexDirection: 'column', gap: 8,
-    position: 'relative', overflow: 'hidden', transition: 'all .2s ease',
-  }}>
-    <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: '50%', backgroundColor: `${color}12` }}/>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 11, color: C.textSec, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5 }}>{label}</span>
-      {Icon && (
-        <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={18} color={color}/>
-        </div>
-      )}
+const StatCard = ({ label, value, subtitle, color, Icon, trend }) => {
+  const { C } = useTheme()
+  return (
+    <div style={{
+      backgroundColor: C.surface, borderRadius: 16, padding: '20px 22px',
+      boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`,
+      display: 'flex', flexDirection: 'column', gap: 8,
+      position: 'relative', overflow: 'hidden', transition: 'all .2s ease',
+    }}>
+      <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: '50%', backgroundColor: `${color}12` }}/>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: C.textSec, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5 }}>{label}</span>
+        {Icon && (
+          <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon size={18} color={color}/>
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+        <span style={{ fontSize: 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>{value}</span>
+        {trend && <TrendingUp size={16} color={C.emerald} style={{ marginBottom: 3 }}/>}
+      </div>
+      {subtitle && <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{subtitle}</span>}
     </div>
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-      <span style={{ fontSize: 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>{value}</span>
-      {trend && <TrendingUp size={16} color={C.emerald} style={{ marginBottom: 3 }}/>}
-    </div>
-    {subtitle && <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{subtitle}</span>}
-  </div>
-)
+  )
+}
 
 function BKTModal({ apprenant, onClose }) {
+  const { C } = useTheme()
   const [bkt, setBkt]         = useState(null)
   const [history, setHistory] = useState(null)
   const [tab, setTab]         = useState('radar')
@@ -212,6 +220,7 @@ function BKTModal({ apprenant, onClose }) {
 
 // ── Dashboard Enseignant ──────────────────────────────────────────
 export default function DashboardProf() {
+  const { C }        = useTheme()
   const { user }     = useSelector(s => s.auth)
   const navigate     = useNavigate()
   const [data, setData]           = useState(null)

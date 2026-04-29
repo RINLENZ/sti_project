@@ -4,7 +4,7 @@ import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera } from 'lucide-react'
-import { C } from '../../styles/theme'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const PAYS    = ['Cameroun', "Côte d'Ivoire", 'Sénégal', 'Mali', 'Burkina Faso', 'Congo', 'Gabon', 'Autre']
@@ -85,6 +85,7 @@ function AvatarDisplay({ avatarId, initiales, size = 80, editable = false, onCli
 
 /* ── AvatarPicker (modal) ── */
 function AvatarPicker({ current, onSelect, onClose }) {
+  const { C } = useTheme()
   const [hovered, setHovered] = useState(null)
   const categories = [
     { label: '🧑🏿 Personnes', ids: ['student_boy_1','student_girl_1','student_boy_2','student_girl_2','scholar_1','scholar_2','scholar_3','scholar_4','coder_1','coder_2','scientist_1','teacher_f','teacher_m','artist'] },
@@ -161,6 +162,7 @@ function AvatarPicker({ current, onSelect, onClose }) {
 
 /* ── InfoRow ── */
 function InfoRow({ icon: Icon, label, children, value }) {
+  const { C } = useTheme()
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', borderBottom: `1px solid ${C.border}` }}>
       <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: C.brownPale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -176,6 +178,7 @@ function InfoRow({ icon: Icon, label, children, value }) {
 
 /* ── SelectField ── */
 function SelectField({ value, onChange, options }) {
+  const { C } = useTheme()
   return (
     <select value={value} onChange={onChange} style={{ padding: '7px 12px', border: `2px solid ${C.brownLight}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', cursor: 'pointer', background: C.surface, color: C.brown }}>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -190,6 +193,7 @@ export default function Profil() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
   const { mobile }      = useBreakpoint()
+  const { C }           = useTheme()
 
   const [editing,        setEditing]        = useState(false)
   const [loading,        setLoading]        = useState(false)
