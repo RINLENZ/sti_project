@@ -13,7 +13,6 @@ import { Spinner } from '../Skeleton'
 // ── Helpers ─────────────────────────────────────────────────────
 
 function uaStatus(ua, progression) {
-  const { C } = useTheme()
   if (ua.statut === 'done') return 'done'
   if (ua.is_locked) return 'locked'
   const details = progression?.details || []
@@ -25,7 +24,6 @@ function uaStatus(ua, progression) {
 }
 
 function uaStars(ua, progression) {
-  const { C } = useTheme()
   const details = progression?.details || []
   const done = details.filter(d => d.ua_id === ua.id && d.correct).length
   const pct  = ua.nb_exercices > 0 ? Math.round(done / ua.nb_exercices * 100) : 0

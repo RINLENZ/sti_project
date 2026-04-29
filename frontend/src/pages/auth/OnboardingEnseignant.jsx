@@ -79,7 +79,6 @@ const NIVEAUX_FALLBACK = [
 ]
 
 function generateCode() {
-  const { C } = useTheme()
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
   for (let i = 0; i < 7; i++) {
