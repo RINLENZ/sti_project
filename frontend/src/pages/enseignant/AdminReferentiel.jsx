@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Edit3, ChevronDown, ChevronRight,
   Shield, X, Save, AlertTriangle, RefreshCw,
 } from 'lucide-react'
-import { C } from '../../styles/theme'
+import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 
@@ -24,13 +24,18 @@ const inputBase = {
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border .15s',
 }
 
-const FieldLabel = ({ children, required }) => (
+const FieldLabel = ({ children, required }) => {
+  const { C } = useTheme()
+  return (
   <label style={{ fontSize: 11, fontWeight: 700, color: C.textSec, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: .4 }}>
     {children}{required && <span style={{ color: C.red, marginLeft: 3 }}>*</span>}
   </label>
-)
+  )
+}
 
-const FInput = ({ label, value, onChange, placeholder, required, hint }) => (
+const FInput = ({ label, value, onChange, placeholder, required, hint }) => {
+  const { C } = useTheme()
+  return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
     <input value={value} onChange={onChange} placeholder={placeholder} required={required}
@@ -40,19 +45,24 @@ const FInput = ({ label, value, onChange, placeholder, required, hint }) => (
     />
     {hint && <p style={{ fontSize: 10, color: C.textSec, marginTop: 3 }}>{hint}</p>}
   </div>
-)
+  )
+}
 
-const FSelect = ({ label, value, onChange, options, required }) => (
+const FSelect = ({ label, value, onChange, options, required }) => {
+  return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
     <select value={value} onChange={onChange} required={required} style={inputBase}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   </div>
-)
+  )
+}
 
 // ── Modal ───────────────────────────────────────────────────────
-function Modal({ title, onClose, children, accentColor = C.brown }) {
+function Modal({ title, onClose, children, accentColor }) {
+  const { C } = useTheme()
+  const accent = accentColor ?? C.brown
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
@@ -67,10 +77,10 @@ function Modal({ title, onClose, children, accentColor = C.brown }) {
         backgroundColor: C.surface, borderRadius: 20, padding: '24px 28px',
         maxWidth: 480, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.3)',
         animation: 'slideDown .2s ease',
-        borderTop: `4px solid ${accentColor}`,
+        borderTop: `4px solid ${accent}`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: accentColor, margin: 0 }}>{title}</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: accent, margin: 0 }}>{title}</h2>
           <button onClick={onClose} style={{ background: C.brownPale, border: 'none', borderRadius: 8, padding: '6px 8px', cursor: 'pointer', color: C.brown, display: 'flex' }}>
             <X size={14} />
           </button>
@@ -83,6 +93,7 @@ function Modal({ title, onClose, children, accentColor = C.brown }) {
 
 // ── ConfirmDelete ───────────────────────────────────────────────
 function ConfirmDelete({ item, onConfirm, onCancel }) {
+  const { C } = useTheme()
   return (
     <Modal title="Confirmer la suppression" onClose={onCancel} accentColor={C.red}>
       <div style={{ textAlign: 'center', paddingBottom: 8 }}>
@@ -110,6 +121,7 @@ function ConfirmDelete({ item, onConfirm, onCancel }) {
 
 // ── TableRow ────────────────────────────────────────────────────
 function TableRow({ item, parent, type, onEdit, onDelete, mobile }) {
+  const { C } = useTheme()
   const s = SEC[type]
   return (
     <div style={{
@@ -164,6 +176,7 @@ function TableRow({ item, parent, type, onEdit, onDelete, mobile }) {
 
 // ── AccordionSection ────────────────────────────────────────────
 function AccordionSection({ type, title, count, defaultOpen, children, onAdd }) {
+  const { C } = useTheme()
   const [open, setOpen] = useState(defaultOpen)
   const s = SEC[type]
 
@@ -226,6 +239,7 @@ function AccordionSection({ type, title, count, defaultOpen, children, onAdd }) 
 
 // ── Formulaires par type ────────────────────────────────────────
 function FormCycle({ initial = {}, onSubmit, onClose }) {
+  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -247,6 +261,7 @@ function FormCycle({ initial = {}, onSubmit, onClose }) {
 }
 
 function FormOrdre({ initial = {}, cycles, onSubmit, onClose }) {
+  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', cycle_id: initial.cycle_id || cycles[0]?.id || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -270,6 +285,7 @@ function FormOrdre({ initial = {}, cycles, onSubmit, onClose }) {
 }
 
 function FormFiliere({ initial = {}, ordres, onSubmit, onClose }) {
+  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', description: initial.description || '', ordre_id: initial.ordre_id || ordres[0]?.id || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -296,6 +312,7 @@ function FormFiliere({ initial = {}, ordres, onSubmit, onClose }) {
 }
 
 function FormNiveau({ initial = {}, cycles, onSubmit, onClose }) {
+  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', cycle_id: initial.cycle_id || cycles[0]?.id || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -324,6 +341,7 @@ function FormNiveau({ initial = {}, cycles, onSubmit, onClose }) {
 // ── PAGE PRINCIPALE ────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
 export default function AdminReferentiel() {
+  const { C } = useTheme()
   const [referentiel, setReferentiel] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null) // { type, mode: 'create'|'edit', data? }
