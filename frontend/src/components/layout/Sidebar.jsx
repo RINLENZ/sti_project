@@ -7,9 +7,9 @@ import {
   LayoutDashboard, BookOpen, LogOut,
   GraduationCap, ChevronLeft, ChevronRight,
   BarChart2, Shield, UserCircle,
-  Map, Menu, X, Home,
+  Map, Menu, X, Home, Sun, Moon,
 } from 'lucide-react'
-import { C } from '../../styles/theme'
+import { C, useTheme } from '../../styles/theme'
 
 const ROLE_INFO = {
   super_admin: { label: 'Super Admin', color: '#D4A853', emoji: '⚙️' },
@@ -66,6 +66,7 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
+  const { isDark, toggleTheme } = useTheme()
 
   const roleInfo = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
 
@@ -223,8 +224,16 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
         </div>
       )}
 
-      {/* ── Déconnexion ── */}
-      <div style={{ padding: '10px 10px', borderTop: `1px solid ${C.sidebarBorder}` }}>
+      {/* ── Thème + Déconnexion ── */}
+      <div style={{ padding: '10px 10px', borderTop: `1px solid ${C.sidebarBorder}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <button onClick={toggleTheme} title={isDark ? 'Thème clair' : 'Thème sombre'}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', color: 'rgba(255,255,255,0.55)', padding: collapsed ? '9px 0' : '8px 12px', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start', fontSize: 13, fontWeight: 500, transition: 'all .15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
+        >
+          {isDark ? <Sun size={15} style={{ flexShrink: 0 }}/> : <Moon size={15} style={{ flexShrink: 0 }}/>}
+          {!collapsed && <span>{isDark ? 'Thème clair' : 'Thème sombre'}</span>}
+        </button>
         <NavBtn
           icon={LogOut} label="Déconnexion" collapsed={collapsed}
           active={false} color="rgba(220,38,38,0.7)"
@@ -242,6 +251,7 @@ function MobileBottomNav({ activeView, onViewChange }) {
   const navigate   = useNavigate()
   const location   = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const { isDark, toggleTheme } = useTheme()
 
   const roleInfo = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
 
@@ -367,6 +377,12 @@ function MobileBottomNav({ activeView, onViewChange }) {
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '10px 0' }}/>
 
+          <button onClick={toggleTheme}
+            style={{ width: '100%', padding: '12px 14px', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(255,255,255,0.65)', fontSize: 14, fontWeight: 500, marginBottom: 4 }}
+          >
+            {isDark ? <Sun size={16} style={{ flexShrink: 0 }}/> : <Moon size={16} style={{ flexShrink: 0 }}/>}
+            {isDark ? 'Thème clair' : 'Thème sombre'}
+          </button>
           <button
             onClick={() => { dispatch(logout()); navigate('/'); setMenuOpen(false) }}
             style={{ width: '100%', padding: '12px 14px', background: 'rgba(220,38,38,0.08)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(220,38,38,0.8)', fontSize: 14, fontWeight: 600 }}

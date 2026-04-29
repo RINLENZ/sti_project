@@ -12,7 +12,7 @@ import { useSelector } from 'react-redux'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Mic, MicOff, Play, RotateCcw, Send, CheckCircle } from 'lucide-react'
-import { C } from '../styles/theme'
+import { C, useTheme  } from '../styles/theme'
 
 /* ── Commandes à collecter ──────────────────────────────────── */
 const COMMANDES = [
@@ -78,6 +78,7 @@ const TARGET = 100
 
 /* ── Encodage WAV 16kHz mono ────────────────────────────────── */
 function encodeWAV(samples, sampleRate) {
+  const { C } = useTheme()
   const buf  = new ArrayBuffer(44 + samples.length * 2)
   const view = new DataView(buf)
   const ws   = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)) }
@@ -113,6 +114,7 @@ async function blobToWav16k(blob) {
 }
 
 function arrayBufferToBase64(buffer) {
+  const { C } = useTheme()
   const bytes = new Uint8Array(buffer)
   let binary  = ''
   const chunk = 8192
@@ -124,6 +126,7 @@ function arrayBufferToBase64(buffer) {
 
 /* ── Barre de niveau VU ─────────────────────────────────────── */
 function VUMeter({ analyser, active }) {
+  const { C } = useTheme()
   const canvasRef = useRef(null)
   const rafRef    = useRef(null)
 

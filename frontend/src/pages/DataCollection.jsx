@@ -11,7 +11,7 @@ import { useSelector } from 'react-redux'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Camera, ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react'
-import { C } from '../styles/theme'
+import { C, useTheme  } from '../styles/theme'
 
 /* ── Config états affectifs ──────────────────────────────────── */
 const ETATS = [

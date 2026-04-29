@@ -12,7 +12,7 @@ import {
   PolarRadiusAxis, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { C } from '../../styles/theme'
+import { C, useTheme  } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkList, Spinner } from '../../components/Skeleton'
 
@@ -20,13 +20,18 @@ const engColor = s => s >= 0.7 ? C.emerald : s >= 0.4 ? C.orange : C.red
 const engLabel = s => s >= 0.7 ? '🟢 Engagé' : s >= 0.4 ? '🟡 Modéré' : '🔴 Décroché'
 
 // ── Composants utilitaires ────────────────────────────────────────
-const ProgressBar = ({ value, color = C.emerald, h = 6 }) => (
+const ProgressBar = ({ value, color = C.emerald, h = 6 }) => {
+  const { C } = useTheme()
+  return (
   <div style={{ height: h, backgroundColor: '#E5E7EB', borderRadius: h, overflow: 'hidden' }}>
     <div style={{ height: '100%', width: `${Math.min(100, value)}%`, backgroundColor: color, borderRadius: h, transition: 'width .6s ease' }}/>
   </div>
 )
+}
 
-const Dot = ({ score }) => (
+const Dot = ({ score }) => {
+  const { C } = useTheme()
+  return (
   <span style={{
     display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
     backgroundColor: engColor(score),
@@ -34,8 +39,11 @@ const Dot = ({ score }) => (
     animation: 'pulse 2s infinite'
   }}/>
 )
+}
 
-const StatCard = ({ label, value, subtitle, color, Icon, trend }) => (
+const StatCard = ({ label, value, subtitle, color, Icon, trend }) => {
+  const { C } = useTheme()
+  return (
   <div style={{
     backgroundColor: C.surface, borderRadius: 16, padding: '20px 22px',
     boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`,
@@ -58,8 +66,10 @@ const StatCard = ({ label, value, subtitle, color, Icon, trend }) => (
     {subtitle && <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{subtitle}</span>}
   </div>
 )
+}
 
 function BKTModal({ apprenant, onClose }) {
+  const { C } = useTheme()
   const [bkt, setBkt]         = useState(null)
   const [history, setHistory] = useState(null)
   const [tab, setTab]         = useState('radar')
