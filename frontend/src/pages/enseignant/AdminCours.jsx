@@ -636,7 +636,8 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
   const [form, setForm] = useState({
     titre: initial.titre || '', type: initial.type || 'qcm',
     enonce: initial.enonce || '',
-    options: initial.options?.length === 4 ? initial.options : ['', '', '', ''],
+    options: initial.options?.length ? initial.options : ['', '', '', ''],
+    propositions: initial.options?.length ? initial.options.join(', ') : '',
     reponse_correcte: initial.reponse_correcte || '',
     explication: initial.explication || '', indice_1: initial.indice_1 || '',
     indice_2: initial.indice_2 || '', competence_evaluee: initial.competence_evaluee || '',
@@ -644,12 +645,24 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     ua_id: initial.ua_id || uas[0]?.id || '',
   })
   const [loading, setLoading] = useState(false)
+
+  function getOptions() {
+    if (form.type === 'qcm')       return form.options.filter(o => o.trim())
+    if (form.type === 'vrai_faux') return ['Vrai', 'Faux']
+    if (form.type === 'texte_trou') {
+      const props = form.propositions.split(',').map(s => s.trim()).filter(Boolean)
+      return props.length ? props : null
+    }
+    return null
+  }
+
   async function handle(e) {
     e.preventDefault(); setLoading(true)
+    const apiType = form.type === 'vrai_faux' ? 'qcm' : form.type
     try {
       await onSubmit({
-        titre: form.titre, type: form.type, enonce: form.enonce,
-        options: form.type === 'qcm' ? form.options.filter(o => o.trim()) : null,
+        titre: form.titre, type: apiType, enonce: form.enonce,
+        options: getOptions(),
         reponse_correcte: form.reponse_correcte, explication: form.explication,
         indice_1: form.indice_1, indice_2: form.indice_2,
         competence_evaluee: form.competence_evaluee,
@@ -662,14 +675,26 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     <form onSubmit={handle}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <FInput label="Titre" value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))} placeholder="Titre court" required />
-        <FSelect label="Type" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-          options={[{ value: 'qcm', label: 'QCM' }, { value: 'texte_trou', label: 'Texte à trou' }, { value: 'reponse_libre', label: 'Réponse libre' }]} />
+        <FSelect label="Type d'exercice" value={form.type}
+          onChange={e => {
+            const t = e.target.value
+            const rc = t === 'vrai_faux' ? form.reponse_correcte || 'Vrai' : form.reponse_correcte
+            setForm(f => ({ ...f, type: t, reponse_correcte: rc }))
+          }}
+          options={[
+            { value: 'qcm',          label: '🔤 QCM — choix multiple (A B C D)' },
+            { value: 'vrai_faux',    label: '✅ Vrai / Faux' },
+            { value: 'texte_trou',   label: '🔲 Texte à trous + propositions' },
+            { value: 'reponse_libre',label: '✏️ Réponse libre (rédaction)' },
+          ]} />
       </div>
       {uas.length > 0 && (
         <FSelect label="UA parente" value={form.ua_id} onChange={e => setForm(f => ({ ...f, ua_id: e.target.value }))} required
           options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 50) }))} />
       )}
       <FTextarea label="Énoncé" value={form.enonce} onChange={e => setForm(f => ({ ...f, enonce: e.target.value }))} placeholder="Question complète…" rows={3} required />
+
+      {/* Options QCM */}
       {form.type === 'qcm' && (
         <div style={{ marginBottom: 12 }}>
           <FieldLabel>Options A B C D</FieldLabel>
@@ -684,7 +709,44 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
           </div>
         </div>
       )}
-      {form.type !== 'reponse_libre' && (
+
+      {/* Propositions pour texte à trous */}
+      {form.type === 'texte_trou' && (
+        <div style={{ marginBottom:12 }}>
+          <FieldLabel>Propositions (word bank, séparées par des virgules)</FieldLabel>
+          <input value={form.propositions}
+            onChange={e => setForm(f => ({ ...f, propositions: e.target.value }))}
+            placeholder="Ex : atome, molécule, proton, électron"
+            style={inputBase}
+            onFocus={e => e.target.style.borderColor = C.brown}
+            onBlur={e => e.target.style.borderColor = C.brownPale}/>
+          <p style={{ fontSize:10, color:C.textSec, margin:'4px 0 0' }}>
+            L'apprenant cliquera sur la bonne proposition — laisse vide pour une saisie libre.
+          </p>
+        </div>
+      )}
+
+      {/* Vrai/Faux — sélecteur réponse correcte */}
+      {form.type === 'vrai_faux' && (
+        <div style={{ marginBottom:12 }}>
+          <FieldLabel>Réponse correcte</FieldLabel>
+          <div style={{ display:'flex', gap:10 }}>
+            {['Vrai','Faux'].map(v => (
+              <button key={v} type="button"
+                onClick={() => setForm(f => ({ ...f, reponse_correcte: v }))}
+                style={{ flex:1, padding:'12px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:14,
+                  background: form.reponse_correcte === v ? (v==='Vrai'?C.emeraldPale:'#FEE2E2') : C.surface,
+                  border:`2px solid ${form.reponse_correcte === v ? (v==='Vrai'?C.emerald:C.red) : C.brownPale}`,
+                  color: form.reponse_correcte === v ? (v==='Vrai'?C.emerald:C.red) : C.text,
+                }}>
+                {v === 'Vrai' ? '✅ Vrai' : '❌ Faux'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {form.type !== 'reponse_libre' && form.type !== 'vrai_faux' && (
         <FInput label="Réponse correcte" value={form.reponse_correcte} onChange={e => setForm(f => ({ ...f, reponse_correcte: e.target.value }))} placeholder="Texte exact de la bonne réponse" required />
       )}
       <FTextarea label="Explication (feedback)" value={form.explication} onChange={e => setForm(f => ({ ...f, explication: e.target.value }))} placeholder="Pourquoi c'est la bonne réponse…" rows={2} />
@@ -770,8 +832,15 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
     finally { setGenLoading(false) }
   }
 
-  const TypeBadge = ({ type }) => {
-    const cfg = { qcm: { bg: C.bluePale, color: C.blue, label: 'QCM' }, texte_trou: { bg: '#F3E8FF', color: '#7C3AED', label: 'Trou' }, reponse_libre: { bg: '#FEF3C7', color: C.orange, label: 'Libre' } }[type] || { bg: C.brownPale, color: C.textSec, label: type }
+  const TypeBadge = ({ type, options }) => {
+    const isVF = type === 'qcm' && options?.length === 2 && (options.includes('Vrai') || options.includes('Faux'))
+    const effectiveType = isVF ? 'vrai_faux' : type
+    const cfg = {
+      qcm:          { bg: C.bluePale,  color: C.blue,     label: 'QCM'       },
+      vrai_faux:    { bg: '#D1FAE5',   color: '#065F46',  label: 'Vrai/Faux' },
+      texte_trou:   { bg: '#F3E8FF',   color: '#7C3AED',  label: 'Trou'      },
+      reponse_libre:{ bg: '#FEF3C7',   color: C.orange,   label: 'Libre'     },
+    }[effectiveType] || { bg: C.brownPale, color: C.textSec, label: type }
     return <span style={{ background: cfg.bg, color: cfg.color, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{cfg.label}</span>
   }
 
@@ -813,7 +882,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
                 onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
             </div>
             <FSelect label="Type" value={genForm.type} onChange={e => setGenForm(g => ({ ...g, type: e.target.value }))}
-              options={[{ value: 'qcm', label: 'QCM' }, { value: 'texte_trou', label: 'Texte à trou' }]} />
+              options={[{ value: 'qcm', label: 'QCM' }, { value: 'texte_trou', label: 'Texte à trou' }, { value: 'reponse_libre', label: 'Réponse libre' }]} />
             <FSelect label="Difficulté" value={genForm.difficulte} onChange={e => setGenForm(g => ({ ...g, difficulte: parseInt(e.target.value) }))}
               options={[{ value: 1, label: '▲ Facile' }, { value: 2, label: '▲▲ Moyen' }, { value: 3, label: '▲▲▲ Difficile' }]} />
           </div>
@@ -845,7 +914,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre || ex.enonce?.substring(0, 50) + '…'}</p>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <TypeBadge type={ex.type} />
+                  <TypeBadge type={ex.type} options={ex.options} />
                   <span style={{ fontSize: 10, color: C.textSec }}>Diff. {ex.difficulte} · {ex.points} pts</span>
                   {ex.competence_evaluee && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.competence_evaluee}</span>}
                 </div>

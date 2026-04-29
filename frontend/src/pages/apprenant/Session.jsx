@@ -447,6 +447,45 @@ function renderInline(text) {
 }
 
 
+/* ── Sons de feedback ─────────────────────────────────────────────
+   Web Audio API synthétisé — aucune dépendance externe          */
+function playFeedback(correct) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    if (correct) {
+      [[523.25, 0], [659.25, 0.13], [783.99, 0.26]].forEach(([freq, t]) => {
+        const osc = ctx.createOscillator(), g = ctx.createGain()
+        osc.type = 'sine'; osc.frequency.value = freq
+        g.gain.setValueAtTime(0.22, ctx.currentTime + t)
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.36)
+        osc.connect(g); g.connect(ctx.destination)
+        osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + 0.36)
+      })
+    } else {
+      const osc = ctx.createOscillator(), g = ctx.createGain()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(260, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(130, ctx.currentTime + 0.36)
+      g.gain.setValueAtTime(0.14, ctx.currentTime)
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.46)
+      osc.connect(g); g.connect(ctx.destination)
+      osc.start(); osc.stop(ctx.currentTime + 0.46)
+    }
+  } catch {}
+}
+
+const MSG_CORRECT = [
+  'Bravo ! 🎉', 'Super ! ✨', 'Excellent ! 🏆',
+  'Bien joué ! 👏', 'Parfait ! 🌟', 'Tu maîtrises ! 💪',
+  "C'est ça ! 🎯", 'Bonne réponse ! 🔥',
+]
+const MSG_WRONG = [
+  'Pas cette fois…', 'Continue, tu progresses ! 💪',
+  'Presque ! Retiens bien la réponse', 'Tu y arriveras ! 🔥',
+  'Bonne tentative, regarde la correction', 'Relève-toi ! 💡',
+]
+function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+
 /* ── Sélection de la meilleure voix française disponible ────────
    Ordre de préférence : voix neuronales (Denise, Amélie, Thomas)
    > voix Google > n'importe quelle voix fr > défaut système.
@@ -514,6 +553,8 @@ export default function Session() {
   const [noiseAdaptatif, setNoiseAdaptatif] = useState(null)  // null|'eleve'|'tres_eleve'
   const [picModal,       setPicModal]       = useState(false)
   const [vadSpeech,      setVadSpeech]      = useState(false) // parole active détectée
+  const [answerFlash,    setAnswerFlash]    = useState(null)  // null|'correct'|'wrong'
+  const [feedbackMsg,    setFeedbackMsg]    = useState('')    // message aléatoire de feedback
 
   const videoRef         = useRef(null)
   const canvasRef        = useRef(null)
@@ -890,13 +931,19 @@ export default function Session() {
     setSubmitting(true)
     try {
       const { data } = await api.post('/api/cours/exercice/verifier', { exercice_id: ex.id, user_id: user.id, reponse })
-      setResultat(data); setScores(prev => [...prev, data.points_gagnes])
+      const msg = pickRandom(data.correct ? MSG_CORRECT : MSG_WRONG)
+      setResultat({ ...data, msg })
+      setFeedbackMsg(msg)
+      setScores(prev => [...prev, data.points_gagnes])
+      playFeedback(data.correct)
+      setAnswerFlash(data.correct ? 'correct' : 'wrong')
+      setTimeout(() => setAnswerFlash(null), 750)
       await sendEvent('response', { exercice_id: ex.id, correct: data.correct, time_seconds: tempsReponse, emotion })
       if (data.correct) {
-        toast.success(`+${data.points_gagnes} points !`)
-        tts(`Correct ! ${data.explication || ''}`)
+        toast.success(`+${data.points_gagnes} points !`, { icon: '🎯' })
+        tts(`${msg} ${data.explication || ''}`)
       } else {
-        tts(`Pas tout à fait. La bonne réponse était : ${data.reponse_correcte}. ${data.explication || ''}`)
+        tts(`${msg} La bonne réponse était : ${data.reponse_correcte}. ${data.explication || ''}`)
       }
     } catch { toast.error('Erreur de vérification') }
     finally { setSubmitting(false) }
@@ -914,6 +961,7 @@ export default function Session() {
     } else {
       setCurrent(c => c + 1); setReponse(null); setResultat(null)
       setIndices(0); setAdaptation(null); setExplicationIA(null)
+      setAnswerFlash(null); setFeedbackMsg('')
       setQuestionTime(Date.now())
     }
   }
@@ -1011,13 +1059,20 @@ export default function Session() {
 
   const ex = exercices[current]
   const diffStyle = {
-    1: { bg: C.emeraldPale, color: C.emerald,   label: 'Facile' },
-    2: { bg: '#FEF3C7',     color: '#92400E',    label: 'Moyen' },
-    3: { bg: '#FEE2E2',     color: C.red,        label: 'Difficile' },
+    1: { bg: C.emeraldPale, color: C.emerald,   label: 'Facile',    icon: '🟢' },
+    2: { bg: '#FEF3C7',     color: '#92400E',    label: 'Moyen',     icon: '🟡' },
+    3: { bg: '#FEE2E2',     color: C.red,        label: 'Difficile', icon: '🔴' },
   }
   const ds = diffStyle[ex.difficulte] || diffStyle[1]
   const progressPct = ((current + (resultat ? 1 : 0)) / exercices.length) * 100
   const totalPts = scores.reduce((a, b) => a + b, 0)
+  const isVraiFaux = ex.type === 'qcm' && ex.options?.length === 2 &&
+    (ex.options.includes('Vrai') || ex.options.includes('Faux'))
+  const MASCOT = {
+    engagement_eleve:'🦁', engagement_modere:'🐘', engagement_faible:'🐢',
+    confusion:'🤔', frustration:'🐆', ennui:'😴', neutre:'🦉', decrochage:'⚠️',
+  }
+  const mascot = MASCOT[emotion] || '🦉'
 
   /* ── Panneau IA ─────────────────────────────────────────── */
   const PanneauIA = ({ isOverlay = false }) => (
@@ -1313,24 +1368,38 @@ export default function Session() {
           <div style={{
             backgroundColor: C.surface, borderRadius: isMobile ? 18 : 22,
             padding: isMobile ? '18px 16px' : '30px 32px',
-            boxShadow: '0 3px 20px rgba(107,58,42,0.09)',
-            border: `1px solid ${C.brownPale}`
+            boxShadow: answerFlash === 'correct' ? `0 0 0 4px ${C.emerald}45,0 0 28px ${C.emerald}25`
+                     : answerFlash === 'wrong'   ? `0 0 0 4px ${C.red}45`
+                     : '0 3px 20px rgba(107,58,42,0.09)',
+            border: `1px solid ${answerFlash === 'correct' ? C.emerald+'60' : answerFlash === 'wrong' ? C.red+'60' : C.brownPale}`,
+            animation: answerFlash === 'correct' ? 'flashCorrect .65s ease'
+                     : answerFlash === 'wrong'   ? 'shake .4s ease, flashWrong .65s ease'
+                     : undefined,
+            transition: 'box-shadow .3s ease, border-color .3s ease',
           }}>
-            {/* Méta badges */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-              <span style={{ backgroundColor: ds.bg, color: ds.color, padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
-                {ds.label}
+            {/* Méta badges + mascotte */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+              {/* Mascotte réactive */}
+              <span style={{ fontSize:22, lineHeight:1, animation: answerFlash ? 'popIn .4s ease' : undefined }}
+                title={`État : ${emotion}`}>
+                {answerFlash === 'correct' ? '🎉' : answerFlash === 'wrong' ? '💪' : mascot}
               </span>
-              <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>
-                Q{current + 1}/{exercices.length}
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:11, color:C.textSec, fontWeight:600, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  Question {current + 1} sur {exercices.length}
+                  {ex.competence_evaluee && ` · ${ex.competence_evaluee}`}
+                </p>
+              </div>
+              <span style={{ backgroundColor:ds.bg, color:ds.color, padding:'3px 10px', borderRadius:20, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
+                {ds.icon} {ds.label}
               </span>
               {!resultat && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: questionElapsed > 60 ? C.orange : C.textSec, fontWeight: 700 }}>
-                  <Clock size={12}/> {questionElapsed}s
+                <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, color: questionElapsed > 60 ? C.orange : C.textSec, fontWeight:700 }}>
+                  <Clock size={11}/>{questionElapsed}s
                 </span>
               )}
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: C.brownLight, fontWeight: 800, background: C.brownPale, padding: '4px 12px', borderRadius: 20 }}>
-                {ex.points} pts
+              <span style={{ fontSize:12, color:C.gold, fontWeight:900, background:C.brownPale, padding:'3px 10px', borderRadius:20 }}>
+                ★ {ex.points}
               </span>
             </div>
 
@@ -1362,9 +1431,42 @@ export default function Session() {
               </button>
             </div>
 
-            {/* Options QCM */}
-            {ex.type === 'qcm' && ex.options && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 8 : 10, marginBottom: 16 }}>
+            {/* ── Vrai / Faux ── */}
+            {isVraiFaux && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
+                {ex.options.map((opt, i) => {
+                  const isV  = opt === 'Vrai'
+                  const isSel = reponse === opt
+                  const isOk  = !!resultat && opt === resultat.reponse_correcte
+                  const isKo  = !!resultat && isSel && !resultat.correct
+                  return (
+                    <button key={i} onClick={() => !resultat && setReponse(opt)} style={{
+                      padding: isMobile ? '22px 10px' : '30px 16px',
+                      borderRadius:20, cursor: resultat ? 'default' : 'pointer',
+                      border: `3px solid ${isOk ? C.emerald : isKo ? C.red : isSel ? C.brown : C.brownPale}`,
+                      background: isOk ? C.emeraldPale : isKo ? '#FEE2E2' : isSel ? C.brownPale : C.surface,
+                      transition:'all .18s ease',
+                      transform: isSel && !resultat ? 'scale(1.05)' : 'scale(1)',
+                      boxShadow: isSel && !resultat ? `0 8px 24px ${C.brown}30` : 'none',
+                      display:'flex', flexDirection:'column', alignItems:'center', gap:10,
+                      animation: isOk ? 'popIn .35s ease' : undefined,
+                    }}>
+                      <span style={{ fontSize: isMobile ? 40 : 52 }}>{isV ? '✅' : '❌'}</span>
+                      <span style={{ fontSize: isMobile ? 17 : 20, fontWeight:900,
+                        color: isOk ? C.emerald : isKo ? C.red : isSel ? C.brown : C.text }}>
+                        {opt}
+                      </span>
+                      {isOk && <CheckCircle size={20} color={C.emerald}/>}
+                      {isKo && <XCircle     size={20} color={C.red}/>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* ── QCM standard ── */}
+            {ex.type === 'qcm' && ex.options && !isVraiFaux && (
+              <div style={{ display:'flex', flexDirection:'column', gap: isMobile ? 8 : 10, marginBottom:16 }}>
                 {ex.options.map((opt, i) => (
                   <ExerciceOption key={i}
                     lettre={String.fromCharCode(65 + i)} texte={opt}
@@ -1376,18 +1478,69 @@ export default function Session() {
               </div>
             )}
 
-            {/* Texte à trous */}
+            {/* ── Texte à trous avec propositions ── */}
             {ex.type === 'texte_trou' && (
-              <input type="text" placeholder="Complète le texte…"
-                value={reponse || ''} onChange={e => setReponse(e.target.value)} disabled={!!resultat}
-                style={{ width: '100%', padding: '13px 16px', border: `1.5px solid ${C.brownPale}`, borderRadius: 10, fontSize: 14, marginBottom: 16, outline: 'none', boxSizing: 'border-box', backgroundColor: C.surface }}/>
+              <div style={{ marginBottom:16 }}>
+                {ex.options?.length > 0 ? (
+                  <>
+                    {!resultat && (
+                      <>
+                        <p style={{ fontSize:11, fontWeight:800, color:C.textSec, textTransform:'uppercase', letterSpacing:.6, margin:'0 0 10px' }}>
+                          Sélectionne le bon mot :
+                        </p>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+                          {ex.options.map((opt, i) => (
+                            <button key={i} onClick={() => setReponse(opt)} style={{
+                              padding:'11px 22px', borderRadius:24,
+                              background: reponse === opt
+                                ? `linear-gradient(135deg,${C.brown},${C.brownLight})`
+                                : C.surface,
+                              color: reponse === opt ? 'white' : C.text,
+                              border:`2px solid ${reponse === opt ? C.brown : C.brownPale}`,
+                              fontSize:15, fontWeight:700, cursor:'pointer', transition:'all .15s',
+                              boxShadow: reponse === opt ? `0 4px 16px ${C.brown}35` : 'none',
+                              transform: reponse === opt ? 'scale(1.06)' : 'scale(1)',
+                              animation: reponse === opt ? 'popIn .2s ease' : undefined,
+                            }}>
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {resultat && (
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <span style={{ fontSize:12, color:C.textSec, fontWeight:600 }}>Ta réponse :</span>
+                        <span style={{ padding:'7px 18px', borderRadius:22,
+                          background: resultat.correct ? C.emeraldPale : '#FEE2E2',
+                          color: resultat.correct ? C.emerald : C.red,
+                          fontSize:14, fontWeight:800,
+                          border:`2px solid ${resultat.correct ? C.emerald : C.red}30` }}>
+                          {reponse}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <input type="text" placeholder="Complète le texte…"
+                    value={reponse || ''} onChange={e => setReponse(e.target.value)} disabled={!!resultat}
+                    style={{ width:'100%', padding:'13px 16px', border:`1.5px solid ${resultat ? C.brownPale : C.brownLight}`, borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', backgroundColor:C.surface, fontWeight:600, transition:'border .2s' }}/>
+                )}
+              </div>
             )}
 
-            {/* Réponse libre */}
+            {/* ── Réponse libre ── */}
             {ex.type === 'reponse_libre' && (
-              <textarea rows={3} placeholder="Écris ta réponse…"
-                value={reponse || ''} onChange={e => setReponse(e.target.value)} disabled={!!resultat}
-                style={{ width: '100%', padding: '13px 16px', border: `1.5px solid ${C.brownPale}`, borderRadius: 10, fontSize: 14, marginBottom: 16, outline: 'none', resize: 'vertical', boxSizing: 'border-box', backgroundColor: C.surface }}/>
+              <div style={{ marginBottom:16 }}>
+                <textarea rows={4} placeholder="Écris ta réponse complète ici…"
+                  value={reponse || ''} onChange={e => setReponse(e.target.value)} disabled={!!resultat}
+                  style={{ width:'100%', padding:'13px 16px', border:`1.5px solid ${C.brownPale}`, borderRadius:10, fontSize:14, outline:'none', resize:'vertical', boxSizing:'border-box', backgroundColor:C.surface, fontFamily:'inherit', lineHeight:1.6 }}/>
+                {!resultat && reponse && (
+                  <p style={{ fontSize:11, color:C.textSec, margin:'4px 0 0', textAlign:'right' }}>
+                    {reponse.trim().split(/\s+/).length} mot(s)
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Feedback résultat */}
@@ -1403,8 +1556,8 @@ export default function Session() {
                     ? <CheckCircle size={18} color={C.emerald} style={{ flexShrink: 0, marginTop: 2 }}/>
                     : <XCircle     size={18} color={C.red}     style={{ flexShrink: 0, marginTop: 2 }}/>}
                   <div style={{ flex: 1 }}>
-                    <p style={{ margin: '0 0 5px', fontSize: 14, fontWeight: 800, color: resultat.correct ? C.emerald : C.red }}>
-                      {resultat.correct ? 'Excellent ! ✓' : 'Pas tout à fait…'}
+                    <p style={{ margin: '0 0 5px', fontSize: 14, fontWeight: 800, color: resultat.correct ? C.emerald : C.red, animation:'popIn .3s ease' }}>
+                      {resultat.msg || (resultat.correct ? 'Bravo ! 🎉' : 'Pas cette fois…')}
                     </p>
                     <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{resultat.explication}</p>
                     {!resultat.correct && (
@@ -1510,28 +1663,34 @@ export default function Session() {
             {/* Bouton action principal */}
             {!resultat ? (
               <button onClick={soumettre} disabled={!reponse || submitting} style={{
-                width: '100%', padding: '15px',
-                background: reponse && !submitting ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : '#E5E7EB',
+                width: '100%', padding: '16px',
+                background: reponse && !submitting
+                  ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
+                  : '#E5E7EB',
                 color: reponse && !submitting ? 'white' : C.textSec,
-                border: 'none', borderRadius: 12,
+                border: 'none', borderRadius: 14,
                 fontSize: isMobile ? 14 : 15, fontWeight: 800,
                 cursor: reponse && !submitting ? 'pointer' : 'not-allowed',
-                boxShadow: reponse && !submitting ? `0 4px 18px ${C.brown}35` : 'none',
-                transition: 'all .2s ease', minHeight: 52,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                boxShadow: reponse && !submitting ? `0 6px 22px ${C.brown}40` : 'none',
+                transition: 'all .2s ease', minHeight: 54,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                animation: reponse && !submitting ? 'pulse 2s infinite' : undefined,
               }}>
-                {submitting ? <><Spinner size={14} color={C.textSec}/> Vérification…</> : 'Valider ma réponse'}
+                {submitting
+                  ? <><Spinner size={14} color={C.textSec}/> Vérification…</>
+                  : <>{reponse ? '✅ Valider ma réponse' : 'Choisir une réponse…'}</>}
               </button>
             ) : (
               <button onClick={suivant} style={{
-                width: '100%', padding: '15px',
+                width: '100%', padding: '16px',
                 background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`,
-                color: 'white', border: 'none', borderRadius: 12,
+                color: 'white', border: 'none', borderRadius: 14,
                 fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                boxShadow: `0 4px 18px ${C.emerald}35`, minHeight: 52
+                boxShadow: `0 6px 22px ${C.emerald}40`, minHeight: 54,
+                animation: 'popIn .3s ease',
               }}>
-                {current + 1 >= exercices.length ? 'Terminer 🏁' : 'Suivant'}
+                {current + 1 >= exercices.length ? '🏁 Terminer la session' : 'Question suivante'}
                 <ChevronRight size={16}/>
               </button>
             )}
