@@ -7,66 +7,53 @@ import {
   Clock, Zap, Layers, FolderOpen, Grid,
   FileText, AlertTriangle, Sparkles, Loader, Upload
 } from 'lucide-react'
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkList, Spinner } from '../../components/Skeleton'
 
 // ── UI de base ──────────────────────────────────────────────────
-const getInputBase = (C) => ({
+const inputBase = {
   width: '100%', padding: '9px 12px', border: `1.5px solid ${C.brownPale}`,
   borderRadius: 8, fontSize: 13, color: C.text, background: C.surface,
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-})
-const FieldLabel = ({ children, required }) => {
-  const { C } = useTheme()
-  return (
+}
+const FieldLabel = ({ children, required }) => (
   <label style={{ fontSize: 11, fontWeight: 700, color: C.textSec, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: .4 }}>
     {children}{required && <span style={{ color: C.red, marginLeft: 3 }}>*</span>}
   </label>
 )
-}
-const FInput = ({ label, value, onChange, placeholder, type = 'text', required, hint }) => {
-  const { C } = useTheme()
-  return (
+const FInput = ({ label, value, onChange, placeholder, type = 'text', required, hint }) => (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
     <input type={type} value={value} onChange={onChange} placeholder={placeholder} required={required}
-      style={getInputBase(C)}
+      style={inputBase}
       onFocus={e => e.target.style.borderColor = C.brown}
       onBlur={e => e.target.style.borderColor = C.brownPale}
     />
     {hint && <p style={{ fontSize: 10, color: C.textSec, marginTop: 3 }}>{hint}</p>}
   </div>
 )
-}
-const FTextarea = ({ label, value, onChange, placeholder, rows = 3, required }) => {
-  const { C } = useTheme()
-  return (
+const FTextarea = ({ label, value, onChange, placeholder, rows = 3, required }) => (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
     <textarea value={value} onChange={onChange} placeholder={placeholder} rows={rows}
-      style={{ ...getInputBase(C), resize: 'vertical' }}
+      style={{ ...inputBase, resize: 'vertical' }}
       onFocus={e => e.target.style.borderColor = C.brown}
       onBlur={e => e.target.style.borderColor = C.brownPale}
     />
   </div>
 )
-}
-const FSelect = ({ label, value, onChange, options, required }) => {
-  const { C } = useTheme()
-  return (
+const FSelect = ({ label, value, onChange, options, required }) => (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
-    <select value={value} onChange={onChange} style={getInputBase(C)}>
+    <select value={value} onChange={onChange} style={inputBase}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   </div>
 )
-}
 
 // ── Modal ───────────────────────────────────────────────────────
 function Modal({ title, onClose, children, size = 560 }) {
-  const { C } = useTheme()
   useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = '' } }, [])
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()} style={{
@@ -92,7 +79,6 @@ function Modal({ title, onClose, children, size = 560 }) {
 }
 
 function ConfirmDelete({ item, onConfirm, onCancel }) {
-  const { C } = useTheme()
   return (
     <Modal title="Confirmer la suppression" onClose={onCancel} size={420}>
       <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
@@ -110,24 +96,17 @@ function ConfirmDelete({ item, onConfirm, onCancel }) {
   )
 }
 
-const SaveBtn = ({ loading }) => {
-  const { C } = useTheme()
-  return (
+const SaveBtn = ({ loading }) => (
   <button type="submit" disabled={loading} style={{ flex: 2, padding: '10px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
     <Save size={14} /> {loading ? 'Enregistrement…' : 'Enregistrer'}
   </button>
 )
-}
-const CancelBtn = ({ onClose }) => {
-  const { C } = useTheme()
-  return (
+const CancelBtn = ({ onClose }) => (
   <button type="button" onClick={onClose} style={{ flex: 1, padding: '10px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Annuler</button>
 )
-}
 
 // ── TagList ─────────────────────────────────────────────────────
 function TagList({ label, items, onChange, placeholder }) {
-  const { C } = useTheme()
   const [draft, setDraft] = useState('')
   function add() {
     const t = draft.trim()
@@ -147,7 +126,7 @@ function TagList({ label, items, onChange, placeholder }) {
       <div style={{ display: 'flex', gap: 6 }}>
         <input value={draft} onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
-          placeholder={placeholder} style={{ ...getInputBase(C), flex: 1 }}
+          placeholder={placeholder} style={{ ...inputBase, flex: 1 }}
           onFocus={e => e.target.style.borderColor = C.brown}
           onBlur={e => e.target.style.borderColor = C.brownPale}
         />
@@ -203,7 +182,6 @@ function FormModule({ initial = {}, matieres = [], niveaux = [], onSubmit, onClo
 }
 
 function FormFamille({ initial = {}, modules = [], onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({
     titre: initial.titre || '', description: initial.description || '',
     module_id: initial.module_id || modules[0]?.id || '', ordre: initial.ordre || 1,
@@ -222,7 +200,6 @@ function FormFamille({ initial = {}, modules = [], onSubmit, onClose }) {
 }
 
 function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload }) {
-  const { C } = useTheme()
   const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [expanded, setExpanded] = useState({})
@@ -432,7 +409,6 @@ function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload })
 // ════════════════════════════════════════════════════════════════
 
 function FormUA({ initial = {}, familles = [], onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({
     titre: initial.titre || '', reference_ue: initial.reference_ue || '',
     situation_probleme: initial.situation_probleme || '',
@@ -473,7 +449,6 @@ function FormUA({ initial = {}, familles = [], onSubmit, onClose }) {
 }
 
 function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
-  const { C } = useTheme()
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
@@ -539,7 +514,7 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 160, position: 'relative' }}>
           <Search size={13} color={C.textSec} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une UA…" style={{ ...getInputBase(C), paddingLeft: 30 }}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une UA…" style={{ ...inputBase, paddingLeft: 30 }}
             onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
         </div>
         <button onClick={() => { setPdfModal(true); setPdfFamille(familles[0]?.id || '') }} style={{ padding: '9px 14px', background: `linear-gradient(135deg, #7C3AED, #5B21B6)`, color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
@@ -600,7 +575,7 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
 
             <div>
               <FieldLabel required>Famille de destination</FieldLabel>
-              <select value={pdfFamille} onChange={e => setPdfFamille(e.target.value)} style={getInputBase(C)}
+              <select value={pdfFamille} onChange={e => setPdfFamille(e.target.value)} style={inputBase}
                 onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = C.brownPale}>
                 <option value="">— Sélectionner une famille —</option>
                 {familles.map(f => <option key={f.id} value={f.id}>{f.titre}</option>)}
@@ -658,7 +633,6 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
 // ════════════════════════════════════════════════════════════════
 
 function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({
     titre: initial.titre || '', type: initial.type || 'qcm',
     enonce: initial.enonce || '',
@@ -728,7 +702,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
             {form.options.map((opt, i) => (
               <input key={i} value={opt}
                 onChange={e => { const o = [...form.options]; o[i] = e.target.value; setForm(f => ({ ...f, options: o })) }}
-                placeholder={`Option ${String.fromCharCode(65 + i)}`} style={getInputBase(C)}
+                placeholder={`Option ${String.fromCharCode(65 + i)}`} style={inputBase}
                 onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale}
               />
             ))}
@@ -743,7 +717,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
           <input value={form.propositions}
             onChange={e => setForm(f => ({ ...f, propositions: e.target.value }))}
             placeholder="Ex : atome, molécule, proton, électron"
-            style={getInputBase(C)}
+            style={inputBase}
             onFocus={e => e.target.style.borderColor = C.brown}
             onBlur={e => e.target.style.borderColor = C.brownPale}/>
           <p style={{ fontSize:10, color:C.textSec, margin:'4px 0 0' }}>
@@ -792,7 +766,6 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
 }
 
 function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
-  const { C } = useTheme()
   const [exercices, setExercices] = useState([])
   const [loadingEx, setLoadingEx] = useState(true)
   const [search, setSearch] = useState('')
@@ -876,10 +849,10 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 140, position: 'relative' }}>
           <Search size={13} color={C.textSec} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…" style={{ ...getInputBase(C), paddingLeft: 30 }}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…" style={{ ...inputBase, paddingLeft: 30 }}
             onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
         </div>
-        <select value={filterUA} onChange={e => setFilterUA(e.target.value)} style={{ ...getInputBase(C), width: 'auto', minWidth: 160 }}>
+        <select value={filterUA} onChange={e => setFilterUA(e.target.value)} style={{ ...inputBase, width: 'auto', minWidth: 160 }}>
           <option value="all">Toutes les UA</option>
           {allUAs.map(u => <option key={u.id} value={u.id}>{u.titre?.substring(0, 35)}</option>)}
         </select>
@@ -905,7 +878,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
               <FieldLabel>Nombre</FieldLabel>
-              <input type="number" min={1} max={10} value={genForm.nb} onChange={e => setGenForm(g => ({ ...g, nb: parseInt(e.target.value) }))} style={getInputBase(C)}
+              <input type="number" min={1} max={10} value={genForm.nb} onChange={e => setGenForm(g => ({ ...g, nb: parseInt(e.target.value) }))} style={inputBase}
                 onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
             </div>
             <FSelect label="Type" value={genForm.type} onChange={e => setGenForm(g => ({ ...g, type: e.target.value }))}
@@ -982,7 +955,6 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
 // ════════════════════════════════════════════════════════════════
 
 function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({
     titre:       initial.titre       || '',
     type:        initial.type        || 'lecon',
@@ -1058,7 +1030,7 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
           <textarea value={form.contenu} onChange={e => setForm(f => ({ ...f, contenu: e.target.value }))}
             placeholder={`# Titre\n\nIntroduction...\n\n## Définition\n\nTexte explicatif...\n\n- Point 1\n- Point 2\n\n\`\`\`\nExemple de code\n\`\`\``}
             rows={12}
-            style={{ ...getInputBase(C), resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 }}
+            style={{ ...inputBase, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 }}
             onFocus={e => e.target.style.borderColor = C.brown}
             onBlur={e => e.target.style.borderColor = C.brownPale}
           />
@@ -1086,7 +1058,7 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
           <input value={pkDraft} onChange={e => setPkDraft(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPk() } }}
             placeholder="Ajouter un point clé puis Entrée…"
-            style={{ ...getInputBase(C), flex: 1 }}
+            style={{ ...inputBase, flex: 1 }}
             onFocus={e => e.target.style.borderColor = C.brown}
             onBlur={e => e.target.style.borderColor = C.brownPale}
           />
@@ -1104,7 +1076,6 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
 
 // Aperçu Markdown simplifié (identique à LeconReader)
 function MarkdownPreview({ content }) {
-  const { C } = useTheme()
   if (!content) return <p style={{ color: C.textSec, fontStyle: 'italic', fontSize: 13 }}>Aucun contenu à afficher.</p>
   const lines = content.split('\n')
   return (
@@ -1124,7 +1095,6 @@ function MarkdownPreview({ content }) {
 }
 
 function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
-  const { C } = useTheme()
   const [ressources,   setRessources]   = useState([])
   const [loadingRes,   setLoadingRes]   = useState(true)
   const [modal,        setModal]        = useState(null)
@@ -1216,12 +1186,12 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
         <div style={{ flex: 1, minWidth: 140, position: 'relative' }}>
           <Search size={13} color={C.textSec} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une ressource…"
-            style={{ ...getInputBase(C), paddingLeft: 30 }}
+            style={{ ...inputBase, paddingLeft: 30 }}
             onFocus={e => e.target.style.borderColor = C.brown}
             onBlur={e => e.target.style.borderColor = C.brownPale}
           />
         </div>
-        <select value={filterUA} onChange={e => setFilterUA(e.target.value)} style={{ ...getInputBase(C), width: 'auto', minWidth: 180 }}>
+        <select value={filterUA} onChange={e => setFilterUA(e.target.value)} style={{ ...inputBase, width: 'auto', minWidth: 180 }}>
           <option value="all">Toutes les UA</option>
           {allUAs.map(u => <option key={u.id} value={u.id}>{u.titre?.substring(0, 40)}</option>)}
         </select>
@@ -1290,7 +1260,6 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
 
 // ── PAGE PRINCIPALE
 export default function AdminCours() {
-  const { C } = useTheme()
   const [structure, setStructure] = useState([])
   const [niveaux,   setNiveaux]   = useState([])
   const [loading,   setLoading]   = useState(true)
@@ -1388,12 +1357,12 @@ export default function AdminCours() {
       {/* Filtres globaux */}
       <div style={{ display: 'flex', gap: 8, marginBottom: filterNiveau !== 'all' ? 8 : 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={filterNiveau} onChange={e => setFilterNiveau(e.target.value)}
-          style={{ ...getInputBase(C), width: 'auto', minWidth: 170 }}>
+          style={{ ...inputBase, width: 'auto', minWidth: 170 }}>
           <option value="all">🎓 Tous les niveaux</option>
           {niveaux.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
         </select>
         <select value={filterMat} onChange={e => setFilterMat(e.target.value)}
-          style={{ ...getInputBase(C), width: 'auto', minWidth: 170 }}>
+          style={{ ...inputBase, width: 'auto', minWidth: 170 }}>
           <option value="all">📚 Toutes les matières</option>
           {structure.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
         </select>

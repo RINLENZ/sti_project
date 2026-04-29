@@ -10,12 +10,11 @@ import {
   X, Search, GraduationCap, RefreshCw, ArrowLeft
 } from 'lucide-react'
 import SensiaLogo from '../../components/SensiaLogo'
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 // ── Onde ECG ──────────────────────────────────────────────────────
 function ECGWave({ width=28, height=18, color='white' }) {
-  const { C } = useTheme()
   const w=width, h=height
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display:'block' }}>
@@ -90,7 +89,6 @@ function generateCode() {
 
 // ── Composants boutons ────────────────────────────────────────────
 function BtnNext({ onClick, disabled, label='Continuer', mobile }) {
-  const { C } = useTheme()
   return (
     <button onClick={onClick} disabled={disabled} style={{
       flex:2, padding:mobile?'12px':'13px',
@@ -108,7 +106,6 @@ function BtnNext({ onClick, disabled, label='Continuer', mobile }) {
 }
 
 function BtnBack({ onClick, mobile }) {
-  const { C } = useTheme()
   return (
     <button onClick={onClick} style={{
       flex:1, padding:mobile?'12px':'13px',
@@ -123,7 +120,6 @@ function BtnBack({ onClick, mobile }) {
 
 // ── Grille niveaux ────────────────────────────────────────────────
 function NiveauxGrid({ niveauxParCycle, selected, toggle, mobile }) {
-  const { C } = useTheme()
   const data = Object.keys(niveauxParCycle).length > 0
     ? Object.entries(niveauxParCycle).map(([cycleNom, items]) => ({ cycleNom, items }))
     : NIVEAUX_FALLBACK

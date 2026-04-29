@@ -5,17 +5,14 @@ import { Provider } from 'react-redux'
 import { Toaster } from 'react-hot-toast'
 import App from './App.jsx'
 import { store } from './store/store.js'
-import { ThemeProvider } from './styles/theme'
 import './styles/index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Provider store={store}>
       <BrowserRouter>
-        <ThemeProvider>
-          <App />
-          <Toaster position="top-right" />
-        </ThemeProvider>
+        <App />
+        <Toaster position="top-right" />
       </BrowserRouter>
     </Provider>
   </React.StrictMode>

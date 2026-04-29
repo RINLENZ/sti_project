@@ -2,20 +2,18 @@ import { useState } from 'react'
 import Sidebar from './Sidebar'
 import ParcoursPage from './ParcoursPage'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
-import { useTheme } from '../../styles/theme'
 
 export default function AppLayout({ children }) {
   const [collapsed,  setCollapsed]  = useState(false)
   const [activeView, setActiveView] = useState('main') // 'main' | 'parcours'
   const { mobile } = useBreakpoint()
-  const { C } = useTheme()
 
   return (
     <div style={{
       display: 'flex',
       minHeight: '100vh',
       flexDirection: mobile ? 'column' : 'row',
-      background: C.bg,
+      background: '#FAF7F4',
     }}>
 
       {/* ── Sidebar desktop uniquement ── */}

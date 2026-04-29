@@ -9,7 +9,7 @@ import {
   Building2, BookOpen, Users, Hash, Camera, ChevronRight,
   LayoutDashboard, GraduationCap, RefreshCw,
 } from 'lucide-react'
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 // ── Parsing JSON stocké en DB ─────────────────────────────────────
@@ -55,7 +55,6 @@ const AVATARS = [
 
 // ── AvatarDisplay ─────────────────────────────────────────────────
 function AvatarDisplay({ avatarId, initiales, size = 80, editable, onClick }) {
-  const { C } = useTheme()
   const [hovering, setHovering] = useState(false)
   const av = AVATARS.find(a => a.id === avatarId)
   const br = size > 60 ? 22 : 14
@@ -90,7 +89,6 @@ function AvatarDisplay({ avatarId, initiales, size = 80, editable, onClick }) {
 
 // ── AvatarPicker ──────────────────────────────────────────────────
 function AvatarPicker({ current, onSelect, onClose }) {
-  const { C } = useTheme()
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(26,18,7,0.55)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:24, width:'100%', maxWidth:480, maxHeight:'80vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 28px 70px rgba(26,18,7,0.32)' }}>
@@ -119,7 +117,6 @@ function AvatarPicker({ current, onSelect, onClose }) {
 
 // ── MatièresPicker (modal) ────────────────────────────────────────
 function MatieresPicker({ selected, onSave, onClose }) {
-  const { C } = useTheme()
   const [local, setLocal] = useState([...selected])
   const toggle = nom => setLocal(prev => prev.includes(nom) ? prev.filter(x => x !== nom) : [...prev, nom])
   return (
@@ -157,7 +154,6 @@ function MatieresPicker({ selected, onSave, onClose }) {
 
 // ── InfoRow ───────────────────────────────────────────────────────
 function InfoRow({ icon: Icon, label, children, value }) {
-  const { C } = useTheme()
   return (
     <div style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 0', borderBottom:`1px solid ${C.border}` }}>
       <div style={{ width:34, height:34, borderRadius:10, flexShrink:0, background:C.brownPale, display:'flex', alignItems:'center', justifyContent:'center' }}>

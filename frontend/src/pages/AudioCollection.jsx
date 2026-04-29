@@ -12,7 +12,7 @@ import { useSelector } from 'react-redux'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Mic, MicOff, Play, RotateCcw, Send, CheckCircle } from 'lucide-react'
-import { C, useTheme  } from '../styles/theme'
+import { C } from '../styles/theme'
 
 /* ── Commandes à collecter ──────────────────────────────────── */
 const COMMANDES = [
@@ -124,7 +124,6 @@ function arrayBufferToBase64(buffer) {
 
 /* ── Barre de niveau VU ─────────────────────────────────────── */
 function VUMeter({ analyser, active }) {
-  const { C } = useTheme()
   const canvasRef = useRef(null)
   const rafRef    = useRef(null)
 

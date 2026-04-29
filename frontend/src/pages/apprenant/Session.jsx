@@ -9,7 +9,7 @@ import {
   X, Activity, Clock, Target, Award
 } from 'lucide-react'
 
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 
@@ -81,7 +81,6 @@ function fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch) {
 
 /* ── Gauge component ─────────────────────────────────────────── */
 const MiniGauge = ({ score, emotion, compact = false }) => {
-  const { C } = useTheme()
   const color = engColor(score)
   const em = ETATS[emotion] || ETATS.neutre
 
@@ -136,7 +135,6 @@ const MiniGauge = ({ score, emotion, compact = false }) => {
 
 /* ── Option QCM ──────────────────────────────────────────────── */
 const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }) => {
-  const { C } = useTheme()
   let bg = C.surface, border = `1.5px solid ${C.brownPale}`, textColor = C.text
   let lBg = '#E5E7EB', lColor = C.textSec
   if (selected && !correct && !incorrect) {
@@ -177,7 +175,6 @@ const CONFETTI_PIECES = Array.from({ length: 40 }, (_, i) => ({
 }))
 
 const Confetti = () => {
-  const { C } = useTheme()
   const pieces = CONFETTI_PIECES
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999 }}>
@@ -194,9 +191,7 @@ const Confetti = () => {
 }
 
 /* ── Toast caméra mobile ─────────────────────────────────────── */
-const CameraBanner = ({ onActivate, onDismiss }) => {
-  const { C } = useTheme()
-  return (
+const CameraBanner = ({ onActivate, onDismiss }) => (
   <div style={{
     position: 'fixed', bottom: 90, left: 12, right: 12, zIndex: 300,
     backgroundColor: C.surface, borderRadius: 16,
@@ -243,13 +238,11 @@ const CameraBanner = ({ onActivate, onDismiss }) => {
     </div>
   </div>
 )
-}
 
 
 // LECON READER
 
 function LeconReader({ ua, ressources, onStart, onResourceView }) {
-  const { C } = useTheme()
   const [idx, setIdx] = useState(0)
   const readStartRef  = useRef(Date.now())
   const res = ressources[idx]
@@ -493,7 +486,6 @@ const MSG_WRONG = [
 ]
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)] }
 
-
 /* ── Sélection de la meilleure voix française disponible ────────
    Ordre de préférence : voix neuronales (Denise, Amélie, Thomas)
    > voix Google > n'importe quelle voix fr > défaut système.
@@ -520,7 +512,6 @@ if (typeof window !== 'undefined' && window.speechSynthesis) {
 
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Session() {
-  const { C } = useTheme()
   const { uaId }   = useParams()
   const navigate   = useNavigate()
   const { user }   = useSelector(s => s.auth)

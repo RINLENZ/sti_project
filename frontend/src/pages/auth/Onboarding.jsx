@@ -5,7 +5,7 @@ import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Copy, CheckCircle, GraduationCap, Brain, ChevronRight } from 'lucide-react'
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 
 const PAYS = [
   { code: 'CM', name: 'Cameroun',      flag: '🇨🇲' },
@@ -613,7 +613,6 @@ export default function Onboarding() {
 
 // ── Composants boutons réutilisables ──────────────────────────────
 function BtnNext({ onClick, disabled, label = 'Continuer →' }) {
-  const { C } = useTheme()
   return (
     <button onClick={onClick} disabled={disabled} style={{
       flex:2, padding:'13px',
@@ -633,7 +632,6 @@ function BtnNext({ onClick, disabled, label = 'Continuer →' }) {
 }
 
 function BtnBack({ onClick }) {
-  const { C } = useTheme()
   return (
     <button onClick={onClick} style={{
       flex:1, padding:'13px',

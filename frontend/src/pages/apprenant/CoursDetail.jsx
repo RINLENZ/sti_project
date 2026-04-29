@@ -6,22 +6,18 @@ import {
   Clock, BookOpen, ChevronRight, CheckCircle,
   Target, ArrowLeft, Play, Lock, Star
 } from 'lucide-react'
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 
-const ProgressBar = ({ value, color = C.emerald, h = 6 }) => {
-  const { C } = useTheme()
-  return (
+const ProgressBar = ({ value, color = C.emerald, h = 6 }) => (
   <div style={{ height: h, backgroundColor: '#E5E7EB', borderRadius: h, overflow: 'hidden' }}>
     <div style={{ height: '100%', width: `${Math.min(100, value)}%`, backgroundColor: color, borderRadius: h, transition: 'width .6s ease' }}/>
   </div>
 )
-}
 
 /* ── Rendu Markdown simplifié ─────────────────────────────────── */
 function MarkdownRenderer({ content }) {
-  const { C } = useTheme()
   if (!content) return null
   const lines = content.split('\n')
   const elements = []
@@ -98,7 +94,6 @@ function MarkdownRenderer({ content }) {
 
 /* ── Sidebar ────────────────────────────────────────────────────── */
 function Sidebar({ ua, uaId, navigate }) {
-  const { C } = useTheme()
   const diffLabel = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile' }
   const diffColor = { 1: C.emerald, 2: C.orange, 3: C.red }
   const diffBg    = { 1: C.emeraldPale, 2: '#FEF3C7', 3: '#FEE2E2' }
@@ -169,7 +164,6 @@ function Sidebar({ ua, uaId, navigate }) {
 
 /* ── Main component ─────────────────────────────────────────────── */
 export default function CoursDetail() {
-  const { C } = useTheme()
   const { uaId }  = useParams()
   const navigate  = useNavigate()
   const { mobile: isMobile, tablet: isTablet } = useBreakpoint()

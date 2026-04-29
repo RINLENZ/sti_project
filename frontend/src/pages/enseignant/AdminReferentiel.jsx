@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Edit3, ChevronDown, ChevronRight,
   Shield, X, Save, AlertTriangle, RefreshCw,
 } from 'lucide-react'
-import { C, useTheme  } from '../../styles/theme'
+import { C } from '../../styles/theme'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 
@@ -24,18 +24,13 @@ const inputBase = {
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border .15s',
 }
 
-const FieldLabel = ({ children, required }) => {
-  const { C } = useTheme()
-  return (
+const FieldLabel = ({ children, required }) => (
   <label style={{ fontSize: 11, fontWeight: 700, color: C.textSec, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: .4 }}>
     {children}{required && <span style={{ color: C.red, marginLeft: 3 }}>*</span>}
   </label>
 )
-}
 
-const FInput = ({ label, value, onChange, placeholder, required, hint }) => {
-  const { C } = useTheme()
-  return (
+const FInput = ({ label, value, onChange, placeholder, required, hint }) => (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
     <input value={value} onChange={onChange} placeholder={placeholder} required={required}
@@ -46,11 +41,8 @@ const FInput = ({ label, value, onChange, placeholder, required, hint }) => {
     {hint && <p style={{ fontSize: 10, color: C.textSec, marginTop: 3 }}>{hint}</p>}
   </div>
 )
-}
 
-const FSelect = ({ label, value, onChange, options, required }) => {
-  const { C } = useTheme()
-  return (
+const FSelect = ({ label, value, onChange, options, required }) => (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
     <select value={value} onChange={onChange} required={required} style={inputBase}>
@@ -58,11 +50,9 @@ const FSelect = ({ label, value, onChange, options, required }) => {
     </select>
   </div>
 )
-}
 
 // ── Modal ───────────────────────────────────────────────────────
 function Modal({ title, onClose, children, accentColor = C.brown }) {
-  const { C } = useTheme()
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
@@ -93,7 +83,6 @@ function Modal({ title, onClose, children, accentColor = C.brown }) {
 
 // ── ConfirmDelete ───────────────────────────────────────────────
 function ConfirmDelete({ item, onConfirm, onCancel }) {
-  const { C } = useTheme()
   return (
     <Modal title="Confirmer la suppression" onClose={onCancel} accentColor={C.red}>
       <div style={{ textAlign: 'center', paddingBottom: 8 }}>
@@ -121,7 +110,6 @@ function ConfirmDelete({ item, onConfirm, onCancel }) {
 
 // ── TableRow ────────────────────────────────────────────────────
 function TableRow({ item, parent, type, onEdit, onDelete, mobile }) {
-  const { C } = useTheme()
   const s = SEC[type]
   return (
     <div style={{
@@ -176,7 +164,6 @@ function TableRow({ item, parent, type, onEdit, onDelete, mobile }) {
 
 // ── AccordionSection ────────────────────────────────────────────
 function AccordionSection({ type, title, count, defaultOpen, children, onAdd }) {
-  const { C } = useTheme()
   const [open, setOpen] = useState(defaultOpen)
   const s = SEC[type]
 
@@ -239,7 +226,6 @@ function AccordionSection({ type, title, count, defaultOpen, children, onAdd }) 
 
 // ── Formulaires par type ────────────────────────────────────────
 function FormCycle({ initial = {}, onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -261,7 +247,6 @@ function FormCycle({ initial = {}, onSubmit, onClose }) {
 }
 
 function FormOrdre({ initial = {}, cycles, onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', cycle_id: initial.cycle_id || cycles[0]?.id || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -285,7 +270,6 @@ function FormOrdre({ initial = {}, cycles, onSubmit, onClose }) {
 }
 
 function FormFiliere({ initial = {}, ordres, onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', description: initial.description || '', ordre_id: initial.ordre_id || ordres[0]?.id || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -312,7 +296,6 @@ function FormFiliere({ initial = {}, ordres, onSubmit, onClose }) {
 }
 
 function FormNiveau({ initial = {}, cycles, onSubmit, onClose }) {
-  const { C } = useTheme()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', cycle_id: initial.cycle_id || cycles[0]?.id || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) {
@@ -341,7 +324,6 @@ function FormNiveau({ initial = {}, cycles, onSubmit, onClose }) {
 // ── PAGE PRINCIPALE ────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
 export default function AdminReferentiel() {
-  const { C } = useTheme()
   const [referentiel, setReferentiel] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null) // { type, mode: 'create'|'edit', data? }
