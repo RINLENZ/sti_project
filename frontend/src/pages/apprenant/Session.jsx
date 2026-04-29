@@ -941,9 +941,6 @@ export default function Session() {
       await sendEvent('response', { exercice_id: ex.id, correct: data.correct, time_seconds: tempsReponse, emotion })
       if (data.correct) {
         toast.success(`+${data.points_gagnes} points !`, { icon: '🎯' })
-        tts(`${msg} ${data.explication || ''}`)
-      } else {
-        tts(`${msg} La bonne réponse était : ${data.reponse_correcte}. ${data.explication || ''}`)
       }
     } catch { toast.error('Erreur de vérification') }
     finally { setSubmitting(false) }
