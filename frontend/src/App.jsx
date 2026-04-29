@@ -1,6 +1,21 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { useEffect } from 'react'
+import { useEffect, Component } from 'react'
+
+class ErrorBoundary extends Component {
+  state = { error: null }
+  static getDerivedStateFromError(e) { return { error: e } }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 40, fontFamily: 'monospace', background: '#1a1a1a', color: '#f87171', minHeight: '100vh' }}>
+        <h2 style={{ color: '#fbbf24' }}>Erreur de rendu</h2>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{this.state.error.message}</pre>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, opacity: .6 }}>{this.state.error.stack}</pre>
+      </div>
+    )
+    return this.props.children
+  }
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -66,7 +81,7 @@ export default function App() {
   const { user, token } = useSelector(s => s.auth)
 
   return (
-    <>
+    <ErrorBoundary>
     <ScrollToTop />
     <Routes>
 
@@ -157,6 +172,6 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace/>}/>
 
     </Routes>
-    </>
+    </ErrorBoundary>
   )
 }

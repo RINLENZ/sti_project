@@ -14,7 +14,6 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 // ── Parsing JSON stocké en DB ─────────────────────────────────────
 function parseListe(val) {
-  const { C } = useTheme()
   if (!val) return []
   if (Array.isArray(val)) return val
   try { return JSON.parse(val) } catch { return [] }
