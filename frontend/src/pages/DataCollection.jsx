@@ -11,7 +11,7 @@ import { useSelector } from 'react-redux'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Camera, ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react'
-import { C } from '../styles/theme'
+import { C, useTheme } from '../styles/theme.jsx'
 
 /* ── Config états affectifs ──────────────────────────────────── */
 const ETATS = [
@@ -68,6 +68,7 @@ const ETATS = [
 const TARGET = 1000   // minimum pour entraînement ; cap backend = 1500
 
 export default function DataCollection() {
+  const { C } = useTheme()
   const navigate   = useNavigate()
   const { user }   = useSelector(s => s.auth)
 
