@@ -7,7 +7,7 @@ import {
   CheckCircle2, PlayCircle, Lock, Trophy,
   ChevronDown, BookMarked, Layers, Star
 } from 'lucide-react'
-import { C } from '../../styles/theme'
+import { C, useTheme } from '../../styles/theme.jsx'
 import { Spinner } from '../Skeleton'
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -33,14 +33,19 @@ function uaStars(ua, progression) {
   return 0
 }
 
-const ProgressBar = ({ value, color = C.emerald, h = 5 }) => (
-  <div style={{ height: h, background: 'rgba(107,58,42,0.1)', borderRadius: h, overflow: 'hidden' }}>
-    <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, background: color, borderRadius: h, transition: 'width .7s ease' }} />
-  </div>
-)
+const ProgressBar = ({ value, color, h = 5 }) => {
+  const { C } = useTheme()
+  const col = color ?? C.emerald
+  return (
+    <div style={{ height: h, background: C.brownPale, borderRadius: h, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, background: col, borderRadius: h, transition: 'width .7s ease' }} />
+    </div>
+  )
+}
 
 // ── Nœud UA style Duolingo ──────────────────────────────────────
 function UANode({ ua, index, progression, recommandeeId, navigate, isLast }) {
+  const { C } = useTheme()
   const status  = uaStatus(ua, progression)
   const stars   = uaStars(ua, progression)
   const isDone       = status === 'done'
@@ -199,6 +204,7 @@ function UANode({ ua, index, progression, recommandeeId, navigate, isLast }) {
 
 // ── Section famille (accordéon) ─────────────────────────────────
 function FamilleSection({ famille, index, progression, recommandeeId, navigate }) {
+  const { C } = useTheme()
   const [open, setOpen] = useState(index === 0)
 
   const doneFam  = (famille.unites || []).filter(u => uaStatus(u, progression) === 'done').length
@@ -286,6 +292,7 @@ function FamilleSection({ famille, index, progression, recommandeeId, navigate }
 // ── PAGE PARCOURS ───────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════
 export default function ParcoursPage({ onBack }) {
+  const { C } = useTheme()
   const { user }   = useSelector(s => s.auth)
   const navigate   = useNavigate()
 

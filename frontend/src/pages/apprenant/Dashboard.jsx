@@ -12,7 +12,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   PolarRadiusAxis, ResponsiveContainer, Tooltip
 } from 'recharts'
-import { C } from '../../styles/theme'
+import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkDashboard } from '../../components/Skeleton'
 
@@ -32,16 +32,23 @@ const UAStatus = pct => {
 
 /* ─── Sub-components ────────────────────────────────────────────── */
 
-const ProgressBar = ({ value, color = C.emerald, h = 5, bg = C.border }) => (
-  <div style={{ height: h, backgroundColor: bg, borderRadius: h, overflow: 'hidden' }}>
-    <div style={{
-      height: '100%', width: `${Math.min(100, Math.max(0, value))}%`,
-      backgroundColor: color, borderRadius: h, transition: 'width .7s cubic-bezier(.4,0,.2,1)'
-    }} />
-  </div>
-)
+const ProgressBar = ({ value, color, h = 5, bg }) => {
+  const { C } = useTheme()
+  const col = color ?? C.emerald
+  const bgCol = bg ?? C.border
+  return (
+    <div style={{ height: h, backgroundColor: bgCol, borderRadius: h, overflow: 'hidden' }}>
+      <div style={{
+        height: '100%', width: `${Math.min(100, Math.max(0, value))}%`,
+        backgroundColor: col, borderRadius: h, transition: 'width .7s cubic-bezier(.4,0,.2,1)'
+      }} />
+    </div>
+  )
+}
 
-const StatCard = ({ label, value, subtitle, color, Icon, xs }) => (
+const StatCard = ({ label, value, subtitle, color, Icon, xs }) => {
+  const { C } = useTheme()
+  return (
   <div style={{
     backgroundColor: C.surface, borderRadius: xs ? 12 : 14,
     padding: xs ? '12px 13px' : '15px 17px',
@@ -66,10 +73,12 @@ const StatCard = ({ label, value, subtitle, color, Icon, xs }) => (
     <span style={{ fontSize: xs ? 19 : 23, fontWeight: 900, color: C.text, lineHeight: 1, letterSpacing: -.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
     {subtitle && <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</span>}
   </div>
-)
+  )
+}
 
 /* ── UA compact card ── */
 const UACard = ({ ua, pct, isReco, onClick }) => {
+  const { C } = useTheme()
   const st = UAStatus(pct)
   const StatusIcon = st.icon
   const [hov, setHov] = useState(false)
@@ -143,6 +152,7 @@ const UACard = ({ ua, pct, isReco, onClick }) => {
 
 /* ── Famille collapsible ── */
 const FamilleSection = ({ famille, progression, recommandee, navigate, defaultOpen }) => {
+  const { C } = useTheme()
   const [open, setOpen] = useState(defaultOpen)
   const doneFam = (famille.unites || []).filter(ua => {
     const ex = (progression?.details || []).filter(d => d.correct && String(d.ua_id) === String(ua.id)).length
@@ -189,6 +199,7 @@ const FamilleSection = ({ famille, progression, recommandee, navigate, defaultOp
 
 /* ── Module accordion ── */
 const ModuleAccordion = ({ module, familles, progression, recommandee, navigate }) => {
+  const { C } = useTheme()
   const totalUA = familles.reduce((a, f) => a + (f.unites || []).length, 0)
   const doneUA = familles.reduce((a, f) => a + (f.unites || []).filter(ua => {
     const ex = (progression?.details || []).filter(d => d.correct && String(d.ua_id) === String(ua.id)).length
@@ -283,6 +294,7 @@ const ModuleAccordion = ({ module, familles, progression, recommandee, navigate 
 
 /* ── Sidebar BKT top 3 ── */
 const SidebarBKT = ({ bktData }) => {
+  const { C } = useTheme()
   if (!bktData || !Object.keys(bktData.competences).length) return null
   const top3 = Object.entries(bktData.competences)
     .sort((a, b) => b[1].pourcentage - a[1].pourcentage)
@@ -327,6 +339,7 @@ const SidebarBKT = ({ bktData }) => {
 
 /* ── Next badge ── */
 const NextBadge = ({ bktData }) => {
+  const { C } = useTheme()
   if (!bktData) return null
   const next = Object.entries(bktData.competences)
     .filter(([, v]) => v.pourcentage < 95)
@@ -358,6 +371,7 @@ const NextBadge = ({ bktData }) => {
 
 /* ─── Dashboard principal ──────────────────────────────────────── */
 export default function Dashboard() {
+  const { C } = useTheme()
   const { user }  = useSelector(s => s.auth)
   const navigate  = useNavigate()
   const { xs, mobile, desktop } = useBreakpoint()
