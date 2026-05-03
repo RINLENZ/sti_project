@@ -5,7 +5,8 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   Users, TrendingUp, AlertTriangle, Activity,
-  RefreshCw, CheckCircle, Plus, ChevronRight, Edit2, Check, X
+  RefreshCw, CheckCircle, Plus, ChevronRight, Edit2, Check, X,
+  FileText, Award, ShieldAlert, ClipboardList
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -66,11 +67,62 @@ const StatCard = ({ label, value, subtitle, color, Icon, trend }) => {
   )
 }
 
+function EpreuvesWidget({ navigate, C }) {
+  const { user }    = useSelector(s => s.auth)
+  const [eps, setEps] = useState([])
+
+  useEffect(() => {
+    api.get('/api/examens/').then(({ data }) => setEps(data)).catch(() => {})
+  }, [user.id])
+
+  const publiees  = eps.filter(e => e.statut === 'publie')
+  const brouillon = eps.filter(e => e.statut === 'brouillon')
+
+  return (
+    <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: 18, marginBottom: 16, border: `1px solid ${C.brownPale}`, boxShadow: '0 2px 10px rgba(107,58,42,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <ClipboardList size={14} color={C.brown}/>
+          <h3 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Mes épreuves</h3>
+        </div>
+        <button onClick={() => navigate('/prof/examens')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, color: C.brownLight }}>Gérer →</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: eps.length > 0 ? 12 : 0 }}>
+        {[
+          { label: 'Publiées',   value: publiees.length,  color: C.emerald },
+          { label: 'Brouillons', value: brouillon.length, color: C.orange  },
+        ].map(s => (
+          <div key={s.label} style={{ background: C.brownPale, borderRadius: 9, padding: '9px', textAlign: 'center' }}>
+            <p style={{ fontSize: 18, fontWeight: 900, color: s.color, margin: 0 }}>{s.value}</p>
+            <p style={{ fontSize: 9, color: C.textMuted, fontWeight: 700, margin: 0 }}>{s.label}</p>
+          </div>
+        ))}
+      </div>
+      {publiees.slice(0, 3).map(ep => (
+        <div key={ep.id} onClick={() => navigate('/prof/examens')} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 9, cursor: 'pointer', marginBottom: 4, background: C.bg, border: `1px solid ${C.border}`, transition: 'all .15s' }}
+          onMouseEnter={e => e.currentTarget.style.background = C.brownPale}
+          onMouseLeave={e => e.currentTarget.style.background = C.bg}
+        >
+          <FileText size={12} color={C.brown} style={{ flexShrink: 0 }}/>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.titre}</p>
+          <span style={{ fontSize: 9, fontWeight: 700, color: C.emerald, background: `${C.emerald}15`, padding: '1px 6px', borderRadius: 10, flexShrink: 0 }}>
+            {ep.nb_reponses || 0} copie{(ep.nb_reponses || 0) !== 1 ? 's' : ''}
+          </span>
+        </div>
+      ))}
+      {eps.length === 0 && (
+        <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>Aucune épreuve créée</p>
+      )}
+    </div>
+  )
+}
+
 function BKTModal({ apprenant, onClose }) {
   const { C } = useTheme()
-  const [bkt, setBkt]         = useState(null)
-  const [history, setHistory] = useState(null)
-  const [tab, setTab]         = useState('radar')
+  const [bkt, setBkt]           = useState(null)
+  const [history, setHistory]   = useState(null)
+  const [epreuves, setEpreuves] = useState(null)
+  const [tab, setTab]           = useState('radar')
 
   useEffect(() => {
     api.get(`/api/bkt/apprenant/${apprenant.user_id}`)
@@ -79,6 +131,9 @@ function BKTModal({ apprenant, onClose }) {
     api.get(`/api/cours/sessions/historique/${apprenant.user_id}?limit=20`)
       .then(({ data }) => setHistory(data))
       .catch(() => setHistory([]))
+    api.get(`/api/examens/apprenant/${apprenant.user_id}/resultats`)
+      .then(({ data }) => setEpreuves(data))
+      .catch(() => setEpreuves([]))
   }, [apprenant.user_id])
 
   const data = bkt ? Object.entries(bkt.competences).map(([comp, val]) => ({
@@ -104,8 +159,9 @@ function BKTModal({ apprenant, onClose }) {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#E5E7EB', padding: 4, borderRadius: 10 }}>
         {[
-          { key: 'radar',   label: '🎯 Compétences' },
-          { key: 'history', label: '📈 Engagement' },
+          { key: 'radar',    label: '🎯 Compétences' },
+          { key: 'history',  label: '📈 Engagement'  },
+          { key: 'epreuves', label: '📋 Épreuves'    },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, padding: '8px', border: 'none', borderRadius: 7,
@@ -210,6 +266,75 @@ function BKTModal({ apprenant, onClose }) {
               <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: C.textSec }}>
                 <div style={{ width: 16, height: 2, background: C.brown, borderRadius: 1, borderTop: '2px dashed ' + C.brown }} /> Score exercices
               </span>
+            </div>
+          </>
+        )
+      )}
+
+      {/* Tab: Épreuves */}
+      {tab === 'epreuves' && (
+        epreuves === null ? (
+          <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+        ) : epreuves.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <p style={{ fontSize: 32, marginBottom: 8 }}>📋</p>
+            <p style={{ color: C.textSec, fontSize: 13, fontWeight: 600 }}>Aucune épreuve publiée.</p>
+          </div>
+        ) : (
+          <>
+            {(() => {
+              const soumises = epreuves.filter(e => e.soumis && e.score_total != null)
+              const moy = soumises.length > 0 ? soumises.reduce((a,e) => a + e.score_total, 0) / soumises.length : null
+              return (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  {[
+                    { label: 'Passées',  value: soumises.length,                                                         color: C.emerald },
+                    { label: 'À faire',  value: epreuves.filter(e => !e.soumis && e.statut_ep === 'publie').length,      color: C.orange  },
+                    { label: 'Moyenne',  value: moy != null ? `${moy.toFixed(1)}/20` : '—',                              color: '#2563eb' },
+                  ].map(s => (
+                    <div key={s.label} style={{ flex: 1, background: C.brownPale, borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                      <p style={{ fontSize: 15, fontWeight: 900, color: s.color, margin: 0 }}>{s.value}</p>
+                      <p style={{ fontSize: 9, color: C.textSec, fontWeight: 700, margin: 0 }}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
+              {epreuves.map(ep => (
+                <div key={ep.epreuve_id} style={{
+                  padding: '10px 12px', borderRadius: 10,
+                  background: ep.soumis ? `${C.emerald}08` : C.brownPale,
+                  border: `1px solid ${ep.soumis ? C.emerald + '30' : C.border}`,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: ep.soumis ? `${C.emerald}18` : `${C.brown}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {ep.soumis ? <CheckCircle size={15} color={C.emerald}/> : <FileText size={15} color={C.brown}/>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.titre}</p>
+                    <p style={{ margin: 0, fontSize: 10, color: C.textMuted }}>
+                      {ep.classe_label || ep.type_epreuve}
+                      {ep.submitted_at && ` · ${new Date(ep.submitted_at).toLocaleDateString('fr-FR')}`}
+                    </p>
+                  </div>
+                  <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                    {ep.soumis && ep.score_total != null ? (
+                      <>
+                        <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: ep.score_total >= 10 ? C.emerald : C.red }}>{ep.score_total.toFixed(1)}</p>
+                        <p style={{ margin: 0, fontSize: 9, color: C.textMuted }}>/20</p>
+                      </>
+                    ) : ep.statut_ep === 'publie' ? (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: C.orange, background: `${C.orange}15`, padding: '2px 6px', borderRadius: 10 }}>À faire</span>
+                    ) : (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: C.textMuted }}>—</span>
+                    )}
+                    {ep.soumis && ep.nb_incidents > 0 && (
+                      <ShieldAlert size={11} color="#EF4444" style={{ display: 'block', margin: '2px auto 0' }} title={`${ep.nb_incidents} incident(s)`}/>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         )
@@ -689,11 +814,15 @@ export default function DashboardProf() {
             ))}
           </div>
 
+          {/* Widget épreuves */}
+          <EpreuvesWidget navigate={navigate} C={C} />
+
           {/* Navigation rapide */}
           <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.brownPale}` }}>
             <h3 style={{ fontSize: 13, fontWeight: 800, color: C.brown, marginBottom: 12 }}>Navigation rapide</h3>
             {[
-              { label: 'Gestion des cours', path: '/admin', icon: '📚' },
+              { label: 'Épreuves IA',       path: '/prof/examens', icon: '📋' },
+              { label: 'Gestion des cours',  path: '/admin',        icon: '📚' },
             ].map(item => (
               <button key={item.path} onClick={() => navigate(item.path)} style={{
                 width: '100%', backgroundColor: C.brownPale,

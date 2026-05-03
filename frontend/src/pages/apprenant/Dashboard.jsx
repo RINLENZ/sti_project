@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   BookOpen, Clock, Target, Award, Flame, Copy, CheckCircle,
   ChevronRight, Brain, Star, ChevronDown, Lock, PlayCircle,
-  CheckCircle2, Zap, BarChart2
+  CheckCircle2, Zap, BarChart2, ClipboardList, FileText
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -382,6 +382,7 @@ export default function Dashboard() {
   const [progression,     setProgression]     = useState(null)
   const [bktData,         setBktData]         = useState(null)
   const [recommandee,     setRecommandee]     = useState(null)
+  const [epreuves,        setEpreuves]        = useState([])
   const [loading,         setLoading]         = useState(true)
   const [copied,          setCopied]          = useState(false)
 
@@ -420,6 +421,10 @@ export default function Dashboard() {
         try {
           const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
           setRecommandee(reco?.recommandee || null)
+        } catch {}
+        try {
+          const { data: ep } = await api.get('/api/examens/disponibles')
+          setEpreuves(ep)
         } catch {}
       } catch {
         toast.error('Erreur de chargement')
@@ -640,6 +645,45 @@ export default function Dashboard() {
 
       <SidebarBKT bktData={bktData} />
       <NextBadge bktData={bktData} />
+
+      {/* Widget épreuves */}
+      <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '16px 18px', marginTop: 14, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ClipboardList size={13} color={C.brown} />
+            <h3 style={{ fontSize: 11, fontWeight: 800, color: C.brown, margin: 0 }}>Épreuves</h3>
+          </div>
+          <button onClick={() => navigate('/epreuves')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, color: C.brownLight }}>Tout voir →</button>
+        </div>
+        {epreuves.length === 0 ? (
+          <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', padding: '10px 0' }}>Aucune épreuve disponible</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {epreuves.slice(0, 3).map(ep => (
+              <div key={ep.id} onClick={() => navigate(`/epreuve/${ep.id}`)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: ep.soumis ? `${C.emerald}08` : C.bg, border: `1px solid ${ep.soumis ? C.emerald + '30' : C.border}`, transition: 'all .15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = ep.soumis ? `${C.emerald}15` : C.brownPale}
+                onMouseLeave={e => e.currentTarget.style.background = ep.soumis ? `${C.emerald}08` : C.bg}
+              >
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: ep.soumis ? `${C.emerald}18` : `${C.brown}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {ep.soumis ? <CheckCircle size={13} color={C.emerald} /> : <FileText size={13} color={C.brown} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.titre}</p>
+                  <p style={{ margin: 0, fontSize: 10, color: C.textMuted }}>{ep.soumis && ep.score_total != null ? `${ep.score_total.toFixed(1)}/20` : `${ep.duree_minutes} min`}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {epreuves.filter(e => !e.soumis).length > 0 && (
+          <div style={{ marginTop: 10, padding: '7px 10px', borderRadius: 8, background: `${C.brown}10`, border: `1px solid ${C.brown}25`, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.brown, flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.brown }}>
+              {epreuves.filter(e => !e.soumis).length} à passer
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 

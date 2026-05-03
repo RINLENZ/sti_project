@@ -72,7 +72,8 @@ export default function Login() {
       params.append('password', form.password)
       const { data } = await api.post('/auth/login', params)
 dispatch(loginSuccess({
-  token: data.access_token,
+  token:        data.access_token,
+  refreshToken: data.refresh_token,
   user: {
     id:                  data.user_id,
     role:                data.role,

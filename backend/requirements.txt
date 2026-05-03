@@ -25,3 +25,8 @@ python-dotenv>=1.0.0
 websockets==12.0
 anthropic>=0.40.0
 supabase>=2.3.0
+
+# NLP / Correction sémantique
+numpy>=1.24.0
+scikit-learn>=1.3.0
+# sentence-transformers optionnel (requiert torch ~2 GB) — activé automatiquement si installé manuellement

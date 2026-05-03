@@ -5,7 +5,8 @@ import api from '../../services/api'
 import {
   Map, BookOpen, Clock, ChevronRight, ChevronLeft,
   CheckCircle2, PlayCircle, Lock, Trophy,
-  ChevronDown, BookMarked, Layers, Star
+  ChevronDown, BookMarked, Layers, Star,
+  ClipboardList, FileText, Award, ShieldAlert
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
 import { Spinner } from '../Skeleton'
@@ -305,6 +306,8 @@ export default function ParcoursPage({ onBack }) {
   const [selectedMod, setSelectedMod] = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [loadingFam,  setLoadingFam]  = useState(false)
+  const [activeTab,   setActiveTab]   = useState('cours')
+  const [epreuves,    setEpreuves]    = useState([])
 
   // ── Charge les familles d'un module ──────────────────────────
   const loadFamilles = useCallback(async (mod) => {
@@ -344,6 +347,10 @@ export default function ParcoursPage({ onBack }) {
         try {
           const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
           setRecommandee(reco?.recommandee || null)
+        } catch {}
+        try {
+          const { data: ep } = await api.get('/api/examens/disponibles')
+          setEpreuves(ep)
         } catch {}
       } catch {}
       finally { setLoading(false) }
@@ -440,7 +447,125 @@ export default function ParcoursPage({ onBack }) {
         </div>
       </div>
 
-      {/* ── SÉLECTEURS matière + module ── */}
+      {/* ── ONGLETS ── */}
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.brownPale}`, padding: '0 24px', display: 'flex', gap: 4 }}>
+        {[
+          { id: 'cours',    label: 'Cours',    icon: BookOpen      },
+          { id: 'epreuves', label: 'Épreuves', icon: ClipboardList, badge: epreuves.filter(e => !e.soumis).length },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '12px 16px', fontSize: 12, fontWeight: activeTab === tab.id ? 800 : 600,
+            color: activeTab === tab.id ? C.brown : C.textSec,
+            borderBottom: activeTab === tab.id ? `2px solid ${C.brown}` : '2px solid transparent',
+            display: 'flex', alignItems: 'center', gap: 6, transition: 'all .15s', position: 'relative',
+          }}>
+            <tab.icon size={13}/>
+            {tab.label}
+            {tab.badge > 0 && (
+              <span style={{ background: '#EF4444', color: 'white', borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 800 }}>{tab.badge}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ONGLET ÉPREUVES ── */}
+      {activeTab === 'epreuves' && (
+        <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
+          {epreuves.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: C.textMuted }}>
+              <FileText size={40} style={{ marginBottom: 12, opacity: 0.3 }}/>
+              <p style={{ fontWeight: 700, color: C.text }}>Aucune épreuve disponible</p>
+              <p style={{ fontSize: 13 }}>Ton enseignant n'a pas encore publié d'épreuve.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Stats rapides */}
+              {epreuves.some(e => e.soumis) && (() => {
+                const soumises = epreuves.filter(e => e.soumis && e.score_total != null)
+                const moyenne  = soumises.length > 0 ? soumises.reduce((a, e) => a + e.score_total, 0) / soumises.length : null
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 8 }}>
+                    {[
+                      { label: 'Passées',    value: soumises.length,         color: C.emerald, icon: CheckCircle2 },
+                      { label: 'À passer',   value: epreuves.filter(e => !e.soumis).length, color: C.brown, icon: Clock },
+                      { label: 'Moyenne',    value: moyenne != null ? `${moyenne.toFixed(1)}/20` : '—', color: '#2563eb', icon: Award },
+                    ].map(s => (
+                      <div key={s.label} style={{ background: C.surface, borderRadius: 12, padding: '12px 14px', border: `1px solid ${C.border}`, boxShadow: '0 1px 6px rgba(107,58,42,0.07)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                          <s.icon size={12} color={s.color}/>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: .5 }}>{s.label}</span>
+                        </div>
+                        <p style={{ fontSize: 20, fontWeight: 900, color: s.color, margin: 0, lineHeight: 1 }}>{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              {/* Liste épreuves */}
+              {epreuves.map(ep => (
+                <div key={ep.id} onClick={() => navigate(`/epreuve/${ep.id}`)} style={{
+                  background: C.surface, borderRadius: 14, padding: '16px 20px',
+                  border: `1.5px solid ${ep.soumis ? `${C.emerald}35` : C.brownPale}`,
+                  cursor: 'pointer', transition: 'all .2s',
+                  boxShadow: '0 1px 8px rgba(107,58,42,0.06)',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 4px 20px ${C.brown}18` }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 8px rgba(107,58,42,0.06)' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 12, background: ep.soumis ? `${C.emerald}18` : `${C.brown}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {ep.soumis ? <CheckCircle2 size={20} color={C.emerald}/> : <FileText size={20} color={C.brown}/>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.titre}</p>
+                        {ep.soumis && ep.nb_incidents > 0 && (
+                          <span title={`${ep.nb_incidents} incident(s)`}>
+                            <ShieldAlert size={13} color="#EF4444"/>
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: C.textSec }}>{ep.classe_label || ep.type_epreuve}</span>
+                        <span style={{ fontSize: 11, color: C.textSec }}>{ep.duree_minutes} min</span>
+                        {ep.soumis && ep.score_total != null && (
+                          <span style={{ fontSize: 12, fontWeight: 800, color: ep.score_total >= 10 ? C.emerald : '#EF4444' }}>
+                            {ep.score_total.toFixed(1)}/20
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {ep.soumis && ep.score_total != null && (
+                      <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '50%', border: `3px solid ${ep.score_total >= 10 ? C.emerald : '#EF4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ fontSize: 11, fontWeight: 900, color: ep.score_total >= 10 ? C.emerald : '#EF4444' }}>{ep.score_total.toFixed(0)}</span>
+                        </div>
+                        <p style={{ fontSize: 9, color: C.textMuted, margin: '2px 0 0', fontWeight: 600 }}>/20</p>
+                      </div>
+                    )}
+                    {!ep.soumis && (
+                      <ChevronRight size={16} color={C.brown}/>
+                    )}
+                  </div>
+                  {/* Barre score P1+P2 */}
+                  {ep.soumis && ep.score_total != null && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ height: 6, background: C.brownPale, borderRadius: 6, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 6, background: ep.score_total >= 10 ? C.emerald : '#EF4444', width: `${(ep.score_total / 20) * 100}%`, transition: 'width .7s ease' }}/>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ONGLET COURS ── */}
+      {activeTab === 'cours' && <>
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.brownPale}`, padding: '0 28px' }}>
 
         {/* Matières */}
@@ -584,6 +709,7 @@ export default function ParcoursPage({ onBack }) {
           </div>
         )}
       </div>
+      </>}
     </div>
   )
 }

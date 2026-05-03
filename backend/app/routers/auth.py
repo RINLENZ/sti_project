@@ -8,8 +8,8 @@ from uuid import UUID
 from ..database import get_db
 from ..models.user import User
 from ..services.auth_service import (
-    authenticate_user, create_access_token,
-    hash_password, get_user_by_email
+    authenticate_user, create_access_token, create_refresh_token,
+    decode_refresh_token, hash_password, get_user_by_email
 )
 from ..dependencies import get_current_user
 
@@ -30,14 +30,19 @@ class UserCreate(BaseModel):
 
 
 class Token(BaseModel):
-    access_token: str
-    token_type:   str
-    user_id:      str
-    role:         str
-    nom:          str
-    prenom:       str
-    niveau:       Optional[str]
+    access_token:  str
+    refresh_token: str
+    token_type:    str
+    user_id:       str
+    role:          str
+    nom:           str
+    prenom:        str
+    niveau:        Optional[str]
     code_invitation: Optional[str]
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 # ── Authentification ───────────────────────────────────────────────
@@ -75,9 +80,12 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou mot de passe incorrect"
         )
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+    claims = {"sub": str(user.id), "role": user.role}
+    token         = create_access_token(claims)
+    refresh_token = create_refresh_token(claims)
     return {
         "access_token":        token,
+        "refresh_token":       refresh_token,
         "token_type":          "bearer",
         "user_id":             str(user.id),
         "role":                user.role,
@@ -95,6 +103,25 @@ def login(
         "matieres_enseignees": user.matieres_enseignees,
         "niveaux_enseignes":   user.niveaux_enseignes,
         "code_classe":         user.code_classe,
+    }
+
+
+@router.post("/refresh")
+def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
+    """Échange un refresh token valide contre un nouvel access token."""
+    payload = decode_refresh_token(body.refresh_token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Refresh token invalide ou expiré")
+
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user or not user.actif:
+        raise HTTPException(status_code=401, detail="Utilisateur introuvable ou inactif")
+
+    claims = {"sub": str(user.id), "role": user.role}
+    return {
+        "access_token":  create_access_token(claims),
+        "refresh_token": create_refresh_token(claims),
+        "token_type":    "bearer",
     }
 
 

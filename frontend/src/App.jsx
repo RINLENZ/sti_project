@@ -14,15 +14,18 @@ import Register             from './pages/auth/Register'
 import Onboarding           from './pages/auth/Onboarding'
 import OnboardingEnseignant from './pages/auth/OnboardingEnseignant'
 
-import Dashboard    from './pages/apprenant/Dashboard'
-import CoursDetail  from './pages/apprenant/CoursDetail'
-import Session      from './pages/apprenant/Session'
-import Profil       from './pages/apprenant/Profil'
+import Dashboard      from './pages/apprenant/Dashboard'
+import CoursDetail    from './pages/apprenant/CoursDetail'
+import Session        from './pages/apprenant/Session'
+import Profil         from './pages/apprenant/Profil'
+import MesEpreuves    from './pages/apprenant/MesEpreuves'
+import EpreuveSession from './pages/apprenant/EpreuveSession'
 
 import DashboardProf      from './pages/enseignant/DashboardProf'
 import AdminCours         from './pages/enseignant/AdminCours'
 import AdminReferentiel   from './pages/enseignant/AdminReferentiel'
 import ProfilEnseignant   from './pages/enseignant/ProfilEnseignant'
+import AdminExamen        from './pages/enseignant/AdminExamen'
 import DataCollection   from './pages/DataCollection'
 import AudioCollection  from './pages/AudioCollection'
 
@@ -119,11 +122,24 @@ export default function App() {
       <Route path="/session/:uaId" element={
         <ApprenantRoute><Session/></ApprenantRoute>
       }/>
+      <Route path="/epreuves" element={
+        <ApprenantRoute>
+          <AppLayout><MesEpreuves/></AppLayout>
+        </ApprenantRoute>
+      }/>
+      <Route path="/epreuve/:epreuveId" element={
+        <ApprenantRoute><EpreuveSession/></ApprenantRoute>
+      }/>
 
       {/* ── Routes enseignant ── */}
       <Route path="/prof" element={
         <EnseignantRoute>
           <AppLayout><DashboardProf/></AppLayout>
+        </EnseignantRoute>
+      }/>
+      <Route path="/prof/examens" element={
+        <EnseignantRoute>
+          <AppLayout><AdminExamen/></AppLayout>
         </EnseignantRoute>
       }/>
 

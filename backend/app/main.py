@@ -8,14 +8,13 @@ from .database import Base, engine
 from .routers import auth
 from .routers import interactions
 from .models import cours
+from .models import examen as _examen_models  # noqa: F401 — ensures tables are registered
 from .routers import cours
 from .routers import bkt
 from .routers import admin
 from .routers import tuteur
 from .routers import annotation
-
-# Crée les tables au démarrage (en dev ; en prod on utilise Alembic)
-Base.metadata.create_all(bind=engine)
+from .routers import examen
 
 app = FastAPI(
     title="STI Adaptatif — API",
@@ -72,6 +71,7 @@ app.include_router(tuteur.router)
 app.include_router(bkt.router)
 app.include_router(admin.router)
 app.include_router(annotation.router)
+app.include_router(examen.router)
 
 @app.get("/health")
 def health_check():

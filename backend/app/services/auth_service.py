@@ -16,8 +16,24 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(data: dict) -> str:
     payload = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
-    payload.update({"exp": expire})
+    payload.update({"exp": expire, "type": "access"})
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+def create_refresh_token(data: dict) -> str:
+    payload = data.copy()
+    expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
+    payload.update({"exp": expire, "type": "refresh"})
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+def decode_refresh_token(token: str) -> dict | None:
+    from jose import JWTError
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        if payload.get("type") != "refresh":
+            return None
+        return payload
+    except JWTError:
+        return None
 
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()

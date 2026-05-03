@@ -6,7 +6,8 @@ class Settings(BaseSettings):
     redis_url: str
     secret_key: str
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
     environment: str = "development"
     anthropic_api_key: str = ""
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"

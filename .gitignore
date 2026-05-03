@@ -1,4 +1,24 @@
-__pycache__/\n*.pyc\n.env\nvenv/\nnode_modules/
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+node_modules/
+dist/
+build/
 
 # Local Netlify folder
 .netlify
+
+# User-uploaded data (frames, audio)
+backend/data/frames/
+backend/data/audio/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store

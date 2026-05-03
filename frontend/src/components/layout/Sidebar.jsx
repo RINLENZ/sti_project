@@ -1,13 +1,14 @@
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import SensiaLogo from '../SensiaLogo'
+import api from '../../services/api'
 import {
   LayoutDashboard, BookOpen, LogOut,
   GraduationCap, ChevronLeft, ChevronRight,
   BarChart2, Shield, UserCircle,
-  Map, Menu, X, Home, Sun, Moon,
+  Map, Menu, X, Home, Sun, Moon, FileText, ClipboardList,
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
 
@@ -30,7 +31,7 @@ function ECGWave({ width = 22, height = 14, color = 'white' }) {
 }
 
 // ── Bouton nav réutilisable ───────────────────────────────────────
-function NavBtn({ icon: Icon, label, active, onClick, color, collapsed, title }) {
+function NavBtn({ icon: Icon, label, active, onClick, color, collapsed, title, badge }) {
   const [hovered, setHovered] = useState(false)
   return (
     <button
@@ -51,11 +52,25 @@ function NavBtn({ icon: Icon, label, active, onClick, color, collapsed, title })
         borderRadius: '0 9px 9px 0',
         color: active ? 'white' : hovered ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)',
         fontSize: 13, fontWeight: active ? 700 : 500,
-        transition: 'all .15s',
+        transition: 'all .15s', position: 'relative',
       }}
     >
-      <Icon size={16} style={{ flexShrink: 0, color: color || 'inherit' }}/>
-      {!collapsed && <span style={{ color: color || 'inherit' }}>{label}</span>}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <Icon size={16} style={{ color: color || 'inherit' }}/>
+        {badge > 0 && (
+          <span style={{
+            position: 'absolute', top: -5, right: -6,
+            background: '#EF4444', color: 'white',
+            borderRadius: '50%', width: 14, height: 14,
+            fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1.5px solid rgba(0,0,0,0.3)',
+          }}>{badge > 9 ? '9+' : badge}</span>
+        )}
+      </div>
+      {!collapsed && <span style={{ color: color || 'inherit', flex: 1 }}>{label}</span>}
+      {!collapsed && badge > 0 && (
+        <span style={{ background: '#EF4444', color: 'white', borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 800 }}>{badge}</span>
+      )}
     </button>
   )
 }
@@ -67,6 +82,14 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { isDark, toggleTheme } = useTheme()
+  const [epBadge, setEpBadge] = useState(0)
+
+  useEffect(() => {
+    if (user?.role !== 'apprenant') return
+    api.get('/api/examens/disponibles').then(({ data }) => {
+      setEpBadge(data.filter(e => !e.soumis).length)
+    }).catch(() => {})
+  }, [user?.role])
 
   const roleInfo = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
 
@@ -85,14 +108,16 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
     },
     enseignant: {
       main: [
-        { path: '/prof',   label: 'Suivi des apprenants', icon: BarChart2  },
-        { path: '/profil', label: 'Mon profil',            icon: UserCircle },
+        { path: '/prof',          label: 'Suivi des apprenants', icon: BarChart2  },
+        { path: '/prof/examens',  label: 'Épreuves IA',          icon: FileText   },
+        { path: '/profil',        label: 'Mon profil',            icon: UserCircle },
       ],
     },
     apprenant: {
       main: [
-        { path: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-        { path: '/profil',    label: 'Mon profil',       icon: UserCircle      },
+        { path: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard  },
+        { path: '/epreuves',  label: 'Mes épreuves',    icon: ClipboardList    },
+        { path: '/profil',    label: 'Mon profil',       icon: UserCircle       },
       ],
     },
   }
@@ -165,6 +190,7 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
               {nav.main.map(l => (
                 <NavBtn key={l.path} icon={l.icon} label={l.label} collapsed={collapsed}
                   active={activeView === 'main' && location.pathname === l.path}
+                  badge={l.path === '/epreuves' ? epBadge : 0}
                   onClick={() => { onViewChange('main'); navigate(l.path) }}
                 />
               ))}
@@ -251,22 +277,32 @@ function MobileBottomNav({ activeView, onViewChange }) {
   const navigate   = useNavigate()
   const location   = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [epBadge,  setEpBadge]  = useState(0)
   const { isDark, toggleTheme } = useTheme()
+
+  useEffect(() => {
+    if (user?.role !== 'apprenant') return
+    api.get('/api/examens/disponibles').then(({ data }) => {
+      setEpBadge(data.filter(e => !e.soumis).length)
+    }).catch(() => {})
+  }, [user?.role])
 
   const roleInfo = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
 
   // Tabs selon rôle
   const TABS = {
     apprenant: [
-      { id: 'home',     icon: Home,       label: 'Accueil',  action: 'nav',      path: '/dashboard' },
-      { id: 'parcours', icon: Map,        label: 'Parcours', action: 'parcours'                     },
-      { id: 'profil',   icon: UserCircle, label: 'Profil',   action: 'nav',      path: '/profil'    },
-      { id: 'menu',     icon: Menu,       label: 'Menu',     action: 'menu'                         },
+      { id: 'home',     icon: Home,          label: 'Accueil',  action: 'nav', path: '/dashboard' },
+      { id: 'parcours', icon: Map,           label: 'Parcours', action: 'parcours'                },
+      { id: 'epreuves', icon: ClipboardList, label: 'Épreuves', action: 'nav', path: '/epreuves' },
+      { id: 'profil',   icon: UserCircle,    label: 'Profil',   action: 'nav', path: '/profil'   },
+      { id: 'menu',     icon: Menu,          label: 'Menu',     action: 'menu'                   },
     ],
     enseignant: [
-      { id: 'suivi',  icon: BarChart2,  label: 'Suivi',  action: 'nav', path: '/prof'   },
-      { id: 'profil', icon: UserCircle, label: 'Profil', action: 'nav', path: '/profil' },
-      { id: 'menu',   icon: Menu,       label: 'Menu',   action: 'menu'                 },
+      { id: 'suivi',    icon: BarChart2,  label: 'Suivi',    action: 'nav', path: '/prof'         },
+      { id: 'examens',  icon: FileText,   label: 'Épreuves', action: 'nav', path: '/prof/examens' },
+      { id: 'profil',   icon: UserCircle, label: 'Profil',   action: 'nav', path: '/profil'       },
+      { id: 'menu',     icon: Menu,       label: 'Menu',     action: 'menu'                        },
     ],
     super_admin: [
       { id: 'admin', icon: Shield,   label: 'Admin',  action: 'nav', path: '/admin'             },
@@ -299,7 +335,9 @@ function MobileBottomNav({ activeView, onViewChange }) {
   // Menu links pour le drawer
   const menuLinks = [
     { path: '/dashboard',         label: 'Tableau de bord',     icon: LayoutDashboard, show: user?.role === 'apprenant' },
+    { path: '/epreuves',          label: 'Mes épreuves',         icon: ClipboardList,   show: user?.role === 'apprenant' },
     { path: '/prof',              label: 'Suivi des apprenants', icon: BarChart2,       show: ['enseignant','super_admin'].includes(user?.role) },
+    { path: '/prof/examens',      label: 'Épreuves IA',          icon: FileText,        show: user?.role === 'enseignant' },
     { path: '/admin',             label: 'Gestion des cours',    icon: Shield,          show: user?.role === 'super_admin' },
     { path: '/admin/referentiel', label: 'Référentiel',          icon: BookOpen,        show: user?.role === 'super_admin' },
     { path: '/profil',            label: 'Mon profil',           icon: UserCircle,      show: true },
@@ -417,8 +455,13 @@ function MobileBottomNav({ activeView, onViewChange }) {
               {active && (
                 <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 24, height: 2, borderRadius: '0 0 3px 3px', background: `linear-gradient(90deg, ${C.brown}, ${C.gold})` }}/>
               )}
-              <div style={{ width: 34, height: 26, borderRadius: 8, background: active ? `${C.brown}45` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .2s' }}>
+              <div style={{ width: 34, height: 26, borderRadius: 8, background: active ? `${C.brown}45` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .2s', position: 'relative' }}>
                 <Icon size={17}/>
+                {tab.id === 'epreuves' && epBadge > 0 && (
+                  <span style={{ position: 'absolute', top: -3, right: -3, background: '#EF4444', color: 'white', borderRadius: '50%', width: 14, height: 14, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(0,0,0,0.4)' }}>
+                    {epBadge > 9 ? '9+' : epBadge}
+                  </span>
+                )}
               </div>
               <span style={{ fontSize: 10, fontWeight: active ? 700 : 500 }}>{tab.label}</span>
             </button>

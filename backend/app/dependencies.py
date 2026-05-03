@@ -18,6 +18,8 @@ def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        if payload.get("type") == "refresh":
+            raise credentials_exception
         user_id: str = payload.get("sub")
         if not user_id:
             raise credentials_exception
