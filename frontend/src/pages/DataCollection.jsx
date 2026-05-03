@@ -196,7 +196,7 @@ export default function DataCollection() {
         padding: '16px 24px', color: 'white',
         display: 'flex', alignItems: 'center', gap: 14,
       }}>
-        <button onClick={() => navigate('/dashboard')} style={{
+        <button onClick={() => navigate(-1)} style={{
           background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 9,
           padding: '7px 12px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
         }}>

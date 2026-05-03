@@ -9,6 +9,7 @@ import {
   GraduationCap, ChevronLeft, ChevronRight,
   BarChart2, Shield, UserCircle,
   Map, Menu, X, Home, Sun, Moon, FileText, ClipboardList,
+  Camera, Mic,
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
 
@@ -100,6 +101,10 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
       admin: [
         { path: '/admin',             label: 'Gestion des cours',    icon: Shield   },
         { path: '/admin/referentiel', label: 'Référentiel éducatif', icon: BookOpen },
+      ],
+      collect: [
+        { path: '/collect-emotions', label: 'Collecte émotions', icon: Camera },
+        { path: '/collect-audio',    label: 'Collecte audio',    icon: Mic    },
       ],
       test: [
         { path: '/dashboard', label: 'Vue apprenant',  icon: GraduationCap },
@@ -213,6 +218,19 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
               {!collapsed && <p style={{ fontSize: 9, fontWeight: 800, color: C.gold, letterSpacing: '.12em', textTransform: 'uppercase', padding: '14px 6px 4px', margin: 0 }}>Administration</p>}
               {nav.admin.map(l => (
                 <NavBtn key={l.path} icon={l.icon} label={l.label} collapsed={collapsed} color={C.gold}
+                  active={location.pathname === l.path}
+                  onClick={() => { onViewChange('main'); navigate(l.path) }}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Section collecte de données (super_admin) */}
+          {nav.collect?.length > 0 && (
+            <>
+              {!collapsed && <p style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.18)', letterSpacing: '.12em', textTransform: 'uppercase', padding: '14px 6px 4px', margin: 0 }}>Collecte données</p>}
+              {nav.collect.map(l => (
+                <NavBtn key={l.path} icon={l.icon} label={l.label} collapsed={collapsed}
                   active={location.pathname === l.path}
                   onClick={() => { onViewChange('main'); navigate(l.path) }}
                 />
@@ -340,6 +358,8 @@ function MobileBottomNav({ activeView, onViewChange }) {
     { path: '/prof/examens',      label: 'Épreuves IA',          icon: FileText,        show: user?.role === 'enseignant' },
     { path: '/admin',             label: 'Gestion des cours',    icon: Shield,          show: user?.role === 'super_admin' },
     { path: '/admin/referentiel', label: 'Référentiel',          icon: BookOpen,        show: user?.role === 'super_admin' },
+    { path: '/collect-emotions',  label: 'Collecte émotions',    icon: Camera,          show: user?.role === 'super_admin' },
+    { path: '/collect-audio',     label: 'Collecte audio',       icon: Mic,             show: user?.role === 'super_admin' },
     { path: '/profil',            label: 'Mon profil',           icon: UserCircle,      show: true },
   ].filter(l => l.show)
 
