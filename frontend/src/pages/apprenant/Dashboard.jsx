@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   BookOpen, Clock, Target, Award, Flame, Copy, CheckCircle,
   ChevronRight, Brain, Star, ChevronDown, Lock, PlayCircle,
-  CheckCircle2, Zap, BarChart2, ClipboardList, FileText
+  CheckCircle2, Zap, BarChart2, TrendingUp
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -292,6 +292,26 @@ const ModuleAccordion = ({ module, familles, progression, recommandee, navigate 
   )
 }
 
+/* ─── Helpers date/durée ───────────────────────────────────────── */
+const fmtDureeS = s => { if (!s) return '—'; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}` }
+const fmtDate   = iso => iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—'
+
+/* ─── Définition badges (calculée à partir des stats) ──────────── */
+const buildBadges = stats => [
+  { id: 'premier_pas',       emoji: '🚀', label: 'Premier pas',       unlocked: stats?.nb_tentatives >= 1   },
+  { id: 'studieux',          emoji: '📚', label: 'Studieux',           unlocked: stats?.nb_tentatives >= 10  },
+  { id: 'assidu',            emoji: '🔥', label: 'Assidu',             unlocked: stats?.nb_tentatives >= 50  },
+  { id: 'expert',            emoji: '🏆', label: 'Expert',             unlocked: stats?.nb_tentatives >= 100 },
+  { id: 'premiere_maitrise', emoji: '⭐', label: '1re maîtrise',       unlocked: stats?.nb_maitrisees >= 1   },
+  { id: 'multi_maitre',      emoji: '💎', label: 'Multi-maître',       unlocked: stats?.nb_maitrisees >= 5   },
+  { id: 'marathonien',       emoji: '⏱️', label: 'Marathonien',        unlocked: stats?.duree_totale_minutes >= 60  },
+  { id: 'infatigable',       emoji: '🌙', label: 'Infatigable',        unlocked: stats?.duree_totale_minutes >= 300 },
+  { id: 'precis',            emoji: '🎯', label: 'Précis',             unlocked: stats?.taux_reussite >= 80 && stats?.nb_tentatives >= 5  },
+  { id: 'perfectionniste',   emoji: '✨', label: 'Parfait',            unlocked: stats?.taux_reussite >= 95 && stats?.nb_tentatives >= 10 },
+  { id: 'regulier',          emoji: '📅', label: 'Régulier',           unlocked: stats?.nb_sessions >= 5  },
+  { id: 'perseverant',       emoji: '💪', label: 'Persévérant',        unlocked: stats?.nb_sessions >= 20 },
+]
+
 /* ── Sidebar BKT top 3 ── */
 const SidebarBKT = ({ bktData }) => {
   const { C } = useTheme()
@@ -369,6 +389,163 @@ const NextBadge = ({ bktData }) => {
   )
 }
 
+/* ── Widget badges sidebar (accordéon) ── */
+const SidebarBadges = ({ stats }) => {
+  const { C } = useTheme()
+  const [expanded, setExpanded] = useState(false)
+  const badges   = buildBadges(stats)
+  const unlocked = badges.filter(b => b.unlocked)
+  const locked   = badges.filter(b => !b.unlocked)
+  const total    = badges.length
+
+  return (
+    <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Award size={13} color="#D97706" />
+          <h3 style={{ fontSize: 12, fontWeight: 800, color: C.brown, margin: 0 }}>Mes badges</h3>
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 800, color: unlocked.length > 0 ? '#D97706' : C.textMuted }}>
+          {unlocked.length}/{total}
+        </span>
+      </div>
+
+      {/* Contenu */}
+      {!stats ? (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {[0,1,2,3].map(i => <div key={i} style={{ width: 34, height: 34, borderRadius: 8, background: C.brownGhost, animation: 'pulse 1.5s infinite' }}/>)}
+        </div>
+      ) : unlocked.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '6px 0 2px' }}>
+          <p style={{ fontSize: 22, margin: '0 0 3px' }}>🔒</p>
+          <p style={{ fontSize: 10, color: C.textMuted, margin: 0 }}>Fais des exercices pour débloquer des badges !</p>
+        </div>
+      ) : (
+        <>
+          {/* Vue compacte : emojis débloqués */}
+          {!expanded && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {unlocked.map(b => (
+                <div key={b.id} title={b.label}
+                  style={{ width: 34, height: 34, borderRadius: 8, background: '#FFF7ED', border: '1.5px solid #F59E0B40', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, transition: 'transform .15s' }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                >{b.emoji}</div>
+              ))}
+              {locked.length > 0 && (
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: C.brownGhost, border: `1.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: C.textMuted }}>+{locked.length}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Vue déroulée : tous les badges */}
+          {expanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {badges.map(b => (
+                <div key={b.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  padding: '6px 9px', borderRadius: 9,
+                  background: b.unlocked ? '#FFF7ED' : C.brownGhost,
+                  border: `1.5px solid ${b.unlocked ? '#F59E0B35' : C.border}`,
+                  opacity: b.unlocked ? 1 : 0.55,
+                }}>
+                  <span style={{ fontSize: 20, filter: b.unlocked ? 'none' : 'grayscale(1)', flexShrink: 0 }}>{b.emoji}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: b.unlocked ? '#92400E' : C.textMuted }}>{b.label}</p>
+                  </div>
+                  {b.unlocked && <CheckCircle2 size={12} color="#D97706" style={{ flexShrink: 0 }} />}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Toggle */}
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{ width: '100%', marginTop: 9, padding: '5px 0', background: C.brownGhost, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: C.brownLight, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'background .15s' }}
+            onMouseEnter={e => e.currentTarget.style.background = C.brownPale}
+            onMouseLeave={e => e.currentTarget.style.background = C.brownGhost}
+          >
+            <ChevronDown size={11} style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform .2s' }} />
+            {expanded ? 'Réduire' : `Voir tout (${locked.length} verrouillé${locked.length > 1 ? 's' : ''})`}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+/* ── Widget sessions sidebar (accordéon) ── */
+const SidebarSessions = ({ sessions }) => {
+  const { C } = useTheme()
+  const [expanded, setExpanded] = useState(false)
+  const PREVIEW = 3
+  const affectifEmoji = { positif: '😊', neutre: '😐', negatif: '😟', frustre: '😤', confus: '🤔' }
+  const visible = sessions ? (expanded ? sessions : sessions.slice(0, PREVIEW)) : []
+
+  return (
+    <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '14px 16px', border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+        <TrendingUp size={13} color="#2563EB" style={{ marginRight: 6 }} />
+        <h3 style={{ fontSize: 12, fontWeight: 800, color: C.brown, margin: 0, flex: 1 }}>Sessions récentes</h3>
+        {sessions && sessions.length > 0 && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: C.textMuted }}>{sessions.length}</span>
+        )}
+      </div>
+
+      {/* Contenu */}
+      {sessions === null ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[0,1,2].map(i => <div key={i} style={{ height: 42, borderRadius: 8, background: C.brownGhost, animation: 'pulse 1.5s infinite' }}/>)}
+        </div>
+      ) : sessions.length === 0 ? (
+        <p style={{ fontSize: 10, color: C.textMuted, textAlign: 'center', padding: '8px 0', margin: 0 }}>Aucune session complétée pour l'instant</p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {visible.map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 9, background: C.brownGhost, border: `1px solid ${C.border}` }}>
+                <div style={{ width: 28, height: 28, borderRadius: 7, background: '#DBEAFE', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={12} color="#2563EB" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.cours_titre}</p>
+                  <p style={{ margin: 0, fontSize: 9, color: C.textMuted }}>{fmtDate(s.ended_at)} · ⏱ {fmtDureeS(s.duree_secondes)}</p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
+                  {s.score_final !== null && (
+                    <span style={{ fontSize: 11, fontWeight: 900, color: s.score_final >= 70 ? C.emerald : s.score_final >= 50 ? '#D97706' : '#DC2626' }}>
+                      {s.score_final}%
+                    </span>
+                  )}
+                  <span style={{ fontSize: 12 }}>{affectifEmoji[s.etat_affectif] || ''}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Toggle — seulement si plus de PREVIEW sessions */}
+          {sessions.length > PREVIEW && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              style={{ width: '100%', marginTop: 8, padding: '5px 0', background: C.brownGhost, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: C.brownLight, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'background .15s' }}
+              onMouseEnter={e => e.currentTarget.style.background = C.brownPale}
+              onMouseLeave={e => e.currentTarget.style.background = C.brownGhost}
+            >
+              <ChevronDown size={11} style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform .2s' }} />
+              {expanded ? 'Réduire' : `Voir les ${sessions.length - PREVIEW} autres`}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ─── Dashboard principal ──────────────────────────────────────── */
 export default function Dashboard() {
   const { C } = useTheme()
@@ -382,7 +559,8 @@ export default function Dashboard() {
   const [progression,     setProgression]     = useState(null)
   const [bktData,         setBktData]         = useState(null)
   const [recommandee,     setRecommandee]     = useState(null)
-  const [epreuves,        setEpreuves]        = useState([])
+  const [stats,           setStats]           = useState(null)
+  const [sessions,        setSessions]        = useState(null)
   const [loading,         setLoading]         = useState(true)
   const [copied,          setCopied]          = useState(false)
 
@@ -423,8 +601,12 @@ export default function Dashboard() {
           setRecommandee(reco?.recommandee || null)
         } catch {}
         try {
-          const { data: ep } = await api.get('/api/examens/disponibles')
-          setEpreuves(ep)
+          const { data: st } = await api.get(`/api/bkt/apprenant/${user.id}/stats`)
+          setStats(st)
+        } catch {}
+        try {
+          const { data: se } = await api.get(`/api/bkt/apprenant/${user.id}/sessions?limit=8`)
+          setSessions(se)
         } catch {}
       } catch {
         toast.error('Erreur de chargement')
@@ -610,80 +792,10 @@ export default function Dashboard() {
   /* ── SIDEBAR DESKTOP ── */
   const Sidebar = !mobile && (
     <div style={{ width: 240, flexShrink: 0, minWidth: 0, animation: 'fadeUp .5s ease' }}>
-      {recommandee ? (
-        <div style={{
-          backgroundColor: C.surface, borderRadius: 14, padding: '16px 18px', marginBottom: 14,
-          boxShadow: '0 2px 10px rgba(107,58,42,0.07)', border: `1.5px solid ${C.emerald}25`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-            <Star size={13} color={C.emerald} fill={C.emerald} />
-            <h3 style={{ fontSize: 11, fontWeight: 800, color: C.emerald, margin: 0 }}>Recommandé IA</h3>
-          </div>
-          <span style={{ background: C.brownPale, color: C.brown, padding: '2px 7px', borderRadius: 20, fontSize: 9, fontWeight: 700, display: 'inline-block', marginBottom: 7 }}>
-            {recommandee.reference_ue}
-          </span>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 4px', lineHeight: 1.4 }}>{recommandee.titre}</p>
-          <p style={{ fontSize: 10, color: C.textMuted, marginBottom: 11 }}>BKT : {Math.round(recommandee.score_bkt * 100)}%</p>
-          <button
-            onClick={() => navigate(`/cours/${recommandee.ua_id}`)}
-            style={{ width: '100%', padding: '8px', background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, color: 'white', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, boxShadow: `0 3px 10px ${C.emerald}35` }}
-          >
-            Commencer <ChevronRight size={12} />
-          </button>
-        </div>
-      ) : (
-        <div style={{ background: `linear-gradient(135deg, ${C.goldPale}, ${C.brownPale})`, borderRadius: 14, padding: '15px 17px', marginBottom: 14, border: `1px solid ${C.gold}35` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-            <Flame size={14} color={C.gold} />
-            <h3 style={{ fontSize: 12, fontWeight: 800, color: C.brown, margin: 0 }}>Continue comme ça !</h3>
-          </div>
-          <p style={{ fontSize: 11, color: C.textSec, lineHeight: 1.6, margin: 0 }}>
-            <strong style={{ color: C.brown }}>{progression?.exercices_reussis || 0}</strong> exercice(s) réussi(s) sur {progression?.total_exercices || 0}.
-          </p>
-        </div>
-      )}
-
       <SidebarBKT bktData={bktData} />
       <NextBadge bktData={bktData} />
-
-      {/* Widget épreuves */}
-      <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '16px 18px', marginTop: 14, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ClipboardList size={13} color={C.brown} />
-            <h3 style={{ fontSize: 11, fontWeight: 800, color: C.brown, margin: 0 }}>Épreuves</h3>
-          </div>
-          <button onClick={() => navigate('/epreuves')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, color: C.brownLight }}>Tout voir →</button>
-        </div>
-        {epreuves.length === 0 ? (
-          <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', padding: '10px 0' }}>Aucune épreuve disponible</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {epreuves.slice(0, 3).map(ep => (
-              <div key={ep.id} onClick={() => navigate(`/epreuve/${ep.id}`)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: ep.soumis ? `${C.emerald}08` : C.bg, border: `1px solid ${ep.soumis ? C.emerald + '30' : C.border}`, transition: 'all .15s' }}
-                onMouseEnter={e => e.currentTarget.style.background = ep.soumis ? `${C.emerald}15` : C.brownPale}
-                onMouseLeave={e => e.currentTarget.style.background = ep.soumis ? `${C.emerald}08` : C.bg}
-              >
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: ep.soumis ? `${C.emerald}18` : `${C.brown}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {ep.soumis ? <CheckCircle size={13} color={C.emerald} /> : <FileText size={13} color={C.brown} />}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.titre}</p>
-                  <p style={{ margin: 0, fontSize: 10, color: C.textMuted }}>{ep.soumis && ep.score_total != null ? `${ep.score_total.toFixed(1)}/20` : `${ep.duree_minutes} min`}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {epreuves.filter(e => !e.soumis).length > 0 && (
-          <div style={{ marginTop: 10, padding: '7px 10px', borderRadius: 8, background: `${C.brown}10`, border: `1px solid ${C.brown}25`, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.brown, flexShrink: 0 }} />
-            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.brown }}>
-              {epreuves.filter(e => !e.soumis).length} à passer
-            </p>
-          </div>
-        )}
-      </div>
+      <SidebarBadges stats={stats} />
+      <SidebarSessions sessions={sessions} />
     </div>
   )
 
@@ -766,6 +878,14 @@ export default function Dashboard() {
               <p style={{ fontSize: 11, color: C.textSec, lineHeight: 1.5, margin: 0 }}>
                 <strong style={{ color: C.brown }}>{progression.exercices_reussis}</strong> exercice(s) réussi(s) sur {progression.total_exercices}. Continue !
               </p>
+            </div>
+          )}
+
+          {/* Badges + Sessions — version mobile (empilés) */}
+          {mobile && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: xs ? 8 : 10, marginTop: xs ? 8 : 10 }}>
+              <SidebarBadges stats={stats} />
+              <SidebarSessions sessions={sessions} />
             </div>
           )}
         </div>
