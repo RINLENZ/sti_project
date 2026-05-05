@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw } from 'lucide-react'
+import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
@@ -202,7 +202,8 @@ export default function Profil() {
   const [copied,         setCopied]         = useState(false)
   const [showPicker,     setShowPicker]     = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
-  const [referentiel,    setReferentiel]    = useState([])   // cycles [{ cycle_id, niveaux, filieres }]
+  const [referentiel,    setReferentiel]    = useState([])
+  const [stats,          setStats]          = useState(null)
   const [form, setForm] = useState({
     prenom:        user?.prenom        || '',
     nom:           user?.nom           || '',
@@ -214,10 +215,9 @@ export default function Profil() {
   })
 
   useEffect(() => {
-    api.get('/api/tuteur/referentiel')
-      .then(({ data }) => setReferentiel(data))
-      .catch(() => {})
-  }, [])
+    api.get('/api/tuteur/referentiel').then(({ data }) => setReferentiel(data)).catch(() => {})
+    api.get(`/api/bkt/apprenant/${user?.id}/stats`).then(({ data }) => setStats(data)).catch(() => {})
+  }, [user?.id])
 
   // Niveaux de tous les cycles (liste plate)
   const allNiveaux = referentiel.flatMap(c => c.niveaux.map(n => ({ ...n, cycle_id: c.cycle_id })))
@@ -274,6 +274,21 @@ export default function Profil() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // ── Complétion du profil ──────────────────────────────────────
+  const completionItems = [
+    { label: 'Avatar personnalisé', done: !!user?.avatar,        points: 25, icon: Camera,       hint: 'Clique sur ton avatar pour en choisir un' },
+    { label: 'Niveau défini',       done: !!user?.niveau_label,  points: 35, icon: GraduationCap, hint: 'Modifie ton profil ou refais la configuration' },
+    { label: 'Filière choisie',     done: !!user?.filiere_label, points: 25, icon: BookOpen,      hint: 'Choisis ta filière dans les informations' },
+    { label: 'Pays renseigné',      done: !!user?.pays,          points: 15, icon: Globe,         hint: 'Renseigne ton pays dans le formulaire' },
+  ]
+  const completionPct = completionItems.reduce((acc, i) => acc + (i.done ? i.points : 0), 0)
+
+  function formatDuree(minutes) {
+    if (minutes < 60) return `${minutes} min`
+    const h = Math.floor(minutes / 60), m = minutes % 60
+    return m > 0 ? `${h}h ${m}min` : `${h}h`
   }
 
   const pad = mobile ? 14 : 28
@@ -526,6 +541,106 @@ export default function Profil() {
                 </div>
               </div>
             </div>
+            {/* ── Carte complétion du profil ── */}
+            <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', overflow: 'hidden', animation: 'fadeUp .4s .16s ease both' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: mobile ? '14px 16px' : '16px 22px', borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: completionPct === 100 ? C.emeraldPale : C.brownPale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Zap size={14} color={completionPct === 100 ? C.emerald : C.brown} />
+                  </div>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.brown }}>Complétion du profil</span>
+                </div>
+                <span style={{ fontSize: 20, fontWeight: 900, color: completionPct === 100 ? C.emerald : C.brown }}>{completionPct}%</span>
+              </div>
+              <div style={{ padding: mobile ? '14px 16px' : '16px 22px' }}>
+                {/* Barre de progression */}
+                <div style={{ height: 8, background: C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+                  <div style={{
+                    height: '100%', borderRadius: 8, transition: 'width .6s ease',
+                    width: `${completionPct}%`,
+                    background: completionPct === 100
+                      ? `linear-gradient(90deg, ${C.emerald}, #0A7A5E)`
+                      : `linear-gradient(90deg, ${C.brown}, ${C.brownLight})`,
+                  }}/>
+                </div>
+                {/* Checklist */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {completionItems.map(item => (
+                    <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                        background: item.done ? C.emeraldPale : C.brownGhost,
+                        border: `1.5px solid ${item.done ? C.emerald + '60' : C.border}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {item.done
+                          ? <CheckCircle size={12} color={C.emerald}/>
+                          : <item.icon size={11} color={C.textMuted}/>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: item.done ? C.text : C.textSec }}>{item.label}</span>
+                        {!item.done && <p style={{ fontSize: 10, color: C.textMuted, margin: '1px 0 0' }}>{item.hint}</p>}
+                      </div>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: item.done ? C.emerald : C.textMuted, flexShrink: 0 }}>+{item.points}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Carte statistiques de progression ── */}
+            <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', overflow: 'hidden', animation: 'fadeUp .4s .20s ease both' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: mobile ? '14px 16px' : '16px 22px', borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <TrendingUp size={14} color="#7C3AED" />
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 800, color: C.brown }}>Ma progression</span>
+              </div>
+              <div style={{ padding: mobile ? '14px 16px' : '16px 22px' }}>
+                {!stats ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {[0,1,2,3].map(i => (
+                      <div key={i} style={{ height: 72, borderRadius: 12, background: C.brownGhost, animation: 'pulse 1.5s infinite' }}/>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                      {[
+                        { icon: BookOpen, label: 'Exercices tentés',   value: stats.nb_tentatives,                 color: '#7C3AED', bg: '#EDE9FE' },
+                        { icon: Target,   label: 'Taux de réussite',   value: `${stats.taux_reussite}%`,           color: C.emerald, bg: C.emeraldPale },
+                        { icon: Clock,    label: 'Temps d\'étude',     value: formatDuree(stats.duree_totale_minutes), color: C.brown, bg: C.brownPale },
+                        { icon: Award,    label: 'Score moyen BKT',    value: `${stats.p_mastery_moyen}%`,         color: '#F59E0B', bg: '#FEF3C7' },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: s.bg, borderRadius: 12, padding: '12px 14px', border: `1px solid ${s.color}20` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <s.icon size={12} color={s.color}/>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: s.color, textTransform: 'uppercase', letterSpacing: .4 }}>{s.label}</span>
+                          </div>
+                          <p style={{ fontSize: 22, fontWeight: 900, color: s.color, margin: 0, lineHeight: 1 }}>{s.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Compétences maîtrisées */}
+                    <div style={{ background: C.brownGhost, borderRadius: 12, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Sparkles size={13} color={C.gold}/>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Compétences maîtrisées</span>
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: C.brown }}>
+                        {stats.nb_maitrisees} <span style={{ fontSize: 11, fontWeight: 600, color: C.textSec }}>/ {stats.nb_competences}</span>
+                      </span>
+                    </div>
+                    {stats.nb_sessions === 0 && (
+                      <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', marginTop: 12 }}>
+                        Lance ta première session d'apprentissage pour voir tes stats !
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
           </div>
 
           {/* Colonne droite — code tuteur */}
