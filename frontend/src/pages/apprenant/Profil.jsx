@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera } from 'lucide-react'
+import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
@@ -192,6 +193,7 @@ function SelectField({ value, onChange, options }) {
 export default function Profil() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
+  const navigate        = useNavigate()
   const { mobile }      = useBreakpoint()
   const { C }           = useTheme()
 
@@ -202,11 +204,13 @@ export default function Profil() {
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
   const [referentiel,    setReferentiel]    = useState([])   // cycles [{ cycle_id, niveaux, filieres }]
   const [form, setForm] = useState({
-    niveau_label:  user?.niveau_label || user?.niveau || '',
-    niveau_id:     user?.niveau_id    || '',
+    prenom:        user?.prenom        || '',
+    nom:           user?.nom           || '',
+    niveau_label:  user?.niveau_label  || user?.niveau || '',
+    niveau_id:     user?.niveau_id     || '',
     filiere_label: user?.filiere_label || '',
-    filiere_id:    user?.filiere_id   || '',
-    pays:          user?.pays         || 'Cameroun',
+    filiere_id:    user?.filiere_id    || '',
+    pays:          user?.pays          || 'Cameroun',
   })
 
   useEffect(() => {
@@ -248,9 +252,15 @@ export default function Profil() {
 }
 
   async function saveProfile() {
+    if (!form.prenom.trim() || !form.nom.trim()) {
+      toast.error('Le prénom et le nom sont obligatoires')
+      return
+    }
     setLoading(true)
     try {
       const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, {
+        prenom:        form.prenom.trim(),
+        nom:           form.nom.trim(),
         niveau_label:  form.niveau_label,
         niveau_id:     form.niveau_id     || null,
         filiere_label: form.filiere_label || null,
@@ -260,7 +270,6 @@ export default function Profil() {
       dispatch(loginSuccess({ token, user: { ...user, ...updated } }))
       toast.success('Profil mis à jour !'); setEditing(false)
     } catch (err) {
-      console.error('Erreur profil:', err.response?.data || err.message)
       toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
     } finally {
       setLoading(false)
@@ -381,7 +390,7 @@ export default function Profil() {
                   </button>
                 ) : (
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => { setForm({ niveau_label: user?.niveau_label || user?.niveau || '', pays: user?.pays || 'Cameroun' }); setEditing(false) }} style={{ background: C.redPale, border: `1px solid #FCA5A5`, borderRadius: 9, padding: '7px 10px', cursor: 'pointer', color: C.red, display: 'flex' }}><X size={13}/></button>
+                    <button onClick={() => { setForm({ prenom: user?.prenom || '', nom: user?.nom || '', niveau_label: user?.niveau_label || user?.niveau || '', niveau_id: user?.niveau_id || '', filiere_label: user?.filiere_label || '', filiere_id: user?.filiere_id || '', pays: user?.pays || 'Cameroun' }); setEditing(false) }} style={{ background: C.redPale, border: `1px solid #FCA5A5`, borderRadius: 9, padding: '7px 10px', cursor: 'pointer', color: C.red, display: 'flex' }}><X size={13}/></button>
                     <button onClick={saveProfile} disabled={loading} style={{ background: `linear-gradient(135deg,${C.brown},${C.brownLight})`, border: 'none', borderRadius: 9, padding: '7px 16px', cursor: 'pointer', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5, opacity: loading ? .7 : 1 }}>
                       <Save size={12}/> {loading ? 'Sauvegarde…' : 'Sauvegarder'}
                     </button>
@@ -389,8 +398,20 @@ export default function Profil() {
                 )}
               </div>
               <div style={{ padding: mobile ? '4px 16px 8px' : '4px 22px 12px' }}>
-                <InfoRow icon={User}          label="Prénom"         value={user?.prenom} />
-                <InfoRow icon={User}          label="Nom"            value={user?.nom} />
+                <InfoRow icon={User} label="Prénom">
+                  {editing
+                    ? <input value={form.prenom} onChange={e => setForm(f => ({ ...f, prenom: e.target.value }))}
+                        placeholder="Prénom"
+                        style={{ padding: '7px 12px', border: `2px solid ${C.brownLight}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', background: C.surface, color: C.text, width: '100%', boxSizing: 'border-box' }}/>
+                    : <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>{user?.prenom}</p>}
+                </InfoRow>
+                <InfoRow icon={User} label="Nom">
+                  {editing
+                    ? <input value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))}
+                        placeholder="Nom de famille"
+                        style={{ padding: '7px 12px', border: `2px solid ${C.brownLight}`, borderRadius: 9, fontSize: 12, fontWeight: 700, fontFamily: 'inherit', outline: 'none', background: C.surface, color: C.text, width: '100%', boxSizing: 'border-box' }}/>
+                    : <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>{user?.nom}</p>}
+                </InfoRow>
                 <InfoRow icon={Mail}          label="Email"          value={user?.email} />
                 <InfoRow icon={GraduationCap} label="Niveau scolaire">
                   {editing ? (
@@ -482,6 +503,27 @@ export default function Profil() {
                     <span style={{ fontSize: 12, fontWeight: 800, color: row.color }}>{row.value}</span>
                   </div>
                 ))}
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                  <button
+                    onClick={() => navigate('/onboarding')}
+                    style={{
+                      width: '100%', padding: '10px 0',
+                      background: C.brownPale,
+                      border: `1.5px solid ${C.brownLight}`,
+                      borderRadius: 11, cursor: 'pointer',
+                      color: C.brown, fontSize: 12, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      transition: 'background .15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#EAD9CA'}
+                    onMouseLeave={e => e.currentTarget.style.background = C.brownPale}
+                  >
+                    <RefreshCw size={13} /> Refaire la configuration du niveau
+                  </button>
+                  <p style={{ fontSize: 10, color: C.textMuted, textAlign: 'center', margin: '6px 0 0' }}>
+                    Modifie ton niveau scolaire, ta filière et ton code enseignant
+                  </p>
+                </div>
               </div>
             </div>
           </div>
