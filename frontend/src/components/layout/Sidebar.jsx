@@ -7,7 +7,7 @@ import api from '../../services/api'
 import {
   LayoutDashboard, BookOpen, LogOut,
   GraduationCap, ChevronLeft, ChevronRight,
-  BarChart2, Shield, UserCircle,
+  BarChart2, Bell, Shield, UserCircle,
   Map, Menu, X, Home, Sun, Moon, FileText, ClipboardList,
   Camera, Mic,
 } from 'lucide-react'
@@ -91,6 +91,37 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
       setEpBadge(data.filter(e => !e.soumis).length)
     }).catch(() => {})
   }, [user?.role])
+
+  const [nbNonLues, setNbNonLues] = useState(0)
+  const [notifications, setNotifications] = useState([])
+  const [notifOpen, setNotifOpen] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    function load() {
+      api.get('/api/notifications?limit=20').then(({ data }) => {
+        setNbNonLues(data.nb_non_lues)
+        setNotifications(data.notifications)
+      }).catch(() => {})
+    }
+    load()
+    const id = setInterval(load, 60000)
+    return () => clearInterval(id)
+  }, [user?.id])
+
+  function markRead(notifId) {
+    api.put(`/api/notifications/${notifId}/lire`).then(() => {
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, lu: true } : n))
+      setNbNonLues(prev => Math.max(0, prev - 1))
+    }).catch(() => {})
+  }
+
+  function markAllRead() {
+    api.put('/api/notifications/tout-lire').then(() => {
+      setNotifications(prev => prev.map(n => ({ ...n, lu: true })))
+      setNbNonLues(0)
+    }).catch(() => {})
+  }
 
   const roleInfo = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
 
@@ -268,8 +299,87 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
         </div>
       )}
 
-      {/* ── Thème + Déconnexion ── */}
+      {/* ── Notification flyout panel ── */}
+      {notifOpen && (
+        <div onClick={() => setNotifOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }}/>
+      )}
+      {notifOpen && (
+        <div onClick={e => e.stopPropagation()} style={{
+          position: 'fixed',
+          left: collapsed ? 70 : 254,
+          bottom: 0,
+          width: 300,
+          maxHeight: '60vh',
+          background: C.sidebarBg,
+          border: `1px solid ${C.sidebarBorder}`,
+          borderRadius: '12px 12px 0 0',
+          borderBottom: 'none',
+          boxShadow: '-4px -4px 24px rgba(0,0,0,0.4)',
+          zIndex: 2000,
+          display: 'flex',
+          flexDirection: 'column',
+          fontFamily: "'DM Sans', system-ui, sans-serif",
+        }}>
+          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${C.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>Notifications</span>
+            {nbNonLues > 0 && (
+              <button onClick={markAllRead} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brownLight, fontSize: 11, fontWeight: 600, padding: 0 }}>
+                Tout marquer lu
+              </button>
+            )}
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {notifications.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, padding: '24px 14px', margin: 0 }}>Aucune notification</p>
+            ) : notifications.map(n => (
+              <button key={n.id}
+                onClick={() => !n.lu && markRead(n.id)}
+                style={{
+                  width: '100%', padding: '10px 14px',
+                  background: n.lu ? 'none' : 'rgba(255,255,255,0.05)',
+                  border: 'none', borderBottom: `1px solid ${C.sidebarBorder}`,
+                  cursor: n.lu ? 'default' : 'pointer', textAlign: 'left',
+                  display: 'flex', flexDirection: 'column', gap: 2, transition: 'background .15s',
+                }}
+                onMouseEnter={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
+                onMouseLeave={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: n.lu ? 500 : 700, color: n.lu ? 'rgba(255,255,255,0.45)' : 'white', lineHeight: 1.3 }}>{n.titre}</span>
+                  {!n.lu && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.brownLight, flexShrink: 0 }}/>}
+                </div>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', lineHeight: 1.4 }}>{n.message}</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>
+                  {n.created_at ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Thème + Notifications + Déconnexion ── */}
       <div style={{ padding: '10px 10px', borderTop: `1px solid ${C.sidebarBorder}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <button
+          onClick={() => setNotifOpen(o => !o)}
+          title={collapsed ? `Notifications (${nbNonLues})` : ''}
+          style={{ width: '100%', background: notifOpen ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', color: notifOpen ? 'white' : 'rgba(255,255,255,0.55)', padding: collapsed ? '9px 0' : '8px 12px', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start', fontSize: 13, fontWeight: 500, transition: 'all .15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}
+          onMouseLeave={e => { e.currentTarget.style.background = notifOpen ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = notifOpen ? 'white' : 'rgba(255,255,255,0.55)' }}
+        >
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <Bell size={15}/>
+            {nbNonLues > 0 && (
+              <span style={{ position: 'absolute', top: -5, right: -6, background: '#EF4444', color: 'white', borderRadius: '50%', width: 14, height: 14, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(0,0,0,0.3)' }}>
+                {nbNonLues > 9 ? '9+' : nbNonLues}
+              </span>
+            )}
+          </div>
+          {!collapsed && <span style={{ flex: 1 }}>Notifications</span>}
+          {!collapsed && nbNonLues > 0 && (
+            <span style={{ background: '#EF4444', color: 'white', borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 800 }}>{nbNonLues}</span>
+          )}
+        </button>
         <button onClick={toggleTheme} title={isDark ? 'Thème clair' : 'Thème sombre'}
           style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', color: 'rgba(255,255,255,0.55)', padding: collapsed ? '9px 0' : '8px 12px', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start', fontSize: 13, fontWeight: 500, transition: 'all .15s' }}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}
@@ -297,6 +407,9 @@ function MobileBottomNav({ activeView, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [epBadge,  setEpBadge]  = useState(0)
   const { isDark, toggleTheme } = useTheme()
+  const [nbNonLues, setNbNonLues] = useState(0)
+  const [notifications, setNotifications] = useState([])
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false)
 
   useEffect(() => {
     if (user?.role !== 'apprenant') return
@@ -304,6 +417,33 @@ function MobileBottomNav({ activeView, onViewChange }) {
       setEpBadge(data.filter(e => !e.soumis).length)
     }).catch(() => {})
   }, [user?.role])
+
+  useEffect(() => {
+    if (!user) return
+    function load() {
+      api.get('/api/notifications?limit=20').then(({ data }) => {
+        setNbNonLues(data.nb_non_lues)
+        setNotifications(data.notifications)
+      }).catch(() => {})
+    }
+    load()
+    const id = setInterval(load, 60000)
+    return () => clearInterval(id)
+  }, [user?.id])
+
+  function markReadMobile(notifId) {
+    api.put(`/api/notifications/${notifId}/lire`).then(() => {
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, lu: true } : n))
+      setNbNonLues(prev => Math.max(0, prev - 1))
+    }).catch(() => {})
+  }
+
+  function markAllReadMobile() {
+    api.put('/api/notifications/tout-lire').then(() => {
+      setNotifications(prev => prev.map(n => ({ ...n, lu: true })))
+      setNbNonLues(0)
+    }).catch(() => {})
+  }
 
   const roleInfo = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
 
@@ -411,6 +551,49 @@ function MobileBottomNav({ activeView, onViewChange }) {
             </div>
           </div>
 
+          {/* Notifications accordion */}
+          <div style={{ marginBottom: 8 }}>
+            <button
+              onClick={() => setNotifPanelOpen(o => !o)}
+              style={{ width: '100%', padding: '10px 14px', background: notifPanelOpen ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 500 }}
+            >
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <Bell size={16}/>
+                {nbNonLues > 0 && (
+                  <span style={{ position: 'absolute', top: -5, right: -6, background: '#EF4444', color: 'white', borderRadius: '50%', width: 14, height: 14, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(0,0,0,0.3)' }}>
+                    {nbNonLues > 9 ? '9+' : nbNonLues}
+                  </span>
+                )}
+              </div>
+              <span style={{ flex: 1 }}>Notifications</span>
+              {nbNonLues > 0 && <span style={{ background: '#EF4444', color: 'white', borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 800 }}>{nbNonLues}</span>}
+            </button>
+            {notifPanelOpen && (
+              <div style={{ marginTop: 4, background: 'rgba(0,0,0,0.2)', borderRadius: 10, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
+                {nbNonLues > 0 && (
+                  <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.sidebarBorder}`, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={markAllReadMobile} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brownLight, fontSize: 11, fontWeight: 600, padding: 0 }}>
+                      Tout marquer lu
+                    </button>
+                  </div>
+                )}
+                {notifications.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, padding: '16px 14px', margin: 0 }}>Aucune notification</p>
+                ) : notifications.map(n => (
+                  <button key={n.id} onClick={() => !n.lu && markReadMobile(n.id)}
+                    style={{ width: '100%', padding: '10px 14px', background: n.lu ? 'none' : 'rgba(255,255,255,0.05)', border: 'none', borderBottom: `1px solid rgba(255,255,255,0.06)`, cursor: n.lu ? 'default' : 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: n.lu ? 500 : 700, color: n.lu ? 'rgba(255,255,255,0.4)' : 'white' }}>{n.titre}</span>
+                      {!n.lu && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.brownLight, flexShrink: 0 }}/>}
+                    </div>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{n.message}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Liens */}
           {menuLinks.map(link => {
             const Icon   = link.icon
@@ -480,6 +663,11 @@ function MobileBottomNav({ activeView, onViewChange }) {
                 {tab.id === 'epreuves' && epBadge > 0 && (
                   <span style={{ position: 'absolute', top: -3, right: -3, background: '#EF4444', color: 'white', borderRadius: '50%', width: 14, height: 14, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(0,0,0,0.4)' }}>
                     {epBadge > 9 ? '9+' : epBadge}
+                  </span>
+                )}
+                {tab.id === 'menu' && nbNonLues > 0 && (
+                  <span style={{ position: 'absolute', top: -3, right: -3, background: '#EF4444', color: 'white', borderRadius: '50%', width: 14, height: 14, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(0,0,0,0.4)' }}>
+                    {nbNonLues > 9 ? '9+' : nbNonLues}
                   </span>
                 )}
               </div>
