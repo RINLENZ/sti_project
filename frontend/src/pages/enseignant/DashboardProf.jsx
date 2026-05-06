@@ -142,39 +142,44 @@ function BKTModal({ apprenant, onClose }) {
   })) : []
 
   return (
-    <>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.brown, margin: 0 }}>
-            🧠 {apprenant.prenom} {apprenant.nom}
-          </h2>
-          <p style={{ fontSize: 11, color: C.textSec, margin: '4px 0 0' }}>
-            {bkt?.nb_competences_maitrisees || 0} compétence(s) maîtrisée(s)
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+      {/* ── Header + onglets (fixes) ── */}
+      <div style={{ padding: '20px 24px 12px', flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: C.brown, margin: 0 }}>
+              🧠 {apprenant.prenom} {apprenant.nom}
+            </h2>
+            <p style={{ fontSize: 11, color: C.textSec, margin: '4px 0 0' }}>
+              {bkt?.nb_competences_maitrisees || 0} compétence(s) maîtrisée(s)
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: C.brownPale, border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.brown }}>✕</button>
         </div>
-        <button onClick={onClose} style={{ background: C.brownPale, border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: C.brown }}>✕</button>
+
+        <div style={{ display: 'flex', gap: 4, background: C.border, padding: 4, borderRadius: 10 }}>
+          {[
+            { key: 'radar',    label: '🎯 Compétences' },
+            { key: 'history',  label: '📈 Engagement'  },
+            { key: 'epreuves', label: '📋 Épreuves'    },
+          ].map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{
+              flex: 1, padding: '8px', border: 'none', borderRadius: 7,
+              cursor: 'pointer', fontSize: 12, fontWeight: tab === t.key ? 800 : 500,
+              background: tab === t.key ? C.surface : 'transparent',
+              color: tab === t.key ? C.brown : C.textSec,
+              boxShadow: tab === t.key ? '0 2px 8px rgba(107,58,42,0.12)' : 'none',
+              transition: 'all .15s',
+            }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#E5E7EB', padding: 4, borderRadius: 10 }}>
-        {[
-          { key: 'radar',    label: '🎯 Compétences' },
-          { key: 'history',  label: '📈 Engagement'  },
-          { key: 'epreuves', label: '📋 Épreuves'    },
-        ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
-            flex: 1, padding: '8px', border: 'none', borderRadius: 7,
-            cursor: 'pointer', fontSize: 12, fontWeight: tab === t.key ? 800 : 500,
-            background: tab === t.key ? C.surface : 'transparent',
-            color: tab === t.key ? C.brown : C.textSec,
-            boxShadow: tab === t.key ? '0 2px 8px rgba(107,58,42,0.12)' : 'none',
-            transition: 'all .15s',
-          }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* ── Contenu scrollable ── */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '16px 24px 20px', scrollbarWidth: 'thin', scrollbarColor: `${C.brownPale} transparent` }}>
 
       {/* Tab: Compétences BKT */}
       {tab === 'radar' && (
@@ -190,7 +195,7 @@ function BKTModal({ apprenant, onClose }) {
           <>
             <ResponsiveContainer width="100%" height={200}>
               <RadarChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-                <PolarGrid stroke="#E5E7EB" />
+                <PolarGrid stroke={C.border} />
                 <PolarAngleAxis dataKey="subject" tick={{ fill: C.textSec, fontSize: 10, fontWeight: 700 }} />
                 <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
                 <Radar dataKey="A" stroke={C.brown} fill={C.brown} fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: C.brown }} />
@@ -206,7 +211,7 @@ function BKTModal({ apprenant, onClose }) {
                       <span style={{ fontSize: 11, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{comp}</span>
                       <span style={{ fontSize: 11, color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{val.pourcentage}%</span>
                     </div>
-                    <div style={{ height: 4, background: '#E5E7EB', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: 4, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${val.pourcentage}%`, background: color, borderRadius: 4, transition: 'width .6s ease' }} />
                     </div>
                     <p style={{ fontSize: 10, color: C.textSec, margin: '3px 0 0' }}>
@@ -248,7 +253,7 @@ function BKTModal({ apprenant, onClose }) {
             </div>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={history} margin={{ top: 5, right: 8, bottom: 5, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                 <XAxis dataKey="date" tick={{ fontSize: 9, fill: C.textSec }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: C.textSec }} />
                 <Tooltip
@@ -300,7 +305,7 @@ function BKTModal({ apprenant, onClose }) {
                 </div>
               )
             })()}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {epreuves.map(ep => (
                 <div key={ep.epreuve_id} style={{
                   padding: '10px 12px', borderRadius: 10,
@@ -339,7 +344,8 @@ function BKTModal({ apprenant, onClose }) {
           </>
         )
       )}
-    </>
+      </div>
+    </div>
   )
 }
 
@@ -356,6 +362,8 @@ export default function DashboardProf() {
   const [linked, setLinked]       = useState([])
   const [linking, setLinking]     = useState(false)
   const [selectedApprenant, setSelectedApprenant] = useState(null)
+  const [sortBy,     setSortBy]     = useState('engagement_desc')
+  const [filterEng,  setFilterEng]  = useState('all')
   const [referentiel, setReferentiel]     = useState([])       // cycles [{ cycle_id, niveaux, filieres }]
   const [editNiveauFor, setEditNiveauFor] = useState(null)   // apprenant_id en cours d'édition
   const [niveauPick, setNiveauPick]       = useState('')     // niveau_id sélectionné
@@ -465,6 +473,22 @@ export default function DashboardProf() {
   const { apprenants, stats_classe, exercices_difficiles } = data
   const alertCount = stats_classe.nb_decrocheurs
 
+  const apprenantsFiltres = apprenants
+    .filter(a => {
+      const s = a.engagement.score
+      if (filterEng === 'engage')   return s >= 0.7
+      if (filterEng === 'modere')   return s >= 0.4 && s < 0.7
+      if (filterEng === 'decroche') return s < 0.4
+      return true
+    })
+    .sort((a, b) => {
+      if (sortBy === 'engagement_desc') return b.engagement.score - a.engagement.score
+      if (sortBy === 'engagement_asc')  return a.engagement.score - b.engagement.score
+      if (sortBy === 'nom')             return a.nom.localeCompare(b.nom)
+      if (sortBy === 'progression')     return b.progression.pourcentage - a.progression.pourcentage
+      return 0
+    })
+
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box' }}>
 
@@ -530,7 +554,7 @@ export default function DashboardProf() {
 
         {/* ── Liste apprenants ── */}
         <div style={{ flex: 1, minWidth: mobile ? 0 : 400 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <h2 style={{ fontSize: mobile ? 16 : 18, fontWeight: 900, color: C.brown }}>
               Engagement en temps réel
             </h2>
@@ -541,8 +565,49 @@ export default function DashboardProf() {
             )}
           </div>
 
+          {/* ── Barre filtre + tri ── */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Filtres engagement */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {[
+                { key: 'all',      label: `Tous (${apprenants.length})`,                                           bg: C.brownPale,   color: C.brown   },
+                { key: 'engage',   label: `🟢 ${apprenants.filter(a => a.engagement.score >= 0.7).length}`,        bg: `${C.emerald}15`, color: C.emerald },
+                { key: 'modere',   label: `🟡 ${apprenants.filter(a => a.engagement.score >= 0.4 && a.engagement.score < 0.7).length}`, bg: `${C.orange}15`, color: C.orange },
+                { key: 'decroche', label: `🔴 ${apprenants.filter(a => a.engagement.score < 0.4).length}`,         bg: `${C.red}15`,  color: C.red     },
+              ].map(f => (
+                <button key={f.key} onClick={() => setFilterEng(f.key)} style={{
+                  padding: '5px 11px', borderRadius: 20, border: `1.5px solid ${filterEng === f.key ? f.color : 'transparent'}`,
+                  background: filterEng === f.key ? f.bg : C.surface,
+                  color: filterEng === f.key ? f.color : C.textSec,
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+                }}>{f.label}</button>
+              ))}
+            </div>
+
+            {/* Séparateur */}
+            <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0 }}/>
+
+            {/* Tri */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {[
+                { key: 'engagement_desc', label: '↓ Engagement' },
+                { key: 'engagement_asc',  label: '↑ Engagement' },
+                { key: 'nom',             label: 'A–Z'           },
+                { key: 'progression',     label: '↓ Score'       },
+              ].map(s => (
+                <button key={s.key} onClick={() => setSortBy(s.key)} style={{
+                  padding: '5px 11px', borderRadius: 20,
+                  border: `1.5px solid ${sortBy === s.key ? C.brown : 'transparent'}`,
+                  background: sortBy === s.key ? C.brownPale : C.surface,
+                  color: sortBy === s.key ? C.brown : C.textSec,
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+                }}>{s.label}</button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {apprenants.map(apprenant => {
+            {apprenantsFiltres.map(apprenant => {
               const score = apprenant.engagement.score
               const pct   = apprenant.progression.pourcentage
               const initiales = `${apprenant.prenom[0]}${apprenant.nom[0]}`
@@ -701,14 +766,18 @@ export default function DashboardProf() {
               )
             })}
 
-            {apprenants.length === 0 && (
+            {apprenantsFiltres.length === 0 && (
               <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: 32, textAlign: 'center', border: `1px solid ${C.brownPale}` }}>
                 <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>
-                  Aucun apprenant suivi pour l'instant.
+                  {apprenants.length === 0
+                    ? "Aucun apprenant suivi pour l'instant."
+                    : 'Aucun apprenant dans ce filtre.'}
                 </p>
-                <p style={{ color: C.textSec, fontSize: 12, marginTop: 8 }}>
-                  Utilisez le panneau "Lier un apprenant" pour commencer.
-                </p>
+                {apprenants.length === 0 && (
+                  <p style={{ color: C.textSec, fontSize: 12, marginTop: 8 }}>
+                    Utilisez le panneau "Lier un apprenant" pour commencer.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -741,7 +810,7 @@ export default function DashboardProf() {
             />
             <button onClick={lierApprenant} disabled={linking || !codeInput.trim()} style={{
               width: '100%', padding: '11px',
-              background: codeInput.trim() ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : '#E5E7EB',
+              background: codeInput.trim() ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : C.border,
               color: codeInput.trim() ? 'white' : C.textSec,
               border: 'none', borderRadius: 8,
               fontSize: 13, fontWeight: 700,
@@ -852,7 +921,7 @@ export default function DashboardProf() {
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#FAF7F4', borderRadius: 20, padding: '24px 28px', maxWidth: 560, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.3)' }}
+            style={{ background: C.surface, borderRadius: 20, maxWidth: 560, width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,.4)' }}
           >
             <BKTModal apprenant={selectedApprenant} onClose={() => setSelectedApprenant(null)} />
           </div>

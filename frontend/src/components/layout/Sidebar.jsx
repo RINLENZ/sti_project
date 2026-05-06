@@ -1,7 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import SensiaLogo from '../SensiaLogo'
 import api from '../../services/api'
 import {
@@ -95,6 +95,8 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
   const [nbNonLues, setNbNonLues] = useState(0)
   const [notifications, setNotifications] = useState([])
   const [notifOpen, setNotifOpen] = useState(false)
+  const [panelPos, setPanelPos] = useState({ bottom: 60, left: 260 })
+  const bellRef = useRef(null)
 
   useEffect(() => {
     if (!user) return
@@ -108,6 +110,17 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
     const id = setInterval(load, 60000)
     return () => clearInterval(id)
   }, [user?.id])
+
+  function toggleNotif() {
+    if (!notifOpen && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect()
+      setPanelPos({
+        bottom: window.innerHeight - rect.top + 6,
+        left: rect.right + 10,
+      })
+    }
+    setNotifOpen(o => !o)
+  }
 
   function markRead(notifId) {
     api.put(`/api/notifications/${notifId}/lire`).then(() => {
@@ -306,15 +319,14 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
       {notifOpen && (
         <div onClick={e => e.stopPropagation()} style={{
           position: 'fixed',
-          left: collapsed ? 70 : 254,
-          bottom: 0,
+          left: panelPos.left,
+          bottom: panelPos.bottom,
           width: 300,
           maxHeight: '60vh',
           background: C.sidebarBg,
           border: `1px solid ${C.sidebarBorder}`,
-          borderRadius: '12px 12px 0 0',
-          borderBottom: 'none',
-          boxShadow: '-4px -4px 24px rgba(0,0,0,0.4)',
+          borderRadius: 14,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           zIndex: 2000,
           display: 'flex',
           flexDirection: 'column',
@@ -361,7 +373,8 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
       {/* ── Thème + Notifications + Déconnexion ── */}
       <div style={{ padding: '10px 10px', borderTop: `1px solid ${C.sidebarBorder}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <button
-          onClick={() => setNotifOpen(o => !o)}
+          ref={bellRef}
+          onClick={toggleNotif}
           title={collapsed ? `Notifications (${nbNonLues})` : ''}
           style={{ width: '100%', background: notifOpen ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', color: notifOpen ? 'white' : 'rgba(255,255,255,0.55)', padding: collapsed ? '9px 0' : '8px 12px', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'flex-start', fontSize: 13, fontWeight: 500, transition: 'all .15s' }}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}

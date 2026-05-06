@@ -154,6 +154,53 @@ function MatieresPicker({ selected, onSave, onClose }) {
   )
 }
 
+// ── NiveauxPicker (modal) ─────────────────────────────────────────
+function NiveauxPicker({ selected, referentiel, onSave, onClose }) {
+  const { C } = useTheme()
+  const [local, setLocal] = useState([...selected])
+  const toggle = nom => setLocal(prev => prev.includes(nom) ? prev.filter(x => x !== nom) : [...prev, nom])
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(26,18,7,0.55)', backdropFilter:'blur(5px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:22, width:'100%', maxWidth:500, maxHeight:'80vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 28px 70px rgba(26,18,7,0.32)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 20px', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+          <div>
+            <h2 style={{ fontSize:15, fontWeight:900, color:C.brown, margin:0 }}>Niveaux encadrés</h2>
+            <p style={{ fontSize:11, color:C.textSec, margin:'3px 0 0' }}>{local.length} sélectionné(s)</p>
+          </div>
+          <button onClick={onClose} style={{ background:C.brownPale, border:'none', borderRadius:9, padding:8, cursor:'pointer' }}><X size={15} color={C.brown}/></button>
+        </div>
+        <div style={{ overflowY:'auto', padding:'14px 18px', flex:1, minHeight:0 }}>
+          {referentiel.length === 0 ? (
+            <p style={{ textAlign:'center', color:C.textSec, fontSize:13, padding:'24px 0' }}>Chargement…</p>
+          ) : referentiel.map(cycle => (
+            <div key={cycle.cycle_id} style={{ marginBottom:16 }}>
+              <p style={{ fontSize:10, fontWeight:800, color:C.textMuted, textTransform:'uppercase', letterSpacing:.8, margin:'0 0 8px' }}>{cycle.cycle_nom}</p>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:6 }}>
+                {cycle.niveaux.map(n => {
+                  const isSel = local.includes(n.nom)
+                  return (
+                    <div key={n.id} onClick={() => toggle(n.nom)} style={{ padding:'10px 12px', borderRadius:11, border:`2px solid ${isSel ? C.emerald : C.brownPale}`, background: isSel ? `${C.emerald}12` : C.surface, cursor:'pointer', display:'flex', alignItems:'center', gap:9, transition:'all .16s' }}>
+                      <span style={{ fontSize:16, flexShrink:0 }}>🎓</span>
+                      <span style={{ fontSize:12, fontWeight: isSel ? 800 : 600, color: isSel ? C.emerald : C.text, flex:1 }}>{n.nom}</span>
+                      {isSel && <CheckCircle size={13} color={C.emerald}/>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'14px 18px', borderTop:`1px solid ${C.border}`, flexShrink:0, display:'flex', gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, background:C.brownPale, border:'none', borderRadius:10, padding:'10px', cursor:'pointer', color:C.brown, fontSize:13, fontWeight:700 }}>Annuler</button>
+          <button onClick={() => { onSave(local); onClose() }} style={{ flex:2, background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:10, padding:'10px', cursor:'pointer', color:'white', fontSize:13, fontWeight:800 }}>
+            <Save size={13} style={{ marginRight:6, verticalAlign:'middle' }}/>Sauvegarder
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── InfoRow ───────────────────────────────────────────────────────
 function InfoRow({ icon: Icon, label, children, value }) {
   const { C } = useTheme()
@@ -185,10 +232,14 @@ export default function ProfilEnseignant() {
   const [copied,         setCopied]         = useState(false)
   const [showPicker,     setShowPicker]     = useState(false)
   const [showMatieres,   setShowMatieres]   = useState(false)
+  const [showNiveaux,    setShowNiveaux]    = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
   const [stats,          setStats]          = useState(null)
+  const [referentiel,    setReferentiel]    = useState([])
 
   const [form, setForm] = useState({
+    nom:           user?.nom           || '',
+    prenom:        user?.prenom        || '',
     etablissement: user?.etablissement || '',
     ville:         user?.ville         || '',
     pays:          user?.pays          || 'Cameroun',
@@ -204,6 +255,10 @@ export default function ProfilEnseignant() {
       .catch(() => {})
   }, [user.id])
 
+  useEffect(() => {
+    api.get('/api/tuteur/referentiel').then(({ data }) => setReferentiel(data)).catch(() => {})
+  }, [])
+
   async function handleAvatarSelect(id) {
     setSelectedAvatar(id)
     try {
@@ -218,9 +273,15 @@ export default function ProfilEnseignant() {
   }
 
   async function saveInfos() {
+    if (!form.nom.trim() || !form.prenom.trim()) {
+      toast.error('Le nom et le prénom sont obligatoires')
+      return
+    }
     setLoading(true)
     try {
       const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, {
+        nom:           form.nom.trim(),
+        prenom:        form.prenom.trim(),
         etablissement: form.etablissement.trim(),
         ville:         form.ville.trim(),
         pays:          form.pays,
@@ -232,6 +293,18 @@ export default function ProfilEnseignant() {
       toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function saveNiveaux(newList) {
+    try {
+      const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, {
+        niveaux_enseignes: newList,
+      })
+      dispatch(loginSuccess({ token, user: { ...user, niveaux_enseignes: updated.niveaux_enseignes } }))
+      toast.success('Niveaux mis à jour !')
+    } catch {
+      toast.error('Erreur lors de la mise à jour')
     }
   }
 
@@ -266,6 +339,7 @@ export default function ProfilEnseignant() {
 
       {showPicker   && <AvatarPicker   current={selectedAvatar}  onSelect={handleAvatarSelect}  onClose={() => setShowPicker(false)}/>}
       {showMatieres && <MatieresPicker selected={matieres}       onSave={saveMatieres}           onClose={() => setShowMatieres(false)}/>}
+      {showNiveaux  && <NiveauxPicker  selected={niveaux}        referentiel={referentiel}       onSave={saveNiveaux} onClose={() => setShowNiveaux(false)}/>}
 
       <div style={{ maxWidth:880, margin:'0 auto' }}>
 
@@ -363,7 +437,7 @@ export default function ProfilEnseignant() {
                   </button>
                 ) : (
                   <div style={{ display:'flex', gap:6 }}>
-                    <button onClick={() => { setForm({ etablissement:user?.etablissement||'', ville:user?.ville||'', pays:user?.pays||'Cameroun' }); setEditing(false) }} style={{ background:C.redPale, border:`1px solid #FCA5A5`, borderRadius:9, padding:'7px 10px', cursor:'pointer', color:C.red, display:'flex' }}><X size={13}/></button>
+                    <button onClick={() => { setForm({ nom:user?.nom||'', prenom:user?.prenom||'', etablissement:user?.etablissement||'', ville:user?.ville||'', pays:user?.pays||'Cameroun' }); setEditing(false) }} style={{ background:C.redPale, border:`1px solid #FCA5A5`, borderRadius:9, padding:'7px 10px', cursor:'pointer', color:C.red, display:'flex' }}><X size={13}/></button>
                     <button onClick={saveInfos} disabled={loading} style={{ background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:9, padding:'7px 16px', cursor:'pointer', color:'white', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
                       <Save size={12}/>{loading ? 'Sauvegarde…' : 'Sauvegarder'}
                     </button>
@@ -371,8 +445,16 @@ export default function ProfilEnseignant() {
                 )}
               </div>
               <div style={{ padding: mobile ? '4px 16px 8px' : '4px 22px 12px' }}>
-                <InfoRow icon={User} label="Prénom" value={user?.prenom}/>
-                <InfoRow icon={User} label="Nom"    value={user?.nom}/>
+                <InfoRow icon={User} label="Prénom">
+                  {editing
+                    ? <input className="inp-prof" value={form.prenom} onChange={e => setForm(f => ({ ...f, prenom: e.target.value }))} placeholder="Prénom"/>
+                    : <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0 }}>{user?.prenom}</p>}
+                </InfoRow>
+                <InfoRow icon={User} label="Nom">
+                  {editing
+                    ? <input className="inp-prof" value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} placeholder="Nom"/>
+                    : <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0 }}>{user?.nom}</p>}
+                </InfoRow>
                 <InfoRow icon={Mail} label="Email"  value={user?.email}/>
                 <InfoRow icon={Building2} label="Établissement">
                   {editing
@@ -432,6 +514,9 @@ export default function ProfilEnseignant() {
                   <div style={{ width:32, height:32, borderRadius:9, background:C.emeraldPale, display:'flex', alignItems:'center', justifyContent:'center' }}><Users size={14} color={C.emerald}/></div>
                   <span style={{ fontSize:14, fontWeight:800, color:C.brown }}>Niveaux encadrés</span>
                 </div>
+                <button onClick={() => setShowNiveaux(true)} style={{ background:C.brownPale, border:'none', borderRadius:9, padding:'7px 14px', cursor:'pointer', color:C.brown, fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+                  <Edit3 size={12}/> Modifier
+                </button>
               </div>
               <div style={{ padding: mobile ? '14px 16px' : '14px 22px' }}>
                 {niveaux.length === 0 ? (
@@ -439,13 +524,12 @@ export default function ProfilEnseignant() {
                 ) : (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
                     {niveaux.map(n => (
-                      <span key={n} style={{ display:'inline-flex', alignItems:'center', padding:'6px 14px', borderRadius:20, background:C.brownPale, border:`1.5px solid ${C.brownLight}60`, fontSize:12, fontWeight:700, color:C.brown }}>
-                        {n}
+                      <span key={n} style={{ display:'inline-flex', alignItems:'center', padding:'6px 14px', borderRadius:20, background:`${C.emerald}12`, border:`1.5px solid ${C.emerald}40`, fontSize:12, fontWeight:700, color:C.emerald }}>
+                        🎓 {n}
                       </span>
                     ))}
                   </div>
                 )}
-                <p style={{ fontSize:11, color:C.textSec, margin:'10px 0 0' }}>Pour modifier les niveaux, refais la configuration dans <button onClick={() => navigate('/onboarding-enseignant')} style={{ background:'none', border:'none', color:C.brown, fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textDecoration:'underline' }}>l'onboarding</button>.</p>
               </div>
             </div>
           </div>
