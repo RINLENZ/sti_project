@@ -17,22 +17,20 @@ router = APIRouter(prefix="/api/admin", tags=["administration"])
 
 @router.get("/db-check")
 def db_check(db: Session = Depends(get_db)):
-    """Diagnostic : vérifie colonnes modules + version alembic."""
-    cols = [r[0] for r in db.execute(sa.text(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name='modules' ORDER BY ordinal_position"
-    )).fetchall()]
-    alembic_ver = [r[0] for r in db.execute(sa.text(
-        "SELECT version_num FROM alembic_version"
-    )).fetchall()]
+    """Diagnostic : colonnes modules + version alembic."""
     try:
+        cols = [r[0] for r in db.execute(sa.text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='modules' ORDER BY ordinal_position"
+        )).fetchall()]
+        alembic_ver = [r[0] for r in db.execute(sa.text(
+            "SELECT version_num FROM alembic_version"
+        )).fetchall()]
         count = db.query(Module).count()
-        module_ok = True
+        return {"columns": cols, "alembic_version": alembic_ver,
+                "module_query_ok": True, "nb_modules": count}
     except Exception as e:
-        count = 0
-        module_ok = str(e)[:200]
-    return {"columns": cols, "alembic_version": alembic_ver,
-            "module_query_ok": module_ok, "nb_modules": count}
+        return {"error": str(e)[:300]}
 
 
 # ── Schemas ────────────────────────────────────────────────────────
@@ -195,15 +193,12 @@ def get_structure_complete(db: Session = Depends(get_db),
                     "description": fam.description,
                     "unites":  ua_list
                 })
-            filiere = db.query(Filiere).filter(Filiere.id == mod.filiere_id).first() if mod.filiere_id else None
             mods.append({
-                "id":          str(mod.id),
-                "numero":      mod.numero,
-                "titre":       mod.titre,
-                "niveau_id":   str(mod.niveau_id)  if mod.niveau_id  else None,
-                "filiere_id":  str(mod.filiere_id) if mod.filiere_id else None,
-                "filiere_nom": filiere.nom          if filiere        else None,
-                "familles":    fams
+                "id":        str(mod.id),
+                "numero":    mod.numero,
+                "titre":     mod.titre,
+                "niveau_id": str(mod.niveau_id) if mod.niveau_id else None,
+                "familles":  fams
             })
         result.append({
             "id":      str(mat.id),
@@ -661,8 +656,7 @@ def create_module(body: dict, db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
     mod = Module(
         matiere_id  = UUID(body["matiere_id"]),
-        niveau_id   = UUID(body["niveau_id"])  if body.get("niveau_id")  else None,
-        filiere_id  = UUID(body["filiere_id"]) if body.get("filiere_id") else None,
+        niveau_id   = UUID(body["niveau_id"]) if body.get("niveau_id") else None,
         numero      = int(body.get("numero", 1)),
         titre       = body["titre"],
         description = body.get("description", ""),
@@ -680,8 +674,6 @@ def update_module(module_id: UUID, body: dict, db: Session = Depends(get_db),
         if k in body: setattr(mod, k, body[k])
     if "niveau_id" in body:
         mod.niveau_id = UUID(body["niveau_id"]) if body["niveau_id"] else None
-    if "filiere_id" in body:
-        mod.filiere_id = UUID(body["filiere_id"]) if body["filiere_id"] else None
     if body.get("matiere_id"):
         mod.matiere_id = UUID(body["matiere_id"])
     db.commit()
