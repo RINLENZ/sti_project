@@ -10,8 +10,27 @@ from ..models.user import User
 from ..models.cours import Matiere, Module, FamilleSituation, UniteApprentissage, Exercice, RessourcePedagogique
 from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
 from sqlalchemy.orm import joinedload
+import sqlalchemy as sa
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
+
+
+@router.get("/db-check")
+def db_check(db: Session = Depends(get_db)):
+    """Diagnostic : vérifie les colonnes de la table modules."""
+    result = db.execute(sa.text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='modules' ORDER BY ordinal_position"
+    )).fetchall()
+    cols = [r[0] for r in result]
+    # Test requête Module
+    try:
+        count = db.query(Module).count()
+        module_ok = True
+    except Exception as e:
+        count = 0
+        module_ok = str(e)
+    return {"columns": cols, "module_query_ok": module_ok, "nb_modules": count}
 
 
 # ── Schemas ────────────────────────────────────────────────────────
