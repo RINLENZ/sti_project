@@ -182,12 +182,13 @@ function FormMatiere({ initial = {}, onSubmit, onClose }) {
   )
 }
 
-function FormModule({ initial = {}, matieres = [], niveaux = [], onSubmit, onClose }) {
+function FormModule({ initial = {}, matieres = [], niveaux = [], filieres = [], onSubmit, onClose }) {
   const { C } = useTheme()
   const [form, setForm] = useState({
     titre: initial.titre || '', numero: initial.numero || 1, description: initial.description || '',
     matiere_id: initial.matiere_id || matieres[0]?.id || '',
-    niveau_id: initial.niveau_id || '',
+    niveau_id:  initial.niveau_id  || '',
+    filiere_id: initial.filiere_id || '',
     ordre: initial.ordre || 1,
   })
   const [loading, setLoading] = useState(false)
@@ -196,8 +197,12 @@ function FormModule({ initial = {}, matieres = [], niveaux = [], onSubmit, onClo
     <form onSubmit={handle}>
       <FSelect label="Matière" value={form.matiere_id} onChange={e => setForm(f => ({ ...f, matiere_id: e.target.value }))} required
         options={matieres.map(m => ({ value: m.id, label: m.nom }))} />
-      <FSelect label="Niveau" value={form.niveau_id} onChange={e => setForm(f => ({ ...f, niveau_id: e.target.value }))}
-        options={[{ value: '', label: '— Tous niveaux (générique) —' }, ...niveaux.map(n => ({ value: n.id, label: n.nom }))]} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <FSelect label="Niveau / Classe" value={form.niveau_id} onChange={e => setForm(f => ({ ...f, niveau_id: e.target.value }))}
+          options={[{ value: '', label: '— Tous niveaux —' }, ...niveaux.map(n => ({ value: n.id, label: n.nom }))]} />
+        <FSelect label="Spécialité / Série" value={form.filiere_id} onChange={e => setForm(f => ({ ...f, filiere_id: e.target.value }))}
+          options={[{ value: '', label: '— Toutes séries —' }, ...filieres.map(f => ({ value: f.id, label: `${f.nom} (${f.code})` }))]} />
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 12 }}>
         <FInput label="N°" value={form.numero} type="number" onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} required />
         <FInput label="Titre" value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))} placeholder="ex: Algorithmique et programmation" required />
@@ -227,7 +232,7 @@ function FormFamille({ initial = {}, modules = [], onSubmit, onClose }) {
   )
 }
 
-function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload }) {
+function TabStructure({ structure, niveaux, filieres, filterNiveau, filterMat, onReload }) {
   const { C } = useTheme()
   const [modal, setModal] = useState(null)
   const [deleting, setDeleting] = useState(null)
@@ -361,6 +366,11 @@ function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload })
                             tous niveaux
                           </span>
                         )}
+                        {mod.filiere_id && (
+                          <span style={{ background: `${C.emerald}15`, color: C.emerald, fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 20, border: `1px solid ${C.emerald}30` }}>
+                            {mod.filiere_nom || filieres.find(f => f.id === mod.filiere_id)?.nom || 'Série'}
+                          </span>
+                        )}
                         <span style={{ fontSize: 10, color: C.textSec }}>{(mod.familles || []).length} famille(s)</span>
                       </div>
                     </div>
@@ -420,7 +430,7 @@ function TabStructure({ structure, niveaux, filterNiveau, filterMat, onReload })
       )}
       {modal?.type === 'module' && (
         <Modal title={modal.editModule ? 'Modifier le module' : 'Nouveau module'} onClose={() => setModal(null)} size={600}>
-          <FormModule initial={modal.editModule || {}} matieres={allMatieres} niveaux={niveaux} onSubmit={handleSubmitModule} onClose={() => setModal(null)} />
+          <FormModule initial={modal.editModule || {}} matieres={allMatieres} niveaux={niveaux} filieres={filieres} onSubmit={handleSubmitModule} onClose={() => setModal(null)} />
         </Modal>
       )}
       {modal?.type === 'famille' && (
@@ -1305,6 +1315,7 @@ export default function AdminCours() {
   const inputBase = getInputBase(C)
   const [structure, setStructure] = useState([])
   const [niveaux,   setNiveaux]   = useState([])
+  const [filieres,  setFilieres]  = useState([])
   const [loading,   setLoading]   = useState(true)
   const [activeTab, setActiveTab] = useState('structure')
   const [filterNiveau, setFilterNiveau] = useState('all')
@@ -1319,6 +1330,7 @@ export default function AdminCours() {
       ])
       setStructure(s)
       setNiveaux(ref.flatMap(c => c.niveaux || []))
+      setFilieres(ref.flatMap(c => (c.ordres || []).flatMap(o => o.filieres || [])))
     } catch { toast.error('Erreur de chargement') }
     finally { setLoading(false) }
   }, [])
@@ -1435,7 +1447,7 @@ export default function AdminCours() {
 
       {/* Contenu */}
       <div style={{ animation: 'fadeIn .25s ease' }}>
-        {activeTab === 'structure'  && <TabStructure  structure={structure} niveaux={niveaux} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
+        {activeTab === 'structure'  && <TabStructure  structure={structure} niveaux={niveaux} filieres={filieres} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
         {activeTab === 'ua'         && <TabUA         structure={structure} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
         {activeTab === 'exercices'  && <TabExercices  structure={structure} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}
         {activeTab === 'contenu'    && <TabContenu    structure={structure} filterNiveau={filterNiveau} filterMat={filterMat} onReload={loadAll} />}

@@ -7,7 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import Base
 from app.models import cours, user, session, interaction, referentiel
-from app.models import examen as _examen_models  # noqa
+from app.models import examen as _examen_models      # noqa
+from app.models import notification as _notif_models  # noqa
 
 config = context.config
 
