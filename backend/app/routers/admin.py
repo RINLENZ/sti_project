@@ -17,20 +17,22 @@ router = APIRouter(prefix="/api/admin", tags=["administration"])
 
 @router.get("/db-check")
 def db_check(db: Session = Depends(get_db)):
-    """Diagnostic : vérifie les colonnes de la table modules."""
-    result = db.execute(sa.text(
+    """Diagnostic : vérifie colonnes modules + version alembic."""
+    cols = [r[0] for r in db.execute(sa.text(
         "SELECT column_name FROM information_schema.columns "
         "WHERE table_name='modules' ORDER BY ordinal_position"
-    )).fetchall()
-    cols = [r[0] for r in result]
-    # Test requête Module
+    )).fetchall()]
+    alembic_ver = [r[0] for r in db.execute(sa.text(
+        "SELECT version_num FROM alembic_version"
+    )).fetchall()]
     try:
         count = db.query(Module).count()
         module_ok = True
     except Exception as e:
         count = 0
-        module_ok = str(e)
-    return {"columns": cols, "module_query_ok": module_ok, "nb_modules": count}
+        module_ok = str(e)[:200]
+    return {"columns": cols, "alembic_version": alembic_ver,
+            "module_query_ok": module_ok, "nb_modules": count}
 
 
 # ── Schemas ────────────────────────────────────────────────────────
