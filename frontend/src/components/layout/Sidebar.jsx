@@ -2,6 +2,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import SensiaLogo from '../SensiaLogo'
 import api from '../../services/api'
 import {
@@ -312,62 +313,63 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
         </div>
       )}
 
-      {/* ── Notification flyout panel ── */}
-      {notifOpen && (
-        <div onClick={() => setNotifOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }}/>
-      )}
-      {notifOpen && (
-        <div onClick={e => e.stopPropagation()} style={{
-          position: 'fixed',
-          left: panelPos.left,
-          bottom: panelPos.bottom,
-          width: 300,
-          maxHeight: '60vh',
-          background: C.sidebarBg,
-          border: `1px solid ${C.sidebarBorder}`,
-          borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          zIndex: 2000,
-          display: 'flex',
-          flexDirection: 'column',
-          fontFamily: "'DM Sans', system-ui, sans-serif",
-        }}>
-          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${C.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>Notifications</span>
-            {nbNonLues > 0 && (
-              <button onClick={markAllRead} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brownLight, fontSize: 11, fontWeight: 600, padding: 0 }}>
-                Tout marquer lu
-              </button>
-            )}
+      {/* ── Notification flyout panel (portail — échappe overflow/stacking sidebar) ── */}
+      {notifOpen && createPortal(
+        <>
+          <div onClick={() => setNotifOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
+          <div onClick={e => e.stopPropagation()} style={{
+            position: 'fixed',
+            left: panelPos.left,
+            bottom: panelPos.bottom,
+            width: 300,
+            maxHeight: '60vh',
+            background: C.sidebarBg,
+            border: `1px solid ${C.sidebarBorder}`,
+            borderRadius: 14,
+            boxShadow: '0 12px 48px rgba(0,0,0,0.65)',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            fontFamily: "'DM Sans', system-ui, sans-serif",
+          }}>
+            <div style={{ padding: '12px 14px', borderBottom: `1px solid ${C.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>Notifications</span>
+              {nbNonLues > 0 && (
+                <button onClick={markAllRead} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brownLight, fontSize: 11, fontWeight: 600, padding: 0 }}>
+                  Tout marquer lu
+                </button>
+              )}
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {notifications.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, padding: '24px 14px', margin: 0 }}>Aucune notification</p>
+              ) : notifications.map(n => (
+                <button key={n.id}
+                  onClick={() => !n.lu && markRead(n.id)}
+                  style={{
+                    width: '100%', padding: '10px 14px',
+                    background: n.lu ? 'none' : 'rgba(255,255,255,0.05)',
+                    border: 'none', borderBottom: `1px solid ${C.sidebarBorder}`,
+                    cursor: n.lu ? 'default' : 'pointer', textAlign: 'left',
+                    display: 'flex', flexDirection: 'column', gap: 2, transition: 'background .15s',
+                  }}
+                  onMouseEnter={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
+                  onMouseLeave={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: n.lu ? 500 : 700, color: n.lu ? 'rgba(255,255,255,0.45)' : 'white', lineHeight: 1.3 }}>{n.titre}</span>
+                    {!n.lu && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.brownLight, flexShrink: 0 }}/>}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', lineHeight: 1.4 }}>{n.message}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>
+                    {n.created_at ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            {notifications.length === 0 ? (
-              <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, padding: '24px 14px', margin: 0 }}>Aucune notification</p>
-            ) : notifications.map(n => (
-              <button key={n.id}
-                onClick={() => !n.lu && markRead(n.id)}
-                style={{
-                  width: '100%', padding: '10px 14px',
-                  background: n.lu ? 'none' : 'rgba(255,255,255,0.05)',
-                  border: 'none', borderBottom: `1px solid ${C.sidebarBorder}`,
-                  cursor: n.lu ? 'default' : 'pointer', textAlign: 'left',
-                  display: 'flex', flexDirection: 'column', gap: 2, transition: 'background .15s',
-                }}
-                onMouseEnter={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
-                onMouseLeave={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: n.lu ? 500 : 700, color: n.lu ? 'rgba(255,255,255,0.45)' : 'white', lineHeight: 1.3 }}>{n.titre}</span>
-                  {!n.lu && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.brownLight, flexShrink: 0 }}/>}
-                </div>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', lineHeight: 1.4 }}>{n.message}</span>
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>
-                  {n.created_at ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+        </>,
+        document.body
       )}
 
       {/* ── Thème + Notifications + Déconnexion ── */}

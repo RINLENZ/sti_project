@@ -103,7 +103,7 @@ for i, (nom, code, desc) in enumerate(filieres_com, 1):
 db.add(Filiere(ordre_id=col_gen.id, nom="Général", code="GEN",
                description="Enseignement général collège", ordre=1))
 
-db.commit()
+db.commit() 
 
 # ── Résumé ────────────────────────────────────────────────────────
 print("\n✓ Référentiel éducatif camerounais créé")

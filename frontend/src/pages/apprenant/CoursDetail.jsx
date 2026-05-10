@@ -235,12 +235,11 @@ export default function CoursDetail() {
         </svg>
 
         <div style={{ position: 'relative' }}>
-          <button onClick={() => navigate('/dashboard')} style={{
+          <button onClick={() => navigate(-1)} style={{
             background: 'rgba(255,255,255,.15)', border: 'none',
             color: 'white', borderRadius: 8, padding: isMobile ? '8px 12px' : '6px 14px',
             cursor: 'pointer', fontSize: 13, fontWeight: 700,
             display: 'flex', alignItems: 'center', gap: 6, marginBottom: isMobile ? 16 : 20,
-            /* Tap target min 44px on mobile */
             minHeight: isMobile ? 44 : 'auto'
           }}>
             <ArrowLeft size={14}/> Retour
@@ -326,7 +325,7 @@ export default function CoursDetail() {
             {/* Tabs */}
             <div style={{
               display: 'flex', gap: 4, marginBottom: 20,
-              background: '#E5E7EB', padding: 4, borderRadius: 12
+              background: C.brownPale, padding: 4, borderRadius: 12
             }}>
               {[
                 { key: 'lecon',     label: '📖 Leçon' },

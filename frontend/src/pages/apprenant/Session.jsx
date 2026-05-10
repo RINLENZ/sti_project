@@ -138,7 +138,7 @@ const MiniGauge = ({ score, emotion, compact = false }) => {
 const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }) => {
   const { C } = useTheme()
   let bg = C.surface, border = `1.5px solid ${C.brownPale}`, textColor = C.text
-  let lBg = '#E5E7EB', lColor = C.textSec
+  let lBg = C.border, lColor = C.textSec
   if (selected && !correct && !incorrect) {
     bg = C.brownPale; border = `2px solid ${C.brown}`
     textColor = C.brown; lBg = C.brown; lColor = 'white'
@@ -248,6 +248,7 @@ const CameraBanner = ({ onActivate, onDismiss }) => {
 // LECON READER
 
 function LeconReader({ ua, ressources, onStart, onResourceView }) {
+  const { C } = useTheme()
   const [idx, setIdx] = useState(0)
   const readStartRef  = useRef(Date.now())
   const res = ressources[idx]
@@ -260,21 +261,21 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
   }
 
   const typeLabel = {
-    lecon:   { icon: '📖', label: 'Leçon',   color: '#6B3A2A' },
-    tp:      { icon: '🔬', label: 'TP',      color: '#0D9373' },
-    resume:  { icon: '📋', label: 'Résumé',  color: '#2563EB' },
-    video:   { icon: '🎬', label: 'Vidéo',   color: '#7C3AED' },
-  }[res?.type] || { icon: '📄', label: 'Ressource', color: '#6B3A2A' }
+    lecon:   { icon: '📖', label: 'Leçon',    color: C.brown    },
+    tp:      { icon: '🔬', label: 'TP',       color: C.emerald  },
+    resume:  { icon: '📋', label: 'Résumé',   color: '#2563EB'  },
+    video:   { icon: '🎬', label: 'Vidéo',    color: '#7C3AED'  },
+  }[res?.type] || { icon: '📄', label: 'Ressource', color: C.brown }
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#FAF7F4',
+      minHeight: '100vh', background: C.bg,
       display: 'flex', flexDirection: 'column',
       fontFamily: 'system-ui, sans-serif',
     }}>
       {/* Header */}
       <div style={{
-        background: 'linear-gradient(135deg, #3D1F13, #6B3A2A)',
+        background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`,
         padding: '20px 24px', color: 'white',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -282,9 +283,8 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
             {ua?.reference_ue} · {ua?.titre}
           </span>
         </div>
-        {/* Navigation ressources */}
         {ressources.length > 1 && (
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {ressources.map((r, i) => {
               const t = { lecon: '📖', tp: '🔬', resume: '📋', video: '🎬' }[r.type] || '📄'
               return (
@@ -313,31 +313,31 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
           </div>
           <div>
             <span style={{ fontSize: 10, fontWeight: 700, color: typeLabel.color, textTransform: 'uppercase', letterSpacing: .5 }}>{typeLabel.label}</span>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A1207', margin: 0 }}>{res?.titre}</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: 0 }}>{res?.titre}</h2>
           </div>
         </div>
 
         {/* Situation problème */}
         {ua?.situation_probleme && (
-          <div style={{ background: 'linear-gradient(135deg, #E6F5F0, #F5EDE5)', borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: '1px solid #0D937330' }}>
-            <p style={{ fontSize: 10, fontWeight: 700, color: '#0D9373', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 6px' }}>🎯 Situation problème</p>
-            <p style={{ fontSize: 13, color: '#1A1207', lineHeight: 1.7, margin: 0 }}>{ua.situation_probleme}</p>
+          <div style={{ background: `linear-gradient(135deg, ${C.emeraldPale}, ${C.brownPale})`, borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: `1px solid ${C.emerald}30` }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: C.emerald, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 6px' }}>🎯 Situation problème</p>
+            <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: 0 }}>{ua.situation_probleme}</p>
           </div>
         )}
 
-        {/* Contenu principal — rendu Markdown simplifié */}
-        <div style={{ background: '#FFFFFF', borderRadius: 16, padding: '24px 28px', border: '1px solid #F5EDE5', boxShadow: '0 2px 16px rgba(107,58,42,0.07)', marginBottom: 20 }}>
+        {/* Contenu principal */}
+        <div style={{ background: C.surface, borderRadius: 16, padding: '24px 28px', border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', marginBottom: 20 }}>
           <MarkdownRenderer content={res?.contenu || ''} />
         </div>
 
         {/* Points clés */}
         {res?.points_cles && res.points_cles.length > 0 && (
-          <div style={{ background: '#FEF3C7', borderRadius: 14, padding: '16px 18px', marginBottom: 24, border: '1px solid #D97706' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px' }}>⭐ Points clés à retenir</p>
+          <div style={{ background: `${C.gold}15`, borderRadius: 14, padding: '16px 18px', marginBottom: 24, border: `1px solid ${C.gold}50` }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: C.gold, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px' }}>⭐ Points clés à retenir</p>
             {res.points_cles.map((pt, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <span style={{ color: '#D97706', fontWeight: 900, flexShrink: 0, marginTop: 1 }}>→</span>
-                <p style={{ fontSize: 13, color: '#1A1207', margin: 0, lineHeight: 1.6 }}>{pt}</p>
+                <span style={{ color: C.gold, fontWeight: 900, flexShrink: 0, marginTop: 1 }}>→</span>
+                <p style={{ fontSize: 13, color: C.text, margin: 0, lineHeight: 1.6 }}>{pt}</p>
               </div>
             ))}
           </div>
@@ -345,11 +345,11 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
 
         {/* Compétences */}
         {ua?.competences && ua.competences.length > 0 && (
-          <div style={{ background: '#F0FDF4', borderRadius: 12, padding: '14px 18px', marginBottom: 24, border: '1px solid #BBF7D0' }}>
-            <p style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>🎓 Compétences visées</p>
+          <div style={{ background: C.emeraldPale, borderRadius: 12, padding: '14px 18px', marginBottom: 24, border: `1px solid ${C.emerald}35` }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: C.emerald, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>🎓 Compétences visées</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {ua.competences.map((c, i) => (
-                <span key={i} style={{ background: '#DCFCE7', color: '#15803D', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{c}</span>
+                <span key={i} style={{ background: `${C.emerald}20`, color: C.emerald, padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{c}</span>
               ))}
             </div>
           </div>
@@ -358,16 +358,16 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
         {/* Navigation + bouton démarrer */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {idx > 0 && (
-            <button onClick={() => logAndGo(idx - 1)} style={{ padding: '12px 20px', background: '#F5EDE5', color: '#6B3A2A', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => logAndGo(idx - 1)} style={{ padding: '12px 20px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               ← Précédent
             </button>
           )}
           {idx < ressources.length - 1 ? (
-            <button onClick={() => logAndGo(idx + 1)} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #6B3A2A, #C4865A)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <button onClick={() => logAndGo(idx + 1)} style={{ flex: 1, padding: '14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               Ressource suivante → ({idx + 2}/{ressources.length})
             </button>
           ) : (
-            <button onClick={() => { logAndGo(idx); onStart() }} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #0D9373, #0A7A5E)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(13,147,115,0.4)' }}>
+            <button onClick={() => { logAndGo(idx); onStart() }} style={{ flex: 1, padding: '14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 20px ${C.emerald}40` }}>
               ✅ J'ai compris — Commencer les exercices !
             </button>
           )}
@@ -379,7 +379,8 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
 
 // ── Rendu Markdown simplifié ─────────────────────────────────────
 function MarkdownRenderer({ content }) {
-  if (!content) return <p style={{ color: '#6B5744', fontStyle: 'italic' }}>Aucun contenu.</p>
+  const { C } = useTheme()
+  if (!content) return <p style={{ color: C.textSec, fontStyle: 'italic' }}>Aucun contenu.</p>
 
   const lines = content.split('\n')
   const elements = []
@@ -401,51 +402,50 @@ function MarkdownRenderer({ content }) {
     if (inCode) { codeBlock.push(line); return }
 
     if (line.startsWith('### ')) {
-      elements.push(<h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: '#6B3A2A', margin: '20px 0 8px', borderLeft: '3px solid #C4865A', paddingLeft: 10 }}>{line.slice(4)}</h3>)
+      elements.push(<h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: C.brown, margin: '20px 0 8px', borderLeft: `3px solid ${C.brownLight}`, paddingLeft: 10 }}>{line.slice(4)}</h3>)
     } else if (line.startsWith('## ')) {
-      elements.push(<h2 key={i} style={{ fontSize: 17, fontWeight: 800, color: '#3D1F13', margin: '24px 0 10px', paddingBottom: 6, borderBottom: '2px solid #F5EDE5' }}>{line.slice(3)}</h2>)
+      elements.push(<h2 key={i} style={{ fontSize: 17, fontWeight: 800, color: C.text, margin: '24px 0 10px', paddingBottom: 6, borderBottom: `2px solid ${C.border}` }}>{line.slice(3)}</h2>)
     } else if (line.startsWith('# ')) {
-      elements.push(<h1 key={i} style={{ fontSize: 20, fontWeight: 900, color: '#3D1F13', margin: '0 0 16px' }}>{line.slice(2)}</h1>)
+      elements.push(<h1 key={i} style={{ fontSize: 20, fontWeight: 900, color: C.text, margin: '0 0 16px' }}>{line.slice(2)}</h1>)
     } else if (line.startsWith('- ') || line.startsWith('* ')) {
       elements.push(
         <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-          <span style={{ color: '#C4865A', fontWeight: 900, flexShrink: 0 }}>•</span>
-          <p style={{ fontSize: 14, color: '#1A1207', margin: 0, lineHeight: 1.7 }}>{renderInline(line.slice(2))}</p>
+          <span style={{ color: C.brownLight, fontWeight: 900, flexShrink: 0 }}>•</span>
+          <p style={{ fontSize: 14, color: C.text, margin: 0, lineHeight: 1.7 }}>{renderInline(line.slice(2), C)}</p>
         </div>
       )
     } else if (/^\d+\. /.test(line)) {
       const num = line.match(/^(\d+)\. /)[1]
       elements.push(
         <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
-          <span style={{ background: '#6B3A2A', color: 'white', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0, marginTop: 2 }}>{num}</span>
-          <p style={{ fontSize: 14, color: '#1A1207', margin: 0, lineHeight: 1.7 }}>{renderInline(line.replace(/^\d+\. /, ''))}</p>
+          <span style={{ background: C.brown, color: 'white', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0, marginTop: 2 }}>{num}</span>
+          <p style={{ fontSize: 14, color: C.text, margin: 0, lineHeight: 1.7 }}>{renderInline(line.replace(/^\d+\. /, ''), C)}</p>
         </div>
       )
     } else if (line.startsWith('> ')) {
       elements.push(
-        <blockquote key={i} style={{ borderLeft: '4px solid #D4A853', paddingLeft: 14, margin: '10px 0', background: '#FEF9E7', borderRadius: '0 8px 8px 0', padding: '10px 14px' }}>
-          <p style={{ fontSize: 13, color: '#1A1207', margin: 0, fontStyle: 'italic', lineHeight: 1.6 }}>{line.slice(2)}</p>
+        <blockquote key={i} style={{ borderLeft: `4px solid ${C.gold}`, paddingLeft: 14, margin: '10px 0', background: `${C.gold}12`, borderRadius: '0 8px 8px 0', padding: '10px 14px' }}>
+          <p style={{ fontSize: 13, color: C.text, margin: 0, fontStyle: 'italic', lineHeight: 1.6 }}>{line.slice(2)}</p>
         </blockquote>
       )
     } else if (line.trim() === '') {
       elements.push(<div key={i} style={{ height: 8 }} />)
     } else {
-      elements.push(<p key={i} style={{ fontSize: 14, color: '#1A1207', lineHeight: 1.8, margin: '0 0 6px' }}>{renderInline(line)}</p>)
+      elements.push(<p key={i} style={{ fontSize: 14, color: C.text, lineHeight: 1.8, margin: '0 0 6px' }}>{renderInline(line, C)}</p>)
     }
   })
 
   return <div>{elements}</div>
 }
 
-function renderInline(text) {
-  // **gras** et `code`
+function renderInline(text, C) {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} style={{ fontWeight: 800, color: '#3D1F13' }}>{part.slice(2, -2)}</strong>
+      return <strong key={i} style={{ fontWeight: 800, color: C?.text || '#3D1F13' }}>{part.slice(2, -2)}</strong>
     }
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={i} style={{ background: '#F5EDE5', color: '#6B3A2A', padding: '1px 6px', borderRadius: 5, fontSize: 13, fontFamily: 'monospace', fontWeight: 700 }}>{part.slice(1, -1)}</code>
+      return <code key={i} style={{ background: C?.brownPale || '#F5EDE5', color: C?.brown || '#6B3A2A', padding: '1px 6px', borderRadius: 5, fontSize: 13, fontFamily: 'monospace', fontWeight: 700 }}>{part.slice(1, -1)}</code>
     }
     return part
   })
@@ -954,8 +954,8 @@ export default function Session() {
 
   function suivant() {
     if (current + 1 >= exercices.length) {
-      const r = scores.filter(s => s > 0).length + (resultat?.correct ? 1 : 0)
-      if (Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
+      const r = scores.filter(s => s > 0).length
+      if (exercices.length > 0 && Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
       if (sessionIdRef.current) {
         termineeRef.current = true
         api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
@@ -1045,16 +1045,36 @@ export default function Session() {
             <p style={{ fontSize: 10, color: C.textSec, marginTop: 4, margin: '4px 0 0' }}>α·visuel + β·audio + γ·comportemental</p>
           </div>
 
-          <button onClick={() => navigate('/dashboard')} style={{
-            width: '100%', padding: '15px',
-            background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-            color: 'white', border: 'none', borderRadius: 14,
-            fontSize: 15, fontWeight: 800, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52
-          }}>
-            <Home size={17}/> Tableau de bord
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <button onClick={() => navigate(`/cours/${uaId}`)} style={{
+                padding: '13px', background: C.brownPale,
+                color: C.brown, border: `1.5px solid ${C.brownLight}40`,
+                borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
+              }}>
+                <ArrowLeft size={15}/> Retour au cours
+              </button>
+              <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false) }} style={{
+                padding: '13px', background: C.brownPale,
+                color: C.brown, border: `1.5px solid ${C.brownLight}40`,
+                borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
+              }}>
+                🔄 Refaire
+              </button>
+            </div>
+            <button onClick={() => navigate('/dashboard')} style={{
+              width: '100%', padding: '15px',
+              background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+              color: 'white', border: 'none', borderRadius: 14,
+              fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52
+            }}>
+              <Home size={17}/> Tableau de bord
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -1067,11 +1087,11 @@ export default function Session() {
     3: { bg: '#FEE2E2',     color: C.red,        label: 'Difficile', icon: '🔴' },
   }
   const ds = diffStyle[ex.difficulte] || diffStyle[1]
-  const progressPct = ((current + (resultat ? 1 : 0)) / exercices.length) * 100
   const totalPts = scores.reduce((a, b) => a + b, 0)
   const isVraiFaux = ex.type === 'qcm' && ex.options?.length === 2 &&
     (ex.options.includes('Vrai') || ex.options.includes('Faux'))
   const MASCOT = {
+
     engagement_eleve:'🦁', engagement_modere:'🐘', engagement_faible:'🐢',
     confusion:'🤔', frustration:'🐆', ennui:'😴', neutre:'🦉', decrochage:'⚠️',
   }
@@ -1240,7 +1260,7 @@ export default function Session() {
         boxShadow: '0 2px 12px rgba(107,58,42,0.07)'
       }}>
         {/* Bouton retour */}
-        <button onClick={() => navigate('/dashboard')} style={{
+        <button onClick={() => navigate(`/cours/${uaId}`)} style={{
           background: C.brownPale, border: 'none', borderRadius: 9,
           padding: isMobile ? '8px 10px' : '7px 14px', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 5,
@@ -1329,18 +1349,18 @@ export default function Session() {
           {noiseAdaptatif && !picModal && (
             <div style={{
               padding: '10px 14px', borderRadius: 12, marginBottom: 10,
-              background: noiseAdaptatif === 'tres_eleve' ? '#FEE2E2' : '#FFFBEB',
-              border: `1px solid ${noiseAdaptatif === 'tres_eleve' ? '#FCA5A5' : '#FDE68A'}`,
+              background: noiseAdaptatif === 'tres_eleve' ? `${C.red}12` : `${C.gold}12`,
+              border: `1px solid ${noiseAdaptatif === 'tres_eleve' ? `${C.red}40` : `${C.gold}40`}`,
               display: 'flex', alignItems: 'center', gap: 10, animation: 'slideDown .3s ease'
             }}>
               <span style={{ fontSize: 18, flexShrink: 0 }}>
                 {noiseAdaptatif === 'tres_eleve' ? '🔇' : '🔊'}
               </span>
               <p style={{ fontSize: 12, fontWeight: 700, margin: 0, flex: 1,
-                color: noiseAdaptatif === 'tres_eleve' ? C.red : '#92400E', lineHeight: 1.5 }}>
+                color: noiseAdaptatif === 'tres_eleve' ? C.red : C.gold, lineHeight: 1.5 }}>
                 {noiseAdaptatif === 'tres_eleve'
                   ? 'Environnement très bruyant — les consignes sont lues automatiquement'
-                  : 'Bruit de fond détecté — utilise le bouton 🔊 si tu n\'entends pas bien'}
+                  : "Bruit de fond détecté — utilise le bouton 🔊 si tu n'entends pas bien"}
               </p>
               <button onClick={() => setNoiseAdaptatif(null)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: C.textSec, flexShrink: 0, padding: 4 }}>✕</button>
@@ -1351,13 +1371,13 @@ export default function Session() {
           {adaptation && (
             <div style={{
               padding: '12px 14px', borderRadius: 12, marginBottom: 14,
-              background: adaptation.priority === 'haute' ? '#FEF2F2' : '#FFFBEB',
-              border: `1px solid ${adaptation.priority === 'haute' ? '#FCA5A5' : '#FDE68A'}`,
+              background: adaptation.priority === 'haute' ? `${C.red}12` : `${C.gold}12`,
+              border: `1px solid ${adaptation.priority === 'haute' ? `${C.red}40` : `${C.gold}40`}`,
               animation: 'slideDown .3s ease', display: 'flex', gap: 10, alignItems: 'flex-start'
             }}>
               <span style={{ fontSize: 16, flexShrink: 0 }}>{adaptation.priority === 'haute' ? '⚠️' : '💡'}</span>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: adaptation.priority === 'haute' ? C.red : '#92400E', margin: '0 0 4px' }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: adaptation.priority === 'haute' ? C.red : C.gold, margin: '0 0 4px' }}>
                   {adaptation.message}
                 </p>
                 <button onClick={() => setAdaptation(null)} style={{ fontSize: 11, color: C.textSec, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>

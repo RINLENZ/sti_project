@@ -234,6 +234,16 @@ def lier_par_code_classe(
     )
     db.add(lien)
     db.commit()
+
+    try:
+        from ..services.notification_service import notif_enseignant_lie, notif_apprenant_lie
+        enseignant_nom = f"{enseignant.prenom} {enseignant.nom}"
+        apprenant_nom  = f"{current_user.prenom} {current_user.nom}"
+        notif_enseignant_lie(db, current_user.id, enseignant_nom)
+        notif_apprenant_lie(db, enseignant.id, apprenant_nom, current_user.niveau_label)
+    except Exception:
+        pass
+
     return {
         "message":    f"Tu es maintenant lié à {enseignant.prenom} {enseignant.nom}",
         "enseignant": f"{enseignant.prenom} {enseignant.nom}",
@@ -286,6 +296,8 @@ def update_mon_profil(
         raise HTTPException(404, "Utilisateur introuvable")
 
     champs_autorises = [
+        # Identité
+        "nom", "prenom",
         # Apprenant
         "niveau_label", "filiere_label", "pays", "niveau",
         "niveau_id", "filiere_id", "avatar",
@@ -308,6 +320,8 @@ def update_mon_profil(
 
     return {
         "message":             "Profil mis à jour",
+        "nom":                 user.nom,
+        "prenom":              user.prenom,
         "niveau_label":        user.niveau_label,
         "niveau_id":           str(user.niveau_id)  if user.niveau_id  else None,
         "filiere_label":       user.filiere_label,

@@ -8,19 +8,27 @@ from .database import Base, engine
 from .routers import auth
 from .routers import interactions
 from .models import cours
-from .models import examen as _examen_models  # noqa: F401 — ensures tables are registered
+from .models import examen as _examen_models         # noqa: F401 — registers tables
+from .models import notification as _notif_models    # noqa: F401 — registers tables
 from .routers import cours
 from .routers import bkt
 from .routers import admin
 from .routers import tuteur
 from .routers import annotation
 from .routers import examen
+from .routers import notifications
 
 app = FastAPI(
     title="STI Adaptatif — API",
     description="Système de Tutorat Intelligent avec analyse multimodale",
     version="0.1.0"
 )
+
+
+@app.on_event("startup")
+def create_missing_tables():
+    """Crée toutes les tables manquantes (idempotent — checkfirst=True)."""
+    Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────
 try:
@@ -72,6 +80,7 @@ app.include_router(bkt.router)
 app.include_router(admin.router)
 app.include_router(annotation.router)
 app.include_router(examen.router)
+app.include_router(notifications.router)
 
 @app.get("/health")
 def health_check():

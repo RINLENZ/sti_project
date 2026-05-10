@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap } from 'lucide-react'
+import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
@@ -204,6 +204,9 @@ export default function Profil() {
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
   const [referentiel,    setReferentiel]    = useState([])
   const [stats,          setStats]          = useState(null)
+  const [codeClasse,     setCodeClasse]     = useState('')
+  const [savingLink,     setSavingLink]     = useState(false)
+  const [linkedTeacher,  setLinkedTeacher]  = useState(null)
   const [form, setForm] = useState({
     prenom:        user?.prenom        || '',
     nom:           user?.nom           || '',
@@ -236,6 +239,22 @@ export default function Profil() {
     navigator.clipboard.writeText(user?.code_invitation || '')
     setCopied(true); toast.success('Code copié !')
     setTimeout(() => setCopied(false), 2500)
+  }
+
+  async function joinClasse() {
+    const val = codeClasse.trim().toUpperCase()
+    if (!val) { toast.error('Entre un code classe'); return }
+    setSavingLink(true)
+    try {
+      const { data } = await api.post('/auth/lier-enseignant', { code_classe: val })
+      setLinkedTeacher(data.enseignant)
+      setCodeClasse('')
+      toast.success(`Classe rejointe ! Enseignant : ${data.enseignant}`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Code invalide ou introuvable')
+    } finally {
+      setSavingLink(false)
+    }
   }
 
   async function handleAvatarSelect(id) {
@@ -643,8 +662,8 @@ export default function Profil() {
 
           </div>
 
-          {/* Colonne droite — code tuteur */}
-          <div style={{ animation: 'fadeUp .4s .16s ease both' }}>
+          {/* Colonne droite — code tuteur + rejoindre classe */}
+          <div style={{ animation: 'fadeUp .4s .16s ease both', display: 'flex', flexDirection: 'column', gap: mobile ? 12 : 16 }}>
             <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', overflow: 'hidden' }}>
               <div style={{ background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, padding: mobile ? '18px 18px 16px' : '22px 22px 18px', position: 'relative', overflow: 'hidden' }}>
                 <svg width="100%" height="100%" style={{ position:'absolute',inset:0,opacity:.08,pointerEvents:'none' }}>
@@ -689,6 +708,68 @@ export default function Profil() {
                 </div>
               </div>
             </div>
+            {/* ── Carte rejoindre une classe ── */}
+            <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', overflow: 'hidden' }}>
+              <div style={{ background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`, padding: mobile ? '18px 18px 16px' : '22px 22px 18px', position: 'relative', overflow: 'hidden' }}>
+                <svg width="100%" height="100%" style={{ position:'absolute',inset:0,opacity:.08,pointerEvents:'none' }}>
+                  <defs><pattern id="dots3" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.2" fill="white"/></pattern></defs>
+                  <rect width="100%" height="100%" fill="url(#dots3)"/>
+                </svg>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Users size={16} color="white"/>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: 'white', margin: 0 }}>Rejoindre une classe</p>
+                    <p style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', margin: '2px 0 0' }}>Entre le code donné par ton enseignant</p>
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: mobile ? '16px' : '20px 22px' }}>
+                {linkedTeacher ? (
+                  <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.emeraldPale, border: `2px solid ${C.emerald}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', fontSize: 20 }}>✓</div>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: C.emerald, margin: '0 0 3px' }}>Classe rejointe !</p>
+                    <p style={{ fontSize: 12, color: C.textSec, margin: 0 }}>Enseignant : <strong style={{ color: C.text }}>{linkedTeacher}</strong></p>
+                    <button onClick={() => setLinkedTeacher(null)} style={{ marginTop: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.textSec, textDecoration: 'underline' }}>
+                      Rejoindre une autre classe
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 11, color: C.textSec, margin: '0 0 12px', lineHeight: 1.5 }}>
+                      Ton enseignant te donnera un code court (ex : MATH2A). Entre-le ci-dessous pour apparaître dans son tableau de bord.
+                    </p>
+                    <input
+                      className="inp-prof"
+                      value={codeClasse}
+                      onChange={e => setCodeClasse(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                      placeholder="Ex : MATH2A"
+                      maxLength={12}
+                      onKeyDown={e => e.key === 'Enter' && joinClasse()}
+                      style={{ fontFamily: 'monospace', letterSpacing: 3, fontSize: 18, textAlign: 'center', marginBottom: 10 }}
+                    />
+                    <button
+                      onClick={joinClasse}
+                      disabled={savingLink || !codeClasse.trim()}
+                      style={{
+                        width: '100%', padding: '10px 0',
+                        background: savingLink || !codeClasse.trim()
+                          ? C.border
+                          : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+                        border: 'none', borderRadius: 10, cursor: savingLink || !codeClasse.trim() ? 'not-allowed' : 'pointer',
+                        color: savingLink || !codeClasse.trim() ? C.textMuted : 'white',
+                        fontSize: 13, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                        transition: 'all .2s',
+                      }}
+                    >
+                      <Hash size={13}/>
+                      {savingLink ? 'Liaison…' : 'Rejoindre la classe'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
           </div>
 
         </div>

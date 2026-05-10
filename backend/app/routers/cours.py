@@ -390,6 +390,7 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
             mastery.nb_correct += 1
         db.commit()
 
+        p_avant = mastery.p_mastery  # valeur avant mise à jour (déjà écrasée — on lit après commit)
         interp = interpret_mastery(mastery.p_mastery)
         bkt_result = {
             "competence":  exercice.competence_evaluee,
@@ -398,6 +399,43 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
             "label":       interp["label"],
             "color":       interp["color"]
         }
+
+        # ── Notifications BKT ──────────────────────────────────────
+        try:
+            from ..services.notification_service import (
+                notif_badge, notif_competence_maitrisee, notif_competence_progres
+            )
+            p_new  = mastery.p_mastery
+            p_old  = round(p_avant - (p_new - p_avant), 4)   # approximation avant update
+            pct    = round(p_new * 100)
+            pct_old = round(p_old * 100) if p_old >= 0 else 0
+
+            # Paliers de maîtrise (notif une seule fois par franchissement)
+            if pct >= 95 and pct_old < 95:
+                notif_competence_maitrisee(db, body.user_id, exercice.competence_evaluee)
+            elif pct >= 70 and pct_old < 70:
+                notif_competence_progres(db, body.user_id, exercice.competence_evaluee, 70)
+            elif pct >= 40 and pct_old < 40:
+                notif_competence_progres(db, body.user_id, exercice.competence_evaluee, 40)
+
+            # Badges basés sur nb_tentatives
+            BADGE_TENTATIVES = {1: "premier_pas", 10: "studieux", 50: "assidu", 100: "expert"}
+            for seuil, badge_id in BADGE_TENTATIVES.items():
+                if mastery.nb_tentatives == seuil:
+                    notif_badge(db, body.user_id, badge_id)
+
+            # Badges basés sur nb_maitrisees (toutes compétences confondues)
+            from ..models.cours import BKTMastery as _BKT
+            nb_maitrisees = db.query(_BKT).filter(
+                _BKT.user_id == body.user_id,
+                _BKT.p_mastery >= 0.8
+            ).count()
+            BADGE_MAITRISE = {1: "premiere_maitrise", 5: "multi_maitre"}
+            for seuil, badge_id in BADGE_MAITRISE.items():
+                if nb_maitrisees == seuil:
+                    notif_badge(db, body.user_id, badge_id)
+        except Exception:
+            pass  # les notifications ne doivent jamais bloquer la réponse
 
     return {
         "correct":          correct,
@@ -494,21 +532,69 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db)):
     duree = int((now - session.started_at.replace(tzinfo=timezone.utc)).total_seconds()) \
         if session.started_at else None
 
-    session.ended_at       = now
+    session.ended_at        = now
     session.score_engagement = result["score"]
-    session.etat_affectif  = result.get("etat_affectif", "neutre")
-    session.nb_interactions = len(events)
-    session.duree_secondes  = duree
+    session.etat_affectif   = result.get("etat_affectif", "neutre")
+    session.nb_interactions  = len(events)
+    session.duree_secondes   = duree
     db.commit()
 
+    # ── Notifications post-session ─────────────────────────────────
+    try:
+        from ..services.notification_service import (
+            notif_session_terminee, notif_apprenant_session, notif_apprenant_decrocheur,
+            notif_badge
+        )
+        from ..models.cours import BKTMastery, UniteApprentissage
+        from ..models.user import TuteurSuivi
+
+        # Récupère le titre du cours
+        ua = db.query(UniteApprentissage).filter(
+            UniteApprentissage.id == session.cours_id
+        ).first()
+        cours_titre = ua.titre if ua else "Cours"
+
+        # Score final exercices
+        score_pct = round((session.score_final or 0) * 100)
+        duree_min = round((duree or 0) / 60)
+
+        # Notif résumé pour l'apprenant
+        notif_session_terminee(db, session.user_id, cours_titre, score_pct, duree_min)
+
+        # Badges sessions
+        from ..models.session import LearningSession as LS
+        nb_sessions = db.query(LS).filter(
+            LS.user_id == session.user_id,
+            LS.ended_at.isnot(None)
+        ).count()
+        BADGE_SESSIONS = {5: "regulier", 20: "perseverant"}
+        for seuil, badge_id in BADGE_SESSIONS.items():
+            if nb_sessions == seuil:
+                notif_badge(db, session.user_id, badge_id)
+
+        # Notifs pour les enseignants qui suivent cet apprenant
+        liens = db.query(TuteurSuivi).filter(
+            TuteurSuivi.apprenant_id == session.user_id,
+            TuteurSuivi.actif == True
+        ).all()
+        for lien in liens:
+            notif_apprenant_session(db, lien.tuteur_id, "", cours_titre, score_pct)
+            engagement_pct = round((result["score"] or 0) * 100)
+            if engagement_pct < 30:
+                apprenant = db.query(User).filter(User.id == session.user_id).first()
+                nom = f"{apprenant.prenom} {apprenant.nom}" if apprenant else "Un apprenant"
+                notif_apprenant_decrocheur(db, lien.tuteur_id, nom, engagement_pct)
+    except Exception:
+        pass
+
     return {
-        "message":         "Session clôturée",
+        "message":          "Session clôturée",
         "score_engagement": result["score"],
-        "level":           result["level"],
-        "etat_affectif":   result.get("etat_affectif", "neutre"),
-        "duree_secondes":  duree,
-        "nb_interactions": len(events),
-        "fusion_info":     result.get("fusion_info", ""),
+        "level":            result["level"],
+        "etat_affectif":    result.get("etat_affectif", "neutre"),
+        "duree_secondes":   duree,
+        "nb_interactions":  len(events),
+        "fusion_info":      result.get("fusion_info", ""),
     }
 
 @router.get("/dashboard/enseignant")

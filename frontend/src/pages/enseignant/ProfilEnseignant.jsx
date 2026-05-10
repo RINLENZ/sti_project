@@ -236,6 +236,9 @@ export default function ProfilEnseignant() {
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || null)
   const [stats,          setStats]          = useState(null)
   const [referentiel,    setReferentiel]    = useState([])
+  const [editingCode,    setEditingCode]    = useState(false)
+  const [codeInput,      setCodeInput]      = useState(user?.code_classe || '')
+  const [savingCode,     setSavingCode]     = useState(false)
 
   const [form, setForm] = useState({
     nom:           user?.nom           || '',
@@ -317,6 +320,24 @@ export default function ProfilEnseignant() {
       toast.success('Matières mises à jour !')
     } catch {
       toast.error('Erreur lors de la mise à jour')
+    }
+  }
+
+  async function saveCode() {
+    const val = codeInput.trim().toUpperCase().replace(/\s+/g, '')
+    if (!val) { toast.error('Le code ne peut pas être vide'); return }
+    if (val.length < 4 || val.length > 12) { toast.error('Le code doit faire entre 4 et 12 caractères'); return }
+    setSavingCode(true)
+    try {
+      const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, { code_classe: val })
+      dispatch(loginSuccess({ token, user: { ...user, code_classe: updated.code_classe } }))
+      setCodeInput(updated.code_classe)
+      setEditingCode(false)
+      toast.success('Code classe mis à jour !')
+    } catch (err) {
+      toast.error('Erreur : ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setSavingCode(false)
     }
   }
 
@@ -544,16 +565,45 @@ export default function ProfilEnseignant() {
                   <defs><pattern id="dots-p" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.2" fill="white"/></pattern></defs>
                   <rect width="100%" height="100%" fill="url(#dots-p)"/>
                 </svg>
-                <div style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
-                  <Hash size={16} color="white"/>
-                  <div>
-                    <p style={{ fontSize:13, fontWeight:800, color:'white', margin:0 }}>Code classe</p>
-                    <p style={{ fontSize:11, color:'rgba(255,255,255,.75)', margin:'2px 0 0' }}>Partage ce code à tes apprenants</p>
+                <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <Hash size={16} color="white"/>
+                    <div>
+                      <p style={{ fontSize:13, fontWeight:800, color:'white', margin:0 }}>Code classe</p>
+                      <p style={{ fontSize:11, color:'rgba(255,255,255,.75)', margin:'2px 0 0' }}>Partage ce code à tes apprenants</p>
+                    </div>
                   </div>
+                  {!editingCode && (
+                    <button onClick={() => { setCodeInput(user?.code_classe || ''); setEditingCode(true) }} style={{ background:'rgba(255,255,255,.18)', border:'1px solid rgba(255,255,255,.3)', borderRadius:8, padding:'5px 11px', cursor:'pointer', color:'white', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
+                      <Edit3 size={11}/>{user?.code_classe ? 'Modifier' : 'Définir'}
+                    </button>
+                  )}
                 </div>
               </div>
               <div style={{ padding: mobile ? '16px' : '20px 22px' }}>
-                {user?.code_classe ? (
+                {editingCode ? (
+                  <div>
+                    <p style={{ fontSize:11, color:C.textSec, margin:'0 0 10px', lineHeight:1.5 }}>
+                      Choisis un code court et mémorisable (4–12 caractères, lettres et chiffres).
+                    </p>
+                    <input
+                      className="inp-prof"
+                      value={codeInput}
+                      onChange={e => setCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                      placeholder="Ex : MATH2A"
+                      maxLength={12}
+                      style={{ fontFamily:'monospace', letterSpacing:3, fontSize:20, textAlign:'center', marginBottom:10 }}
+                    />
+                    <div style={{ display:'flex', gap:8, marginTop:4 }}>
+                      <button onClick={() => { setEditingCode(false); setCodeInput(user?.code_classe || '') }} style={{ flex:1, background:C.brownPale, border:'none', borderRadius:9, padding:'9px 0', cursor:'pointer', color:C.brown, fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+                        <X size={12}/> Annuler
+                      </button>
+                      <button onClick={saveCode} disabled={savingCode} style={{ flex:2, background:`linear-gradient(135deg,${C.emerald},${C.emeraldDark})`, border:'none', borderRadius:9, padding:'9px 0', cursor:'pointer', color:'white', fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', gap:5, opacity: savingCode ? .7 : 1 }}>
+                        <Save size={12}/>{savingCode ? 'Sauvegarde…' : 'Sauvegarder'}
+                      </button>
+                    </div>
+                  </div>
+                ) : user?.code_classe ? (
                   <>
                     <div style={{ background:`linear-gradient(135deg,${C.emeraldPale},${C.brownGhost})`, borderRadius:12, padding:'16px 16px 12px', border:`1.5px solid ${C.emerald}25`, marginBottom:14, textAlign:'center' }}>
                       <p style={{ fontSize:10, fontWeight:700, color:C.emerald, textTransform:'uppercase', letterSpacing:.8, margin:'0 0 8px' }}>Code de ta classe</p>
@@ -570,11 +620,9 @@ export default function ProfilEnseignant() {
                     </p>
                   </>
                 ) : (
-                  <div style={{ textAlign:'center', padding:'16px 0' }}>
-                    <p style={{ fontSize:13, color:C.textSec, margin:'0 0 12px' }}>Code non configuré</p>
-                    <button onClick={() => navigate('/onboarding-enseignant')} style={{ background:`linear-gradient(135deg,${C.brown},${C.brownLight})`, border:'none', borderRadius:10, padding:'10px 18px', cursor:'pointer', color:'white', fontSize:12, fontWeight:700 }}>
-                      Configurer maintenant
-                    </button>
+                  <div style={{ textAlign:'center', padding:'8px 0 4px' }}>
+                    <p style={{ fontSize:13, color:C.textSec, margin:'0 0 4px' }}>Aucun code défini.</p>
+                    <p style={{ fontSize:11, color:C.textMuted, margin:0 }}>Clique sur "Définir" pour en créer un.</p>
                   </div>
                 )}
               </div>
