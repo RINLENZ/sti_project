@@ -168,30 +168,36 @@ const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }
 }
 
 /* ── Confetti ────────────────────────────────────────────────── */
-const CONFETTI_PIECES = Array.from({ length: 40 }, (_, i) => ({
-  id: i,
-  color: [C.brown, C.brownLight, C.emerald, C.gold, '#FCD34D', '#EC4899'][i % 6],
-  left: `${(i * 2.56 + 3) % 100}%`,
-  delay: `${(i * 0.053) % 2}s`,
-  duration: `${2.5 + (i % 4) * 0.5}s`,
-  size: 5 + (i % 3) * 4,
-}))
+const CONFETTI_COLORS = [C.brown, C.brownLight, C.emerald, C.gold, '#FCD34D', '#EC4899', '#60A5FA', '#A78BFA', '#34D399', '#F87171']
+const CONFETTI_PIECES = Array.from({ length: 70 }, (_, i) => {
+  const shape = i % 3  // 0=square, 1=circle, 2=diamond
+  const anim  = i % 3 === 0 ? 'confettiFall' : i % 3 === 1 ? 'confettiFallL' : 'confettiFallR'
+  return {
+    id: i,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    left: `${(i * 1.45 + 1) % 100}%`,
+    delay: `${(i * 0.038) % 2.5}s`,
+    duration: `${2.2 + (i % 6) * 0.35}s`,
+    size: 5 + (i % 4) * 3,
+    borderRadius: shape === 1 ? '50%' : shape === 2 ? '2px' : '2px',
+    rotate: shape === 2 ? 'rotate(45deg)' : undefined,
+    anim,
+  }
+})
 
-const Confetti = () => {
-  const pieces = CONFETTI_PIECES
-  return (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999 }}>
-      {pieces.map(p => (
-        <div key={p.id} style={{
-          position: 'absolute', top: 0, left: p.left,
-          width: p.size, height: p.size, backgroundColor: p.color,
-          borderRadius: p.size / 4,
-          animation: `confettiFall ${p.duration} ${p.delay} ease-in both`
-        }}/>
-      ))}
-    </div>
-  )
-}
+const Confetti = () => (
+  <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999 }}>
+    {CONFETTI_PIECES.map(p => (
+      <div key={p.id} style={{
+        position: 'absolute', top: 0, left: p.left,
+        width: p.size, height: p.size, backgroundColor: p.color,
+        borderRadius: p.borderRadius,
+        transform: p.rotate,
+        animation: `${p.anim} ${p.duration} ${p.delay} ease-in both`
+      }}/>
+    ))}
+  </div>
+)
 
 /* ── Toast caméra mobile ─────────────────────────────────────── */
 const CameraBanner = ({ onActivate, onDismiss }) => {
@@ -529,6 +535,7 @@ export default function Session() {
   const [exercices, setExercices] = useState([])
   const [current, setCurrent]     = useState(0)
   const [reponse, setReponse]     = useState(null)
+  const [blanks, setBlanks]       = useState([])
   const [resultat, setResultat]   = useState(null)
   const [indices, setIndices]     = useState(0)
   const [termine, setTermine]     = useState(false)
@@ -536,6 +543,9 @@ export default function Session() {
   const [startTime]               = useState(Date.now())
   const [questionTime, setQuestionTime] = useState(Date.now())
   const [confetti, setConfetti]   = useState(false)
+  const [displayPct, setDisplayPct] = useState(0)
+  const [streak, setStreak]       = useState(0)
+  const [floatingPts, setFloatingPts] = useState(null)
   const [adaptation, setAdaptation] = useState(null)
   const [showPanel, setShowPanel] = useState(false)
   const [showCameraBanner, setShowCameraBanner] = useState(false)
@@ -699,6 +709,22 @@ export default function Session() {
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [sendEvent])
+
+  // Score count-up animation when session ends
+  useEffect(() => {
+    if (!termine) return
+    const pct = scores.length > 0 ? Math.round(scores.filter(s => s > 0).length / scores.length * 100) : 0
+    let startTs = null
+    const anim = (ts) => {
+      if (!startTs) startTs = ts
+      const prog = Math.min((ts - startTs) / 1400, 1)
+      const eased = 1 - Math.pow(1 - prog, 3)
+      setDisplayPct(Math.round(eased * pct))
+      if (prog < 1) requestAnimationFrame(anim)
+    }
+    const id = setTimeout(() => requestAnimationFrame(anim), 250)
+    return () => clearTimeout(id)
+  }, [termine])
 
   async function startCamera() {
     setShowCameraBanner(false)
@@ -947,7 +973,14 @@ export default function Session() {
       setTimeout(() => setAnswerFlash(null), 750)
       await sendEvent('response', { exercice_id: ex.id, correct: data.correct, time_seconds: tempsReponse, emotion })
       if (data.correct) {
+        setStreak(s => s + 1)
+        if (data.points_gagnes > 0) {
+          setFloatingPts({ pts: data.points_gagnes, id: Date.now() })
+          setTimeout(() => setFloatingPts(null), 1100)
+        }
         toast.success(`+${data.points_gagnes} points !`, { icon: '🎯' })
+      } else {
+        setStreak(0)
       }
     } catch { toast.error('Erreur de vérification') }
     finally { setSubmitting(false) }
@@ -963,7 +996,7 @@ export default function Session() {
       }
       setTermine(true)
     } else {
-      setCurrent(c => c + 1); setReponse(null); setResultat(null)
+      setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([])
       setIndices(0); setAdaptation(null); setExplicationIA(null)
       setAnswerFlash(null); setFeedbackMsg('')
       setQuestionTime(Date.now())
@@ -1016,65 +1049,117 @@ export default function Session() {
   if (termine) {
     const total = scores.length, reussis = scores.filter(s => s > 0).length
     const pct = total > 0 ? Math.round(reussis / total * 100) : 0
+    const totalPtsGagnes = scores.reduce((a, b) => a + b, 0)
+    const grade = pct >= 90 ? { emoji: '🏆', label: 'Excellent !',       bg: 'linear-gradient(135deg,#F59E0B,#D97706)', anim: 'goldGlow 2s ease infinite' }
+                : pct >= 70 ? { emoji: '🌟', label: 'Très bien !',        bg: `linear-gradient(135deg,${C.emerald},#059669)`, anim: undefined }
+                : pct >= 50 ? { emoji: '👍', label: 'Bien joué !',        bg: `linear-gradient(135deg,${C.brown},${C.brownLight})`, anim: undefined }
+                :             { emoji: '💪', label: 'Continue comme ça !', bg: 'linear-gradient(135deg,#6366F1,#4F46E5)', anim: undefined }
+
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
         {confetti && <Confetti/>}
-        <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? 24 : 40, boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, maxWidth: 480, width: '100%', textAlign: 'center', animation: 'fadeUp .5s ease' }}>
-          <div style={{ fontSize: isMobile ? 52 : 68, marginBottom: 10 }}>{pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '💪'}</div>
-          <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: C.brown, margin: '0 0 6px' }}>Session terminée !</h2>
-          <p style={{ color: C.textSec, fontSize: 13, margin: '0 0 24px' }}>{ua.titre}</p>
+        <div style={{ maxWidth: 520, width: '100%', animation: 'fadeUp .5s ease' }}>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
-            {[
-              { label: 'Score',   value: `${pct}%`,            color: pct >= 80 ? C.emerald : C.brownLight, icon: <Award size={14}/> },
-              { label: 'Réussis', value: `${reussis}/${total}`, color: C.brown,                              icon: <CheckCircle size={14}/> },
-              { label: 'Durée',   value: `${elapsedMin}min`,    color: C.textSec,                            icon: <Clock size={14}/> },
-            ].map(s => (
-              <div key={s.label} style={{ backgroundColor: C.brownPale, borderRadius: 14, padding: '14px 8px' }}>
-                <div style={{ color: s.color, marginBottom: 4, display: 'flex', justifyContent: 'center' }}>{s.icon}</div>
-                <div style={{ fontSize: isMobile ? 20 : 26, fontWeight: 900, color: s.color }}>{s.value}</div>
-                <div style={{ fontSize: 11, color: C.textSec, fontWeight: 600, marginTop: 4 }}>{s.label}</div>
+          {/* ── Carte principale ── */}
+          <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? '24px 20px' : '36px 40px', boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, textAlign: 'center', marginBottom: 14 }}>
+
+            {/* Trophée animé */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: isMobile ? 72 : 90, height: isMobile ? 72 : 90, borderRadius: '50%', background: grade.bg, boxShadow: '0 6px 30px rgba(0,0,0,0.18)', animation: grade.anim, marginBottom: 10 }}>
+                <span style={{ fontSize: isMobile ? 36 : 44, animation: 'trophyPop .7s cubic-bezier(.22,1,.36,1) .2s both', display: 'block' }}>{grade.emoji}</span>
               </div>
-            ))}
-          </div>
-
-          <div style={{ backgroundColor: C.brownPale, borderRadius: 12, padding: 14, marginBottom: 20 }}>
-            <p style={{ fontSize: 11, color: C.textSec, fontWeight: 600, margin: '0 0 4px' }}>Score d'engagement final</p>
-            <p style={{ fontSize: isMobile ? 18 : 22, fontWeight: 900, color: engColor(engagementScore), margin: 0 }}>
-              {Math.round(engagementScore * 100)}% — {engLabel(engagementScore)}
-            </p>
-            <p style={{ fontSize: 10, color: C.textSec, marginTop: 4, margin: '4px 0 0' }}>α·visuel + β·audio + γ·comportemental</p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <button onClick={() => navigate(`/cours/${uaId}`)} style={{
-                padding: '13px', background: C.brownPale,
-                color: C.brown, border: `1.5px solid ${C.brownLight}40`,
-                borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
-              }}>
-                <ArrowLeft size={15}/> Retour au cours
-              </button>
-              <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false) }} style={{
-                padding: '13px', background: C.brownPale,
-                color: C.brown, border: `1.5px solid ${C.brownLight}40`,
-                borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
-              }}>
-                🔄 Refaire
-              </button>
+              <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: C.brown, margin: '0 0 4px' }}>{grade.label}</h2>
+              <p style={{ color: C.textSec, fontSize: 13, margin: 0 }}>{ua.titre}</p>
             </div>
-            <button onClick={() => navigate('/dashboard')} style={{
-              width: '100%', padding: '15px',
-              background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-              color: 'white', border: 'none', borderRadius: 14,
-              fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52
+
+            {/* Score animé central */}
+            <div style={{ margin: '20px 0', position: 'relative' }}>
+              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: C.brownPale, borderRadius: 20, padding: isMobile ? '16px 28px' : '20px 40px' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Score global</span>
+                <span style={{ fontSize: isMobile ? 52 : 68, fontWeight: 900, color: pct >= 70 ? C.emerald : pct >= 50 ? C.brown : C.red, lineHeight: 1, animation: 'scoreCount .5s cubic-bezier(.22,1,.36,1) .3s both' }}>
+                  {displayPct}<span style={{ fontSize: isMobile ? 24 : 32, color: C.textSec }}>%</span>
+                </span>
+                <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{reussis} / {total} réussis · {totalPtsGagnes} pts</span>
+              </div>
+            </div>
+
+            {/* Timeline des réponses */}
+            {scores.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>Détail des réponses</p>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {scores.map((s, i) => (
+                    <div key={i} title={`Q${i+1} : ${s > 0 ? '+'+s+' pts' : 'faux'}`} style={{
+                      width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: s > 0 ? C.emeraldPale : '#FEE2E2',
+                      border: `1.5px solid ${s > 0 ? C.emerald : C.red}50`,
+                      fontSize: 10, fontWeight: 900, color: s > 0 ? C.emerald : C.red,
+                      animation: `scaleIn .3s ease ${i * 0.045}s both`,
+                    }}>
+                      {s > 0 ? '✓' : '✗'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stats en 3 colonnes */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
+              {[
+                { label: 'Engagement',  value: `${Math.round(engagementScore * 100)}%`, color: engColor(engagementScore), icon: <Activity size={13}/> },
+                { label: 'Durée',       value: `${elapsedMin}min`,                       color: C.textSec,                icon: <Clock size={13}/>   },
+                { label: 'Pts gagnés',  value: `${totalPtsGagnes}`,                      color: C.gold,                   icon: <Award size={13}/>   },
+              ].map((s, i) => (
+                <div key={s.label} style={{ backgroundColor: C.brownPale, borderRadius: 12, padding: '12px 8px', animation: `scaleIn .35s ease ${.5 + i * .08}s both` }}>
+                  <div style={{ color: s.color, marginBottom: 3, display: 'flex', justifyContent: 'center' }}>{s.icon}</div>
+                  <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 900, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: C.textSec, fontWeight: 600 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Message motivant */}
+            <div style={{ background: pct >= 70 ? C.emeraldPale : C.brownPale, borderRadius: 12, padding: '10px 14px', marginBottom: 20, border: `1px solid ${pct >= 70 ? C.emerald : C.brownLight}30` }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: pct >= 70 ? C.emerald : C.brown, margin: 0, lineHeight: 1.6 }}>
+                {pct === 100 ? '🎉 Score parfait ! Tu maîtrises cette unité à 100% !'
+                  : pct >= 90 ? '🌟 Excellent résultat ! Tes compétences progressent très bien.'
+                  : pct >= 70 ? '👏 Bien joué ! Quelques points à revoir pour atteindre la maîtrise.'
+                  : pct >= 50 ? '📚 Bon effort ! Revoir les exercices ratés avant de continuer.'
+                  : '🎯 Continue à pratiquer — chaque tentative renforce la mémoire !'}
+              </p>
+            </div>
+
+            {/* Boutons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <button onClick={() => navigate(`/cours/${uaId}`)} style={{
+                  padding: '13px', background: C.brownPale,
+                  color: C.brown, border: `1.5px solid ${C.brownLight}40`,
+                  borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
+                }}>
+                  <ArrowLeft size={15}/> Retour au cours
+                </button>
+                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]) }} style={{
+                  padding: '13px', background: C.brownPale,
+                  color: C.brown, border: `1.5px solid ${C.brownLight}40`,
+                  borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
+                }}>
+                  🔄 Refaire
+                </button>
+              </div>
+              <button onClick={() => navigate('/dashboard')} style={{
+                width: '100%', padding: '15px',
+                background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+                color: 'white', border: 'none', borderRadius: 14,
+                fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52
             }}>
               <Home size={17}/> Tableau de bord
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -1096,6 +1181,11 @@ export default function Session() {
   const apcData = isAPC ? (() => { try { return JSON.parse(ex.enonce.slice(7)) } catch { return null } })() : null
   const isVraiFaux = ex.type === 'qcm' && !isIdentification && ex.options?.length === 2 &&
     (ex.options.includes('Vrai') || ex.options.includes('Faux'))
+  const isMultiBlank = ex.type === 'texte_trou' && (() => {
+    try { return Array.isArray(JSON.parse(ex.reponse_correcte)) } catch { return false }
+  })()
+  const multiParts    = isMultiBlank ? ex.enonce.split('___') : []
+  const multiNbBlanks = multiParts.length - 1
   const MASCOT = {
 
     engagement_eleve:'🦁', engagement_modere:'🐘', engagement_faible:'🐢',
@@ -1238,6 +1328,17 @@ export default function Session() {
     <div style={{ minHeight: '100vh', background: C.bg }}>
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none', position: 'absolute' }}/>
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
+
+      {/* ── Floating +pts overlay ── */}
+      {floatingPts && (
+        <div key={floatingPts.id} style={{
+          position: 'fixed', top: '38%', left: '50%', zIndex: 998,
+          fontSize: isMobile ? 28 : 36, fontWeight: 900, color: C.emerald,
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+          textShadow: `0 3px 10px ${C.emerald}60`,
+          animation: 'floatUpFade .9s ease forwards',
+        }}>+{floatingPts.pts} pts 🎯</div>
+      )}
 
       {/* ── Modal pic sonore — confirmation présence ── */}
       {picModal && (
@@ -1394,6 +1495,7 @@ export default function Session() {
           )}
 
           {/* ── Carte question principale ── */}
+          <div key={current} style={{ animation: 'slideInRight .28s ease' }}>
           <div style={{
             backgroundColor: C.surface, borderRadius: isMobile ? 18 : 22,
             padding: isMobile ? '18px 16px' : '30px 32px',
@@ -1413,6 +1515,13 @@ export default function Session() {
                 title={`État : ${emotion}`}>
                 {answerFlash === 'correct' ? '🎉' : answerFlash === 'wrong' ? '💪' : mascot}
               </span>
+              {/* Streak badge */}
+              {streak >= 2 && !resultat && (
+                <div style={{ display:'flex', alignItems:'center', gap:3, background:'#FEF3C7', borderRadius:20, padding:'2px 9px', border:'1.5px solid #FDE68A', animation:'streakPop .35s cubic-bezier(.22,1,.36,1)' }}>
+                  <span style={{ fontSize:13, animation:'pulse 1.2s infinite' }}>🔥</span>
+                  <span style={{ fontSize:10, fontWeight:800, color:'#92400E' }}>{streak} série</span>
+                </div>
+              )}
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:11, color:C.textSec, fontWeight:600, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   Question {current + 1} sur {exercices.length}
@@ -1535,8 +1644,118 @@ export default function Session() {
               </div>
             )}
 
-            {/* ── Texte à trous avec propositions ── */}
-            {ex.type === 'texte_trou' && (
+            {/* ── Texte à trous — multi-blancs ── */}
+            {ex.type === 'texte_trou' && isMultiBlank && (
+              <div style={{ marginBottom:16 }}>
+                {/* Phrase avec slots inline */}
+                <div style={{ background: C.brownPale, borderRadius: 12, padding: isMobile ? '12px 14px' : '14px 18px', marginBottom: 14, lineHeight: 2.4, fontSize: isMobile ? 14 : 15, fontWeight: 600, color: C.text }}>
+                  {multiParts.map((part, i) => {
+                    const correctArr = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
+                    const filled = blanks[i] ?? null
+                    const isCorrectSlot = resultat && filled?.toLowerCase() === (correctArr[i] || '').toLowerCase()
+                    const isWrongSlot   = resultat && filled !== null && !isCorrectSlot
+                    return (
+                      <span key={i}>
+                        {part}
+                        {i < multiNbBlanks && (
+                          <span
+                            onClick={() => {
+                              if (resultat || filled === null) return
+                              const nb = blanks.length === multiNbBlanks ? [...blanks] : Array(multiNbBlanks).fill(null)
+                              nb[i] = null
+                              const allFilled = nb.slice(0, multiNbBlanks).every(b => b !== null)
+                              setBlanks(nb); setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
+                            }}
+                            style={{
+                              display: 'inline-block', minWidth: 72, padding: '2px 10px', margin: '0 3px',
+                              borderRadius: 7, textAlign: 'center', fontWeight: 800,
+                              border: `2px dashed ${resultat ? (isCorrectSlot ? C.emerald : C.red) : (filled ? C.brown : C.brownLight)}`,
+                              background: resultat ? (isCorrectSlot ? C.emeraldPale : '#FEE2E2') : (filled ? C.brownPale : 'transparent'),
+                              color: resultat ? (isCorrectSlot ? C.emerald : C.red) : (filled ? C.brown : C.textSec),
+                              cursor: filled && !resultat ? 'pointer' : 'default',
+                              fontStyle: filled ? 'normal' : 'italic', fontSize: 13,
+                              transition: 'all .15s',
+                            }}>
+                            {filled ?? `trou ${i+1}`}
+                          </span>
+                        )}
+                      </span>
+                    )
+                  })}
+                </div>
+
+                {/* Réponses correctes après résultat */}
+                {resultat && !resultat.correct && (() => {
+                  try {
+                    const arr = JSON.parse(resultat.reponse_correcte)
+                    if (Array.isArray(arr)) return (
+                      <p style={{ fontSize: 12, color: C.emerald, fontWeight: 600, margin: '0 0 10px' }}>
+                        ✅ Réponses : {arr.join(' · ')}
+                      </p>
+                    )
+                  } catch {}
+                  return null
+                })()}
+
+                {/* Banque de mots */}
+                {!resultat && ex.options?.length > 0 && (
+                  <>
+                    <p style={{ fontSize:11, fontWeight:800, color:C.textSec, textTransform:'uppercase', letterSpacing:.6, margin:'0 0 10px' }}>
+                      Clique pour placer dans un trou :
+                    </p>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                      {ex.options.map((opt, i) => {
+                        const usedIdx = (blanks.length === multiNbBlanks ? blanks : []).indexOf(opt)
+                        const isUsed = usedIdx !== -1
+                        return (
+                          <button key={i} onClick={() => {
+                            if (isUsed) return
+                            const nb = blanks.length === multiNbBlanks ? [...blanks] : Array(multiNbBlanks).fill(null)
+                            const emptyIdx = nb.findIndex((b, idx) => idx < multiNbBlanks && b === null)
+                            if (emptyIdx === -1) return
+                            nb[emptyIdx] = opt
+                            const allFilled = nb.slice(0, multiNbBlanks).every(b => b !== null)
+                            setBlanks(nb); setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
+                          }} style={{
+                            padding:'9px 18px', borderRadius:24,
+                            background: isUsed ? '#E5E7EB' : C.surface,
+                            color: isUsed ? '#9CA3AF' : C.text,
+                            border:`2px solid ${isUsed ? '#E5E7EB' : C.brownPale}`,
+                            fontSize:14, fontWeight:700, cursor: isUsed ? 'not-allowed' : 'pointer',
+                            opacity: isUsed ? 0.5 : 1,
+                            textDecoration: isUsed ? 'line-through' : 'none',
+                            transition:'all .15s',
+                          }}>
+                            {opt}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* Saisie libre multi-blancs (sans banque de mots) */}
+                {!resultat && !ex.options?.length && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {Array.from({ length: multiNbBlanks }, (_, i) => (
+                      <input key={i} type="text"
+                        placeholder={`Trou ${i+1}…`}
+                        value={(blanks.length === multiNbBlanks ? blanks[i] : '') || ''}
+                        onChange={e => {
+                          const nb = blanks.length === multiNbBlanks ? [...blanks] : Array(multiNbBlanks).fill('')
+                          nb[i] = e.target.value
+                          const allFilled = nb.slice(0, multiNbBlanks).every(b => b && b.trim())
+                          setBlanks(nb); setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
+                        }}
+                        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.brownLight}`, borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', backgroundColor:C.surface, fontWeight:600 }}/>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Texte à trous simple (1 trou) ── */}
+            {ex.type === 'texte_trou' && !isMultiBlank && (
               <div style={{ marginBottom:16 }}>
                 {ex.options?.length > 0 ? (
                   <>
@@ -1754,6 +1973,7 @@ export default function Session() {
               </button>
             )}
           </div>
+          </div>{/* end key={current} slide wrapper */}
 
           {/* ── Mini stats mobiles sous la carte ── */}
           {isMobile && (

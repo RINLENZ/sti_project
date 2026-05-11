@@ -702,6 +702,10 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     options: initChoices(),
     propositions: (!initial.options?.[0]?.startsWith?.('__img__:') && initial.options?.length) ? initial.options.join(', ') : '',
     reponse_correcte: initial.reponse_correcte || '',
+    reponses_trou: (() => {
+      try { const p = JSON.parse(initial.reponse_correcte || ''); if (Array.isArray(p)) return p } catch {}
+      return [initial.reponse_correcte || '']
+    })(),
     explication: initial.explication || '', indice_1: initial.indice_1 || '',
     indice_2: initial.indice_2 || '', competence_evaluee: initial.competence_evaluee || '',
     difficulte: initial.difficulte || 1, points: initial.points || 10,
@@ -726,8 +730,14 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       const p = form.propositions.split(',').map(s => s.trim()).filter(Boolean)
       options = p.length ? p : null
     }
+    const nbBlanks = (form.enonce.match(/___/g) || []).length
+    const rcTrou = form.type === 'texte_trou'
+      ? (nbBlanks > 1
+        ? JSON.stringify(form.reponses_trou.slice(0, nbBlanks).map(r => r || ''))
+        : (form.reponses_trou[0] || ''))
+      : form.reponse_correcte
     return { titre: form.titre, type: apiType, enonce: apiEnonce, options,
-      reponse_correcte: form.reponse_correcte, explication: form.explication,
+      reponse_correcte: rcTrou, explication: form.explication,
       indice_1: form.indice_1, indice_2: form.indice_2,
       competence_evaluee: form.competence_evaluee,
       difficulte: parseInt(form.difficulte), points: parseInt(form.points), ua_id: form.ua_id }
@@ -818,20 +828,61 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       )}
 
       {/* ── Texte à trous ── */}
-      {form.type === 'texte_trou' && (
-        <>
-          <FTextarea label="Texte avec trou — utilise ___ pour marquer le trou" value={form.enonce} onChange={e => set('enonce', e.target.value)}
-            placeholder="Le ___ est le cerveau de l'ordinateur." rows={3} required />
-          <div style={{ marginBottom: 12 }}>
-            <FieldLabel>Banque de mots (séparées par des virgules)</FieldLabel>
-            <input value={form.propositions} onChange={e => set('propositions', e.target.value)}
-              placeholder="processeur, mémoire RAM, disque dur, carte mère"
-              style={inputBase} onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
-            <p style={{ fontSize: 10, color: C.textSec, margin: '4px 0 0' }}>Laisse vide → saisie libre.</p>
-          </div>
-          <FInput label="Réponse correcte" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)} placeholder="processeur" required />
-        </>
-      )}
+      {form.type === 'texte_trou' && (() => {
+        const nbBlanks = (form.enonce.match(/___/g) || []).length
+        const parts = form.enonce.split('___')
+        return (
+          <>
+            <FTextarea label="Texte avec trous — utilise ___ pour chaque trou" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+              placeholder="Un ___ est un ensemble de ___ permettant de traiter l'information." rows={3} required />
+            {nbBlanks === 0 && form.enonce.trim() && (
+              <p style={{ fontSize: 11, color: C.orange, margin: '-8px 0 12px', fontWeight: 600 }}>⚠️ Ajoute ___ dans le texte pour créer des trous.</p>
+            )}
+            {nbBlanks > 0 && (
+              <div style={{ background: C.brownPale, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, lineHeight: 2.2, fontWeight: 600, color: C.text }}>
+                {parts.map((part, i) => (
+                  <span key={i}>{part}{i < nbBlanks && (
+                    <span style={{ display: 'inline-block', minWidth: 60, padding: '1px 8px', margin: '0 2px', borderRadius: 6,
+                      background: form.reponses_trou[i] ? C.emeraldPale : '#FEE2E2',
+                      border: `1.5px solid ${form.reponses_trou[i] ? C.emerald : C.red}60`,
+                      color: form.reponses_trou[i] ? C.emerald : C.red,
+                      fontWeight: 800, textAlign: 'center', fontSize: 12 }}>
+                      {form.reponses_trou[i] || `trou ${i+1}`}
+                    </span>
+                  )}</span>
+                ))}
+              </div>
+            )}
+            <div style={{ marginBottom: 12 }}>
+              <FieldLabel>Banque de mots (séparées par des virgules)</FieldLabel>
+              <input value={form.propositions} onChange={e => set('propositions', e.target.value)}
+                placeholder="processeur, mémoire RAM, disque dur, carte mère"
+                style={inputBase} onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
+              <p style={{ fontSize: 10, color: C.textSec, margin: '4px 0 0' }}>Laisse vide → saisie libre.</p>
+            </div>
+            {nbBlanks > 0 && (
+              <div style={{ background: '#F0FDF4', border: `1px solid ${C.emerald}25`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+                <p style={{ fontSize: 10, fontWeight: 800, color: C.emerald, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px' }}>
+                  Réponses correctes — {nbBlanks} trou{nbBlanks > 1 ? 's' : ''}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Array.from({ length: nbBlanks }, (_, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 22, height: 22, borderRadius: 6, background: C.emerald, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>{i+1}</span>
+                      <input value={form.reponses_trou[i] || ''}
+                        onChange={e => { const arr = [...form.reponses_trou]; arr[i] = e.target.value; set('reponses_trou', arr) }}
+                        placeholder={`Mot correct pour le trou ${i+1}`}
+                        required
+                        style={{ ...inputBase, flex: 1 }}
+                        onFocus={e => e.target.style.borderColor = C.emerald} onBlur={e => e.target.style.borderColor = C.brownPale} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* ── Réponse libre ── */}
       {form.type === 'reponse_libre' && (
@@ -921,6 +972,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
   const [genModal, setGenModal] = useState(null)
   const [genLoading, setGenLoading] = useState(false)
   const [genForm, setGenForm] = useState({ nb: 3, type: 'qcm', difficulte: 1 })
+  const [collapsed, setCollapsed] = useState({})
   const { mobile } = useBreakpoint()
 
   const allUAs = structure
@@ -978,15 +1030,19 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
     finally { setGenLoading(false) }
   }
 
-  const TypeBadge = ({ type, options }) => {
-    const isVF = type === 'qcm' && options?.length === 2 && (options.includes('Vrai') || options.includes('Faux'))
-    const effectiveType = isVF ? 'vrai_faux' : type
+  const TypeBadge = ({ type, options, enonce }) => {
+    const isIdentif = type === 'qcm' && options?.[0]?.startsWith?.('__img__:')
+    const isAPC     = type === 'reponse_libre' && enonce?.startsWith?.('__APC__')
+    const isVF      = type === 'qcm' && !isIdentif && options?.length === 2 && (options.includes('Vrai') || options.includes('Faux'))
+    const eff = isIdentif ? 'identification' : isAPC ? 'situation_apc' : isVF ? 'vrai_faux' : type
     const cfg = {
-      qcm:          { bg: C.bluePale,  color: C.blue,     label: 'QCM'       },
-      vrai_faux:    { bg: '#D1FAE5',   color: '#065F46',  label: 'Vrai/Faux' },
-      texte_trou:   { bg: '#F3E8FF',   color: '#7C3AED',  label: 'Trou'      },
-      reponse_libre:{ bg: '#FEF3C7',   color: C.orange,   label: 'Libre'     },
-    }[effectiveType] || { bg: C.brownPale, color: C.textSec, label: type }
+      qcm:           { bg: C.bluePale,  color: C.blue,    label: 'QCM'          },
+      vrai_faux:     { bg: '#D1FAE5',   color: '#065F46', label: 'Vrai/Faux'    },
+      texte_trou:    { bg: '#F3E8FF',   color: '#7C3AED', label: 'Trou'         },
+      reponse_libre: { bg: '#FEF3C7',   color: C.orange,  label: 'Libre'        },
+      identification:{ bg: '#E0F2FE',   color: '#0369A1', label: 'Schéma'       },
+      situation_apc: { bg: '#FDF4FF',   color: '#7E22CE', label: 'APC'          },
+    }[eff] || { bg: C.brownPale, color: C.textSec, label: type }
     return <span style={{ background: cfg.bg, color: cfg.color, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{cfg.label}</span>
   }
 
@@ -1045,38 +1101,104 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
         <div style={{ textAlign: 'center', padding: 40, display: 'flex', justifyContent: 'center' }}>
           <Spinner size={36} />
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filtered.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 40, color: C.textSec, background: C.surface, borderRadius: 16, border: `1px dashed ${C.brownLight}` }}>
-              <Zap size={30} color={C.brownLight} style={{ margin: '0 auto 10px' }} />
-              <p style={{ fontWeight: 600, fontSize: 14 }}>Aucun exercice</p>
-              <p style={{ fontSize: 12 }}>Créez-en un manuellement ou utilisez la génération IA.</p>
-            </div>
-          )}
-          {filtered.map((ex, i) => (
-            <div key={ex.id} style={{ backgroundColor: C.surface, borderRadius: 12, padding: mobile ? '12px' : '12px 18px', border: `1px solid ${C.brownPale}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre || ex.enonce?.substring(0, 50) + '…'}</p>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <TypeBadge type={ex.type} options={ex.options} />
-                  <span style={{ fontSize: 10, color: C.textSec }}>Diff. {ex.difficulte} · {ex.points} pts</span>
-                  {ex.competence_evaluee && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.competence_evaluee}</span>}
+      ) : (() => {
+        if (filtered.length === 0) return (
+          <div style={{ textAlign: 'center', padding: 40, color: C.textSec, background: C.surface, borderRadius: 16, border: `1px dashed ${C.brownLight}` }}>
+            <Zap size={30} color={C.brownLight} style={{ margin: '0 auto 10px' }} />
+            <p style={{ fontWeight: 600, fontSize: 14 }}>Aucun exercice</p>
+            <p style={{ fontSize: 12 }}>Créez-en un manuellement ou utilisez la génération IA.</p>
+          </div>
+        )
+
+        // Group by UA
+        const grouped = {}
+        filtered.forEach(ex => {
+          const k = String(ex.ua_id || 'sans_ua')
+          if (!grouped[k]) grouped[k] = []
+          grouped[k].push(ex)
+        })
+        const groupKeys = Object.keys(grouped)
+        const allAreCollapsed = groupKeys.length > 0 && groupKeys.every(k => collapsed[k])
+
+        const typeDistrib = (exList) => {
+          const counts = {}
+          exList.forEach(ex => {
+            const isIdentif = ex.type === 'qcm' && ex.options?.[0]?.startsWith?.('__img__:')
+            const isAPC     = ex.type === 'reponse_libre' && ex.enonce?.startsWith?.('__APC__')
+            const isVF      = ex.type === 'qcm' && !isIdentif && ex.options?.length === 2
+            const t = isIdentif ? 'Schéma' : isAPC ? 'APC' : isVF ? 'V/F' : ex.type === 'qcm' ? 'QCM' : ex.type === 'texte_trou' ? 'Trou' : 'Libre'
+            counts[t] = (counts[t] || 0) + 1
+          })
+          return Object.entries(counts)
+        }
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {groupKeys.length > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{filtered.length} exercice{filtered.length > 1 ? 's' : ''} · {groupKeys.length} UA</span>
+                <button onClick={() => {
+                  const ns = {}; groupKeys.forEach(k => { ns[k] = !allAreCollapsed }); setCollapsed(ns)
+                }} style={{ padding: '4px 10px', background: C.brownPale, border: 'none', borderRadius: 7, fontSize: 11, fontWeight: 700, color: C.brown, cursor: 'pointer' }}>
+                  {allAreCollapsed ? '▼ Tout développer' : '▲ Tout réduire'}
+                </button>
+              </div>
+            )}
+            {groupKeys.map(key => {
+              const uaInfo = allUAs.find(u => String(u.id) === key)
+              const exList = grouped[key]
+              const isCollapsed = !!collapsed[key]
+              return (
+                <div key={key}>
+                  <button onClick={() => setCollapsed(p => ({ ...p, [key]: !p[key] }))}
+                    style={{ width: '100%', background: `linear-gradient(135deg, ${C.brownPale}, ${C.surface})`, border: `1.5px solid ${C.brownLight}60`, borderRadius: isCollapsed ? 12 : '12px 12px 0 0', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }}>
+                    <ChevronDown size={13} color={C.brown} style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0)', transition: 'transform .2s', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: C.brown, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {uaInfo ? uaInfo.titre : 'Sans UA associée'}
+                      </p>
+                      {uaInfo?.matiere_nom && <p style={{ margin: '1px 0 0', fontSize: 10, color: C.textSec }}>{uaInfo.matiere_nom}</p>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {typeDistrib(exList).map(([t, n]) => (
+                        <span key={t} style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 8, background: C.surface, color: C.textSec, border: `1px solid ${C.brownPale}` }}>{t}:{n}</span>
+                      ))}
+                    </div>
+                    <span style={{ background: C.brown, color: 'white', borderRadius: 20, padding: '2px 9px', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>
+                      {exList.length}
+                    </span>
+                  </button>
+                  {!isCollapsed && (
+                    <div style={{ border: `1.5px solid ${C.brownLight}60`, borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+                      {exList.map((ex, i) => (
+                        <div key={ex.id} style={{ backgroundColor: i % 2 === 0 ? C.surface : C.bg, padding: mobile ? '10px 12px' : '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: i < exList.length - 1 ? `1px solid ${C.brownPale}` : 'none' }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre || ex.enonce?.substring(0, 50) + '…'}</p>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <TypeBadge type={ex.type} options={ex.options} enonce={ex.enonce} />
+                              <span style={{ fontSize: 10, color: C.textSec }}>Diff. {ex.difficulte} · {ex.points} pts</span>
+                              {ex.competence_evaluee && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.competence_evaluee}</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                            <button onClick={() => setModal(ex)} style={{ padding: '5px 9px', background: C.bluePale, color: C.blue, border: 'none', borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700 }}>
+                              <Edit3 size={11} />{!mobile && ' Modifier'}
+                            </button>
+                            <button onClick={() => setDeleting(ex)} style={{ padding: '5px 8px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                <button onClick={() => setModal(ex)} style={{ padding: '5px 9px', background: C.bluePale, color: C.blue, border: 'none', borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700 }}>
-                  <Edit3 size={11} />{!mobile && ' Modifier'}
-                </button>
-                <button onClick={() => setDeleting(ex)} style={{ padding: '5px 8px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {modal && (
         <Modal title={modal?.id ? "Modifier l'exercice" : 'Nouvel exercice'} onClose={() => setModal(null)} size={680}>

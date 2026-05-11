@@ -12,6 +12,7 @@ from typing import Optional
 from uuid import UUID
 import uuid as uuid_module
 from datetime import datetime
+import json
 
 router = APIRouter(prefix="/api/cours", tags=["cours"])
 
@@ -328,8 +329,18 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
     if not exercice:
         raise HTTPException(404, "Exercice introuvable")
 
-    correct = body.reponse.strip().lower() == \
-              exercice.reponse_correcte.strip().lower()
+    try:
+        ua = json.loads(body.reponse)
+        ca = json.loads(exercice.reponse_correcte)
+        if isinstance(ua, list) and isinstance(ca, list):
+            correct = (len(ua) == len(ca) and all(
+                str(u).strip().lower() == str(c).strip().lower()
+                for u, c in zip(ua, ca)
+            ))
+        else:
+            correct = body.reponse.strip().lower() == exercice.reponse_correcte.strip().lower()
+    except (json.JSONDecodeError, TypeError):
+        correct = body.reponse.strip().lower() == exercice.reponse_correcte.strip().lower()
 
     # Enregistre ou met à jour la progression
     prog = db.query(ProgressionApprenant).filter(
