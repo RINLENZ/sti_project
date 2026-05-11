@@ -1089,7 +1089,12 @@ export default function Session() {
   }
   const ds = diffStyle[ex.difficulte] || diffStyle[1]
   const totalPts = scores.reduce((a, b) => a + b, 0)
-  const isVraiFaux = ex.type === 'qcm' && ex.options?.length === 2 &&
+  const isIdentification = ex.type === 'qcm' && !!ex.options?.[0]?.startsWith?.('__img__:')
+  const identImgUrl  = isIdentification ? ex.options[0].slice(8) : null
+  const identChoices = isIdentification ? ex.options.slice(1) : (ex.options || [])
+  const isAPC  = ex.type === 'reponse_libre' && !!ex.enonce?.startsWith?.('__APC__')
+  const apcData = isAPC ? (() => { try { return JSON.parse(ex.enonce.slice(7)) } catch { return null } })() : null
+  const isVraiFaux = ex.type === 'qcm' && !isIdentification && ex.options?.length === 2 &&
     (ex.options.includes('Vrai') || ex.options.includes('Faux'))
   const MASCOT = {
 
@@ -1427,33 +1432,61 @@ export default function Session() {
               </span>
             </div>
 
-            {/* Énoncé */}
-            <div style={{
-              backgroundColor: C.brownPale, borderRadius: 14,
-              padding: isMobile ? '14px 16px' : '18px 22px',
-              marginBottom: 20, borderLeft: `4px solid ${C.brown}`,
-              position: 'relative'
-            }}>
-              <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, fontWeight: 700, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', paddingRight: 36 }}>
-                {ex.enonce}
-              </p>
-              {/* Bouton lecture TTS */}
-              <button
-                onClick={() => speaking ? stopTts() : tts(ex.enonce)}
-                title={speaking ? 'Arrêter la lecture' : 'Lire l\'énoncé'}
-                style={{
-                  position: 'absolute', top: 10, right: 10,
-                  width: 30, height: 30, borderRadius: '50%',
-                  background: speaking ? C.red : C.brown,
-                  border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, transition: 'background .2s',
-                  boxShadow: speaking ? `0 0 0 3px ${C.red}30` : 'none',
-                  animation: speaking ? 'pulse 1.5s infinite' : 'none',
-                }}>
-                {speaking ? '⏹' : '🔊'}
-              </button>
-            </div>
+            {/* Énoncé / Situation APC */}
+            {isAPC && apcData ? (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: 14, padding: isMobile ? '14px' : '18px 20px', marginBottom: 10 }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>📋 Situation-problème</p>
+                  <p style={{ margin: 0, fontSize: isMobile ? 13 : 14, color: '#1E3A5F', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{apcData.contexte}</p>
+                </div>
+                {apcData.ressources && (
+                  <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', gap: 8 }}>
+                    <span style={{ fontSize: 13, flexShrink: 0 }}>📚</span>
+                    <p style={{ margin: 0, fontSize: 12, color: '#166534', lineHeight: 1.7 }}><strong>Ressources :</strong> {apcData.ressources}</p>
+                  </div>
+                )}
+                <div style={{ background: C.brownPale, borderRadius: 12, padding: isMobile ? '12px 14px' : '14px 18px', borderLeft: `4px solid ${C.brown}`, position: 'relative' }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: C.brown, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 6px' }}>🎯 Consigne</p>
+                  <p style={{ margin: 0, fontSize: isMobile ? 13 : 14, fontWeight: 600, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', paddingRight: 36 }}>{apcData.consigne}</p>
+                  <button onClick={() => speaking ? stopTts() : tts(apcData.contexte + '\n' + apcData.consigne)}
+                    style={{ position: 'absolute', top: 10, right: 10, width: 28, height: 28, borderRadius: '50%', background: speaking ? C.red : C.brown, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                    {speaking ? '⏹' : '🔊'}
+                  </button>
+                </div>
+                {apcData.criteres && (
+                  <div style={{ marginTop: 8, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '8px 14px' }}>
+                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                      <strong>Critères d'évaluation :</strong> {apcData.criteres}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: C.brownPale, borderRadius: 14,
+                padding: isMobile ? '14px 16px' : '18px 22px',
+                marginBottom: isIdentification ? 10 : 20, borderLeft: `4px solid ${C.brown}`,
+                position: 'relative'
+              }}>
+                <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, fontWeight: 700, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', paddingRight: 36 }}>
+                  {ex.enonce}
+                </p>
+                <button onClick={() => speaking ? stopTts() : tts(ex.enonce)}
+                  title={speaking ? 'Arrêter la lecture' : 'Lire l\'énoncé'}
+                  style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: '50%', background: speaking ? C.red : C.brown, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, transition: 'background .2s', boxShadow: speaking ? `0 0 0 3px ${C.red}30` : 'none', animation: speaking ? 'pulse 1.5s infinite' : 'none' }}>
+                  {speaking ? '⏹' : '🔊'}
+                </button>
+              </div>
+            )}
+
+            {/* Image schéma (identification) */}
+            {isIdentification && identImgUrl && (
+              <div style={{ marginBottom: 16, textAlign: 'center' }}>
+                <img src={identImgUrl} alt="Schéma à identifier"
+                  style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 12, border: `2px solid #BFDBFE`, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'block', margin: '0 auto' }} />
+                <p style={{ fontSize: 11, color: C.textSec, margin: '6px 0 0', fontStyle: 'italic' }}>Observe bien ce schéma avant de répondre</p>
+              </div>
+            )}
 
             {/* ── Vrai / Faux ── */}
             {isVraiFaux && (
@@ -1488,10 +1521,10 @@ export default function Session() {
               </div>
             )}
 
-            {/* ── QCM standard ── */}
-            {ex.type === 'qcm' && ex.options && !isVraiFaux && (
+            {/* ── QCM standard + Identification ── */}
+            {ex.type === 'qcm' && !isVraiFaux && (
               <div style={{ display:'flex', flexDirection:'column', gap: isMobile ? 8 : 10, marginBottom:16 }}>
-                {ex.options.map((opt, i) => (
+                {identChoices.map((opt, i) => (
                   <ExerciceOption key={i}
                     lettre={String.fromCharCode(65 + i)} texte={opt}
                     selected={reponse === opt}
@@ -1553,12 +1586,14 @@ export default function Session() {
               </div>
             )}
 
-            {/* ── Réponse libre ── */}
+            {/* ── Réponse libre / APC ── */}
             {ex.type === 'reponse_libre' && (
               <div style={{ marginBottom:16 }}>
-                <textarea rows={4} placeholder="Écris ta réponse complète ici…"
+                {isAPC && <p style={{ fontSize: 12, fontWeight: 700, color: C.brown, margin: '0 0 8px' }}>✍️ Ta production :</p>}
+                <textarea rows={isAPC ? 7 : 4}
+                  placeholder={isAPC ? "Développe ta réponse en répondant à chaque point de la consigne…" : "Écris ta réponse complète ici…"}
                   value={reponse || ''} onChange={e => setReponse(e.target.value)} disabled={!!resultat}
-                  style={{ width:'100%', padding:'13px 16px', border:`1.5px solid ${C.brownPale}`, borderRadius:10, fontSize:14, outline:'none', resize:'vertical', boxSizing:'border-box', backgroundColor:C.surface, fontFamily:'inherit', lineHeight:1.6 }}/>
+                  style={{ width:'100%', padding:'13px 16px', border:`1.5px solid ${C.brownPale}`, borderRadius:10, fontSize:14, outline:'none', resize:'vertical', boxSizing:'border-box', backgroundColor:C.surface, fontFamily:'inherit', lineHeight:1.7 }}/>
                 {!resultat && reponse && (
                   <p style={{ fontSize:11, color:C.textSec, margin:'4px 0 0', textAlign:'right' }}>
                     {reponse.trim().split(/\s+/).length} mot(s)

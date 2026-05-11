@@ -678,132 +678,231 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
 function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
   const { C } = useTheme()
   const inputBase = getInputBase(C)
+
+  const initDisplayType = () => {
+    if (initial.type === 'qcm' && initial.options?.[0]?.startsWith?.('__img__:')) return 'identification'
+    if (initial.type === 'reponse_libre' && initial.enonce?.startsWith?.('__APC__')) return 'situation_apc'
+    if (initial.type === 'qcm' && initial.options?.length === 2 && initial.options?.includes?.('Vrai')) return 'vrai_faux'
+    return initial.type || 'qcm'
+  }
+  const initAPC = () => {
+    if (initial.enonce?.startsWith('__APC__')) { try { return JSON.parse(initial.enonce.slice(7)) } catch {} }
+    return { contexte: '', consigne: '', ressources: '', criteres: '' }
+  }
+  const initChoices = () => {
+    if (initial.options?.[0]?.startsWith?.('__img__:')) {
+      const c = initial.options.slice(1); return c.length >= 4 ? c : [...c, ...Array(4 - c.length).fill('')]
+    }
+    return initial.options?.length ? [...initial.options, ...Array(Math.max(0, 4 - initial.options.length)).fill('')].slice(0, 4) : ['', '', '', '']
+  }
+
   const [form, setForm] = useState({
-    titre: initial.titre || '', type: initial.type || 'qcm',
-    enonce: initial.enonce || '',
-    options: initial.options?.length ? initial.options : ['', '', '', ''],
-    propositions: initial.options?.length ? initial.options.join(', ') : '',
+    titre: initial.titre || '', type: initDisplayType(),
+    enonce: initial.enonce?.startsWith('__APC__') ? '' : (initial.enonce || ''),
+    options: initChoices(),
+    propositions: (!initial.options?.[0]?.startsWith?.('__img__:') && initial.options?.length) ? initial.options.join(', ') : '',
     reponse_correcte: initial.reponse_correcte || '',
     explication: initial.explication || '', indice_1: initial.indice_1 || '',
     indice_2: initial.indice_2 || '', competence_evaluee: initial.competence_evaluee || '',
     difficulte: initial.difficulte || 1, points: initial.points || 10,
     ua_id: initial.ua_id || uas[0]?.id || '',
+    image_url: initial.options?.[0]?.startsWith?.('__img__:') ? initial.options[0].slice(8) : '',
+    apc: initAPC(),
   })
   const [loading, setLoading] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const setAPC = (k, v) => setForm(f => ({ ...f, apc: { ...f.apc, [k]: v } }))
 
-  function getOptions() {
-    if (form.type === 'qcm')       return form.options.filter(o => o.trim())
-    if (form.type === 'vrai_faux') return ['Vrai', 'Faux']
-    if (form.type === 'texte_trou') {
-      const props = form.propositions.split(',').map(s => s.trim()).filter(Boolean)
-      return props.length ? props : null
+  function getApiPayload() {
+    const apiType = ['vrai_faux', 'identification'].includes(form.type) ? 'qcm'
+      : form.type === 'situation_apc' ? 'reponse_libre' : form.type
+    const apiEnonce = form.type === 'situation_apc'
+      ? '__APC__' + JSON.stringify(form.apc) : form.enonce
+    let options = null
+    if (form.type === 'identification')  options = [`__img__:${form.image_url}`, ...form.options.filter(o => o.trim())]
+    else if (form.type === 'qcm')        options = form.options.filter(o => o.trim())
+    else if (form.type === 'vrai_faux')  options = ['Vrai', 'Faux']
+    else if (form.type === 'texte_trou') {
+      const p = form.propositions.split(',').map(s => s.trim()).filter(Boolean)
+      options = p.length ? p : null
     }
-    return null
+    return { titre: form.titre, type: apiType, enonce: apiEnonce, options,
+      reponse_correcte: form.reponse_correcte, explication: form.explication,
+      indice_1: form.indice_1, indice_2: form.indice_2,
+      competence_evaluee: form.competence_evaluee,
+      difficulte: parseInt(form.difficulte), points: parseInt(form.points), ua_id: form.ua_id }
   }
 
   async function handle(e) {
     e.preventDefault(); setLoading(true)
-    const apiType = form.type === 'vrai_faux' ? 'qcm' : form.type
-    try {
-      await onSubmit({
-        titre: form.titre, type: apiType, enonce: form.enonce,
-        options: getOptions(),
-        reponse_correcte: form.reponse_correcte, explication: form.explication,
-        indice_1: form.indice_1, indice_2: form.indice_2,
-        competence_evaluee: form.competence_evaluee,
-        difficulte: parseInt(form.difficulte), points: parseInt(form.points),
-        ua_id: form.ua_id,
-      })
-    } finally { setLoading(false) }
+    try { await onSubmit(getApiPayload()) } finally { setLoading(false) }
   }
+
+  const SEC = (label, color = C.brown, bg = C.brownPale) => (
+    <p style={{ fontSize: 10, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
+      {label}
+    </p>
+  )
+
   return (
     <form onSubmit={handle}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <FInput label="Titre" value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))} placeholder="Titre court" required />
-        <FSelect label="Type d'exercice" value={form.type}
-          onChange={e => {
-            const t = e.target.value
-            const rc = t === 'vrai_faux' ? form.reponse_correcte || 'Vrai' : form.reponse_correcte
-            setForm(f => ({ ...f, type: t, reponse_correcte: rc }))
-          }}
-          options={[
-            { value: 'qcm',          label: '🔤 QCM — choix multiple (A B C D)' },
-            { value: 'vrai_faux',    label: '✅ Vrai / Faux' },
-            { value: 'texte_trou',   label: '🔲 Texte à trous + propositions' },
-            { value: 'reponse_libre',label: '✏️ Réponse libre (rédaction)' },
-          ]} />
+      {/* ── Section : Paramètres ── */}
+      <div style={{ background: C.brownPale, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+        {SEC('Paramètres')}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 10 }}>
+          <FInput label="Titre court" value={form.titre} onChange={e => set('titre', e.target.value)} placeholder="ex : Identifier les périphériques" required />
+          <FSelect label="Type d'exercice" value={form.type}
+            onChange={e => set('type', e.target.value)}
+            options={[
+              { value: 'qcm',           label: '🔤 QCM — choix multiple' },
+              { value: 'vrai_faux',     label: '✅ Vrai / Faux' },
+              { value: 'texte_trou',    label: '🔲 Texte à trous' },
+              { value: 'reponse_libre', label: '✏️ Réponse libre' },
+              { value: 'identification',label: '🖼️ Identification schéma' },
+              { value: 'situation_apc', label: '🎯 Situation-problème APC' },
+            ]} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: uas.length ? '2fr 1fr 1fr 2fr' : '1fr 1fr 2fr', gap: 10 }}>
+          {uas.length > 0 && <FSelect label="UA parente" value={form.ua_id} onChange={e => set('ua_id', e.target.value)} required options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 40) }))} />}
+          <FSelect label="Difficulté" value={form.difficulte} onChange={e => set('difficulte', e.target.value)}
+            options={[{ value: 1, label: '▲ Facile' }, { value: 2, label: '▲▲ Moyen' }, { value: 3, label: '▲▲▲ Difficile' }]} />
+          <FInput label="Points" value={form.points} type="number" onChange={e => set('points', e.target.value)} />
+          <FInput label="Compétence APC ciblée" value={form.competence_evaluee} onChange={e => set('competence_evaluee', e.target.value)} placeholder="ex : Résoudre des problèmes" />
+        </div>
       </div>
-      {uas.length > 0 && (
-        <FSelect label="UA parente" value={form.ua_id} onChange={e => setForm(f => ({ ...f, ua_id: e.target.value }))} required
-          options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 50) }))} />
-      )}
-      <FTextarea label="Énoncé" value={form.enonce} onChange={e => setForm(f => ({ ...f, enonce: e.target.value }))} placeholder="Question complète…" rows={3} required />
 
-      {/* Options QCM */}
+      {/* ── QCM ── */}
       {form.type === 'qcm' && (
-        <div style={{ marginBottom: 12 }}>
-          <FieldLabel>Options A B C D</FieldLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {form.options.map((opt, i) => (
-              <input key={i} value={opt}
-                onChange={e => { const o = [...form.options]; o[i] = e.target.value; setForm(f => ({ ...f, options: o })) }}
-                placeholder={`Option ${String.fromCharCode(65 + i)}`} style={inputBase}
-                onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale}
-              />
-            ))}
+        <>
+          <FTextarea label="Énoncé / Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+            placeholder="Quelle est la fonction principale d'un système d'exploitation ?" rows={3} required />
+          <div style={{ marginBottom: 12 }}>
+            <FieldLabel required>Options A B C D</FieldLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {form.options.map((opt, i) => (
+                <div key={i} style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: 5, background: C.brown, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, pointerEvents: 'none' }}>
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <input value={opt} onChange={e => { const o = [...form.options]; o[i] = e.target.value; set('options', o) }}
+                    placeholder={`Option ${String.fromCharCode(65 + i)}`} style={{ ...inputBase, paddingLeft: 38 }}
+                    onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+          <FInput label="Réponse correcte" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)} placeholder="Texte exact de la bonne option" required />
+        </>
       )}
 
-      {/* Propositions pour texte à trous */}
-      {form.type === 'texte_trou' && (
-        <div style={{ marginBottom:12 }}>
-          <FieldLabel>Propositions (word bank, séparées par des virgules)</FieldLabel>
-          <input value={form.propositions}
-            onChange={e => setForm(f => ({ ...f, propositions: e.target.value }))}
-            placeholder="Ex : atome, molécule, proton, électron"
-            style={inputBase}
-            onFocus={e => e.target.style.borderColor = C.brown}
-            onBlur={e => e.target.style.borderColor = C.brownPale}/>
-          <p style={{ fontSize:10, color:C.textSec, margin:'4px 0 0' }}>
-            L'apprenant cliquera sur la bonne proposition — laisse vide pour une saisie libre.
-          </p>
-        </div>
-      )}
-
-      {/* Vrai/Faux — sélecteur réponse correcte */}
+      {/* ── Vrai / Faux ── */}
       {form.type === 'vrai_faux' && (
-        <div style={{ marginBottom:12 }}>
-          <FieldLabel>Réponse correcte</FieldLabel>
-          <div style={{ display:'flex', gap:10 }}>
-            {['Vrai','Faux'].map(v => (
-              <button key={v} type="button"
-                onClick={() => setForm(f => ({ ...f, reponse_correcte: v }))}
-                style={{ flex:1, padding:'12px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:14,
-                  background: form.reponse_correcte === v ? (v==='Vrai'?C.emeraldPale:'#FEE2E2') : C.surface,
-                  border:`2px solid ${form.reponse_correcte === v ? (v==='Vrai'?C.emerald:C.red) : C.brownPale}`,
-                  color: form.reponse_correcte === v ? (v==='Vrai'?C.emerald:C.red) : C.text,
-                }}>
-                {v === 'Vrai' ? '✅ Vrai' : '❌ Faux'}
-              </button>
-            ))}
+        <>
+          <FTextarea label="Affirmation à évaluer" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+            placeholder="Un ordinateur peut fonctionner sans système d'exploitation." rows={2} required />
+          <div style={{ marginBottom: 12 }}>
+            <FieldLabel required>Réponse correcte</FieldLabel>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {['Vrai', 'Faux'].map(v => (
+                <button key={v} type="button" onClick={() => set('reponse_correcte', v)}
+                  style={{ flex: 1, padding: '13px', borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: 15,
+                    background: form.reponse_correcte === v ? (v === 'Vrai' ? C.emeraldPale : '#FEE2E2') : C.surface,
+                    border: `2px solid ${form.reponse_correcte === v ? (v === 'Vrai' ? C.emerald : C.red) : C.brownPale}`,
+                    color: form.reponse_correcte === v ? (v === 'Vrai' ? C.emerald : C.red) : C.text }}>
+                  {v === 'Vrai' ? '✅ Vrai' : '❌ Faux'}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
-      {form.type !== 'reponse_libre' && form.type !== 'vrai_faux' && (
-        <FInput label="Réponse correcte" value={form.reponse_correcte} onChange={e => setForm(f => ({ ...f, reponse_correcte: e.target.value }))} placeholder="Texte exact de la bonne réponse" required />
+      {/* ── Texte à trous ── */}
+      {form.type === 'texte_trou' && (
+        <>
+          <FTextarea label="Texte avec trou — utilise ___ pour marquer le trou" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+            placeholder="Le ___ est le cerveau de l'ordinateur." rows={3} required />
+          <div style={{ marginBottom: 12 }}>
+            <FieldLabel>Banque de mots (séparées par des virgules)</FieldLabel>
+            <input value={form.propositions} onChange={e => set('propositions', e.target.value)}
+              placeholder="processeur, mémoire RAM, disque dur, carte mère"
+              style={inputBase} onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
+            <p style={{ fontSize: 10, color: C.textSec, margin: '4px 0 0' }}>Laisse vide → saisie libre.</p>
+          </div>
+          <FInput label="Réponse correcte" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)} placeholder="processeur" required />
+        </>
       )}
-      <FTextarea label="Explication (feedback)" value={form.explication} onChange={e => setForm(f => ({ ...f, explication: e.target.value }))} placeholder="Pourquoi c'est la bonne réponse…" rows={2} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <FInput label="Indice 1" value={form.indice_1} onChange={e => setForm(f => ({ ...f, indice_1: e.target.value }))} placeholder="Premier indice…" />
-        <FInput label="Indice 2" value={form.indice_2} onChange={e => setForm(f => ({ ...f, indice_2: e.target.value }))} placeholder="Deuxième indice…" />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-        <FInput label="Points" value={form.points} type="number" onChange={e => setForm(f => ({ ...f, points: e.target.value }))} />
-        <FSelect label="Difficulté" value={form.difficulte} onChange={e => setForm(f => ({ ...f, difficulte: e.target.value }))}
-          options={[{ value: 1, label: '▲ Facile' }, { value: 2, label: '▲▲ Moyen' }, { value: 3, label: '▲▲▲ Difficile' }]} />
-        <FInput label="Compétence évaluée" value={form.competence_evaluee} onChange={e => setForm(f => ({ ...f, competence_evaluee: e.target.value }))} placeholder="Compétence…" />
+
+      {/* ── Réponse libre ── */}
+      {form.type === 'reponse_libre' && (
+        <>
+          <FTextarea label="Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+            placeholder="Explique le rôle d'un système d'exploitation." rows={3} required />
+          <FTextarea label="Éléments de corrigé (non montrés avant validation)" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)}
+            placeholder="Le SE gère le matériel, les processus, la mémoire et les fichiers." rows={3} required />
+        </>
+      )}
+
+      {/* ── Identification de schéma ── */}
+      {form.type === 'identification' && (
+        <>
+          <FTextarea label="Consigne / Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+            placeholder="Identifie le composant indiqué sur le schéma." rows={2} required />
+          <div style={{ marginBottom: 14 }}>
+            <FieldLabel required>Schéma ou image à identifier</FieldLabel>
+            <BlockMediaPicker value={form.image_url} accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={url => set('image_url', url)}
+              previewEl={<img src={form.image_url} alt="Schéma" style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 10, display: 'block', objectFit: 'contain', border: `1px solid ${C.brownPale}` }} />} />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <FieldLabel required>Propositions de réponse</FieldLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {form.options.map((opt, i) => (
+                <div key={i} style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: 5, background: '#0369A1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, pointerEvents: 'none' }}>
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <input value={opt} onChange={e => { const o = [...form.options]; o[i] = e.target.value; set('options', o) }}
+                    placeholder={`Étiquette ${String.fromCharCode(65 + i)}`} style={{ ...inputBase, paddingLeft: 38 }}
+                    onFocus={e => e.target.style.borderColor = '#0369A1'} onBlur={e => e.target.style.borderColor = C.brownPale} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <FInput label="Réponse correcte" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)} placeholder="Nom exact de l'élément à identifier" required />
+        </>
+      )}
+
+      {/* ── Situation-problème APC ── */}
+      {form.type === 'situation_apc' && (
+        <>
+          <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: 12, padding: '14px 16px', marginBottom: 12 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 12px' }}>📋 Situation-problème (APC)</p>
+            <FTextarea label="Contexte / Mise en situation" value={form.apc.contexte} onChange={e => setAPC('contexte', e.target.value)}
+              placeholder="Tu es technicien dans une école. Le directeur te demande d'installer un logiciel sur 30 postes…" rows={4} required />
+            <FTextarea label="🎯 Consigne — ce que l'apprenant doit produire" value={form.apc.consigne} onChange={e => setAPC('consigne', e.target.value)}
+              placeholder="1. Identifie le type de logiciel à installer.&#10;2. Décris les étapes d'installation.&#10;3. Justifie ton choix." rows={4} required />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <FTextarea label="📚 Ressources disponibles" value={form.apc.ressources} onChange={e => setAPC('ressources', e.target.value)}
+                placeholder="Manuel TIC, Internet, documentation…" rows={2} />
+              <FTextarea label="✅ Critères d'évaluation (barème)" value={form.apc.criteres} onChange={e => setAPC('criteres', e.target.value)}
+                placeholder="Identification correcte (4 pts)&#10;Étapes complètes (8 pts)&#10;Justification (8 pts)" rows={2} />
+            </div>
+          </div>
+          <FTextarea label="Éléments de corrigé (non montrés avant validation)" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)}
+            placeholder="Corrigé : logiciel d'application — étapes : 1. Vérifier la compatibilité…" rows={4} required />
+        </>
+      )}
+
+      {/* ── Feedback & indices ── */}
+      <div style={{ background: '#F0FDF4', border: `1px solid ${C.emerald}25`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+        <p style={{ fontSize: 10, fontWeight: 800, color: C.emerald, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px' }}>Feedback & indices</p>
+        <FTextarea label="Explication (affichée après la réponse)" value={form.explication} onChange={e => set('explication', e.target.value)}
+          placeholder="Parce que le processeur est le composant central chargé d'exécuter les instructions…" rows={2} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <FInput label="Indice 1" value={form.indice_1} onChange={e => set('indice_1', e.target.value)} placeholder="Premier indice…" />
+          <FInput label="Indice 2" value={form.indice_2} onChange={e => set('indice_2', e.target.value)} placeholder="Deuxième indice…" />
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 10 }}><CancelBtn onClose={onClose} /><SaveBtn loading={loading} /></div>
     </form>
