@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models.user import User
 from ..models.cours import Matiere, Module, FamilleSituation, UniteApprentissage, Exercice, RessourcePedagogique
 from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
-from sqlalchemy.orm import joinedload
+
 import sqlalchemy as sa
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
@@ -795,10 +795,11 @@ async def generer_exercices_ia(
     _: UserModel = Depends(require_super_admin)
 ):
     """
-    Génère N exercices pour une UA via Claude Haiku (Anthropic).
+    Génère N exercices pour une UA via Claude (Anthropic).
+    Contexte complet : leçon, niveau, compétences, filière, difficuté.
     body: { "nb": 3, "type": "qcm", "difficulte": 1 }
     """
-    import anthropic, json as _json, os
+    import anthropic, json as _json, os, re as _re
 
     ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
     if not ua: raise HTTPException(404, "UA introuvable")
@@ -807,35 +808,151 @@ async def generer_exercices_ia(
     if not api_key:
         raise HTTPException(500, "ANTHROPIC_API_KEY non configurée dans le .env")
 
-    nb         = int(body.get("nb", 3))
+    nb         = max(1, min(int(body.get("nb", 3)), 10))
     type_ex    = body.get("type", "qcm")
     difficulte = int(body.get("difficulte", 1))
-    diff_label = {1: "facile", 2: "intermédiaire", 3: "difficile"}.get(difficulte, "facile")
 
-    competences_str = "\n".join(f"- {c}" for c in (ua.competences or []))
+    # ── Récupération du contexte complet ──────────────────────────
+    # Remonte la hiérarchie UA → Famille → Module → Niveau → Matière
+    famille = db.query(FamilleSituation).filter(FamilleSituation.id == ua.famille_id).first()
+    module  = db.query(Module).filter(Module.id == famille.module_id).first() if famille else None
+    niveau  = db.query(Niveau).filter(Niveau.id == module.niveau_id).first() if module and module.niveau_id else None
+    matiere = db.query(Matiere).filter(Matiere.id == module.matiere_id).first() if module else None
 
-    prompt = f"""Tu es un enseignant camerounais expert en informatique.
-Génère exactement {nb} exercice(s) de type {type_ex} de niveau {diff_label}
-pour l'unité d'apprentissage : "{ua.titre}".
+    # Contenu des leçons de la UA (texte brut extrait du JSON bloc)
+    ressources = db.query(RessourcePedagogique).filter(
+        RessourcePedagogique.ua_id == ua.id,
+        RessourcePedagogique.type.in_(["lecon", "resume", "tp"])
+    ).order_by(RessourcePedagogique.ordre).all()
 
-Contexte : {ua.situation_probleme or "Apprentissage des bases de l'informatique"}
-Compétences visées :
-{competences_str or "- Maîtriser les concepts fondamentaux"}
+    def extract_text(contenu_raw: str) -> str:
+        """Extrait le texte brut depuis un contenu JSON-bloc ou Markdown."""
+        try:
+            blocs = _json.loads(contenu_raw)
+            if isinstance(blocs, list):
+                parts = []
+                for b in blocs:
+                    if b.get("type") in ("texte", "titre"):
+                        parts.append(b.get("valeur", ""))
+                    elif b.get("type") == "liste":
+                        parts.extend(b.get("items", []))
+                    elif b.get("type") == "alerte":
+                        parts.append(b.get("valeur", ""))
+                return "\n".join(p for p in parts if p)
+        except Exception:
+            pass
+        return contenu_raw or ""
 
-Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après,
-sans balises markdown. Format exact :
+    lecons_text = []
+    for r in ressources:
+        txt = extract_text(r.contenu).strip()
+        if txt:
+            lecons_text.append(f"[{r.titre}]\n{txt}")
+    contenu_cours = "\n\n".join(lecons_text)
+
+    # Points clés de toutes les leçons
+    tous_points = []
+    for r in ressources:
+        tous_points.extend(r.points_cles or [])
+
+    # Exercices déjà existants (pour ne pas dupliquer)
+    ex_existants = db.query(Exercice).filter(Exercice.ua_id == ua.id).all()
+    enonces_existants = [e.enonce[:80] for e in ex_existants]
+
+    # ── Labels selon difficulté ────────────────────────────────────
+    diff_cfg = {
+        1: {
+            "label":   "facile (niveau débutant)",
+            "conseil": "Questions directes sur les définitions et faits du cours. L'apprenant doit retrouver une information explicitement présente dans la leçon.",
+            "points":  5,
+        },
+        2: {
+            "label":   "intermédiaire",
+            "conseil": "Questions de compréhension et d'application. L'apprenant doit reformuler, classer ou appliquer un concept vu en cours.",
+            "points":  10,
+        },
+        3: {
+            "label":   "difficile (niveau avancé)",
+            "conseil": "Questions d'analyse, de synthèse ou de résolution de problème. L'apprenant doit raisonner au-delà du cours.",
+            "points":  15,
+        },
+    }.get(difficulte, {"label": "intermédiaire", "conseil": "", "points": 10})
+
+    # ── Instructions spécifiques par type d'exercice ──────────────
+    type_instructions = {
+        "qcm": (
+            'Chaque exercice doit avoir 4 options (A, B, C, D), une seule bonne réponse. '
+            '"options" = liste de 4 chaînes. "reponse_correcte" = texte exact de la bonne option.'
+        ),
+        "vrai_faux": (
+            'Chaque exercice est une affirmation à évaluer. '
+            '"options" = ["Vrai", "Faux"]. "reponse_correcte" = "Vrai" ou "Faux".'
+        ),
+        "texte_trou": (
+            'L\'énoncé contient exactement un blanc noté ___ . '
+            '"options" = liste de 4 mots possibles (dont le bon). "reponse_correcte" = le mot exact qui remplit le blanc.'
+        ),
+        "reponse_libre": (
+            '"options" = null. "reponse_correcte" = réponse modèle complète et concise (1-3 phrases).'
+        ),
+    }.get(type_ex, '"options" = null, "reponse_correcte" = réponse attendue.')
+
+    competences_str = "\n".join(f"  • {c}" for c in (ua.competences or []))
+    points_cles_str = "\n".join(f"  • {p}" for p in tous_points) if tous_points else ""
+    non_dupliquer   = "\n".join(f"  - {e}" for e in enonces_existants[:10]) if enonces_existants else "  (aucun)"
+
+    prompt = f"""Tu es un enseignant expert au Cameroun. Tu crées des exercices pédagogiques rigoureusement fondés sur le contenu d'un cours réel.
+
+═══ CONTEXTE PROGRAMME ═══
+Matière      : {matiere.nom if matiere else "Informatique"}
+Niveau/Classe: {niveau.nom if niveau else "Non précisé"} ({niveau.code if niveau else ""})
+Module       : {module.titre if module else ""}
+Famille      : {famille.titre if famille else ""}
+UA           : {ua.titre} ({ua.reference_ue or ""})
+Durée UA     : {ua.duree_estimee} min
+
+═══ CONTENU DU COURS ═══
+{contenu_cours if contenu_cours else "(Aucune leçon rédigée — génère à partir des compétences)"}
+
+═══ POINTS CLÉS ═══
+{points_cles_str if points_cles_str else "  (non renseignés)"}
+
+═══ COMPÉTENCES VISÉES ═══
+{competences_str if competences_str else "  • Maîtriser les concepts fondamentaux de la UA"}
+
+═══ SITUATION-PROBLÈME ═══
+{ua.situation_probleme or "(non renseignée)"}
+
+═══ CONSIGNES DE GÉNÉRATION ═══
+Type d'exercice : {type_ex}
+Niveau de difficulté : {diff_cfg["label"]}
+Conseil pédagogique : {diff_cfg["conseil"]}
+Points suggérés par exercice : {diff_cfg["points"]}
+Nombre d'exercices à créer : {nb}
+
+Instructions pour ce type :
+{type_instructions}
+
+RÈGLES ABSOLUES :
+1. Chaque exercice doit être DIRECTEMENT tiré du contenu du cours ci-dessus.
+2. N'invente rien qui ne soit pas dans le cours ou les compétences.
+3. Adapte le vocabulaire au niveau {niveau.nom if niveau else "scolaire"}.
+4. Ne reproduis pas ces énoncés déjà existants :
+{non_dupliquer}
+5. Réponds UNIQUEMENT avec un JSON valide, sans texte ni markdown autour.
+
+FORMAT DE RÉPONSE (JSON strict) :
 {{
   "exercices": [
     {{
-      "titre": "Titre court",
-      "enonce": "Question complète et claire",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "reponse_correcte": "Option A",
-      "explication": "Pourquoi c'est la bonne réponse",
-      "indice_1": "Premier indice",
-      "indice_2": "Deuxième indice plus précis",
-      "competence_evaluee": "Compétence exacte évaluée",
-      "points": 10
+      "titre": "Titre court et précis",
+      "enonce": "Énoncé clair et complet",
+      "options": ["...", "...", "...", "..."],
+      "reponse_correcte": "...",
+      "explication": "Explication pédagogique (cite la leçon si pertinent)",
+      "indice_1": "Indice vague pour débloquer l'élève",
+      "indice_2": "Indice plus précis",
+      "competence_evaluee": "Compétence exacte parmi celles listées"
     }}
   ]
 }}"""
@@ -844,15 +961,13 @@ sans balises markdown. Format exact :
     try:
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2048,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.APIError as e:
         raise HTTPException(500, f"Erreur API Claude : {str(e)}")
 
-    import re as _re
     content = message.content[0].text.strip()
-    # Supprime les balises de code markdown (```json ... ``` ou ``` ... ```)
     content = _re.sub(r'^```[a-zA-Z]*\n?', '', content)
     content = _re.sub(r'\n?```\s*$', '', content)
     content = content.strip()
@@ -860,25 +975,31 @@ sans balises markdown. Format exact :
     try:
         data = _json.loads(content)
     except Exception:
-        raise HTTPException(500, f"Réponse IA invalide — relancez ({content[:60]}…)")
+        raise HTTPException(500, f"Réponse IA invalide — relancez ({content[:80]}…)")
 
     # Sauvegarde les exercices générés en base
     created = []
     for ex_data in data.get("exercices", []):
+        opts = ex_data.get("options")
+        if type_ex in ("qcm", "vrai_faux", "texte_trou") and isinstance(opts, list):
+            options_val = opts
+        else:
+            options_val = None
+
         ex = Exercice(
             ua_id              = ua.id,
             titre              = ex_data.get("titre", "Exercice"),
             type               = type_ex,
             enonce             = ex_data.get("enonce", ""),
-            options            = ex_data.get("options") if type_ex == "qcm" else None,
+            options            = options_val,
             reponse_correcte   = ex_data.get("reponse_correcte", ""),
             explication        = ex_data.get("explication", ""),
             indice_1           = ex_data.get("indice_1", ""),
             indice_2           = ex_data.get("indice_2", ""),
             competence_evaluee = ex_data.get("competence_evaluee", ""),
             difficulte         = difficulte,
-            points             = int(ex_data.get("points", 10)),
-            ordre              = len(created) + 1,
+            points             = int(ex_data.get("points") or diff_cfg["points"]),
+            ordre              = len(ex_existants) + len(created) + 1,
         )
         db.add(ex)
         created.append(ex_data.get("titre"))
@@ -888,4 +1009,10 @@ sans balises markdown. Format exact :
         "message": f"{len(created)} exercice(s) générés et sauvegardés",
         "exercices_crees": created,
         "ua_id": str(ua_id),
+        "contexte_utilise": {
+            "niveau": niveau.nom if niveau else None,
+            "module": module.titre if module else None,
+            "nb_lecons": len(ressources),
+            "contenu_cours_chars": len(contenu_cours),
+        }
     }

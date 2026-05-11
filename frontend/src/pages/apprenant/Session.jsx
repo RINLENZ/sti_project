@@ -528,7 +528,9 @@ export default function Session() {
   const { uaId }   = useParams()
   const navigate   = useNavigate()
   const [searchParams] = useSearchParams()
-  const groupeParam = searchParams.get('groupe') ? parseInt(searchParams.get('groupe')) : null
+  const groupeParam    = searchParams.get('groupe')     ? parseInt(searchParams.get('groupe')) : null
+  const exerciceIdParam = searchParams.get('exercice_id') || null
+  const skipLecon      = searchParams.get('skip') === '1'
   const { user }   = useSelector(s => s.auth)
   const { mobile: isMobile, tablet } = useBreakpoint()
   const sessionIdRef = useRef(null)
@@ -561,7 +563,7 @@ export default function Session() {
   const [explicationIA, setExplicationIA] = useState(null)
   const [loadingIA,     setLoadingIA]     = useState(false)
   const [ressources, setRessources] = useState([])
-  const [phase,      setPhase]      = useState('lecon')
+  const [phase,      setPhase]      = useState(skipLecon ? 'exercices' : 'lecon')
   const [elapsedMin, setElapsedMin] = useState(0)
   const [loading,         setLoading]         = useState(true)
   const [questionElapsed, setQuestionElapsed] = useState(0)
@@ -613,10 +615,13 @@ export default function Session() {
         const { data: uaData } = await api.get(`/api/cours/ua/${uaId}`)
         setUA(uaData)
         const allEx = uaData.exercices || []
-        setExercices(groupeParam != null ? allEx.filter(e => e.groupe === groupeParam) : allEx)
+        let filtered = allEx
+        if (exerciceIdParam)       filtered = allEx.filter(e => e.id === exerciceIdParam)
+        else if (groupeParam != null) filtered = allEx.filter(e => e.groupe === groupeParam)
+        setExercices(filtered)
         const resos = uaData.ressources || []
         setRessources(resos)
-        if (resos.length === 0) setPhase('exercices')
+        if (resos.length === 0 || skipLecon) setPhase('exercices')
         const { data: sess } = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
         sessionIdRef.current = sess.session_id
       } catch { toast.error('Erreur de chargement') }
@@ -1383,7 +1388,12 @@ export default function Session() {
         <div style={{ flex: 1, minWidth: 0 }}>
           {!isMobile && (
             <p style={{ fontSize: 10, color: C.textSec, fontWeight: 600, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {ua.reference_ue} — {ua.titre}{groupeParam != null ? ` · Exercice ${groupeParam}${exercices[0]?.groupe_titre ? ` : ${exercices[0].groupe_titre}` : ''}` : ''}
+              {ua.reference_ue} — {ua.titre}
+              {exerciceIdParam
+                ? ` · ${exercices[0]?.titre || 'Question'}`
+                : groupeParam != null
+                  ? ` · Exercice ${groupeParam}${exercices[0]?.groupe_titre ? ` : ${exercices[0].groupe_titre}` : ''}`
+                  : ''}
             </p>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

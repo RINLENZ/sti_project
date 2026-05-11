@@ -403,7 +403,7 @@ export default function CoursDetail() {
                   </div>
                 )}
 
-                <button onClick={() => navigate(`/session/${uaId}`)} style={{
+                <button onClick={() => navigate(`/session/${uaId}?skip=1`)} style={{
                   width: '100%', padding: '15px',
                   background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
                   color: 'white', border: 'none', borderRadius: 14,
@@ -422,37 +422,41 @@ export default function CoursDetail() {
               const groupNums = [...new Set(allEx.map(e => e.groupe).filter(g => g != null))].sort((a,b) => a-b)
               const hasGroups = groupNums.length > 0
 
+              // Chaque exercice individuel avec son propre bouton "Faire"
               const ExRow = (ex, i) => (
                 <div key={ex.id} style={{
                   backgroundColor: C.surface, borderRadius: 12,
-                  padding: isMobile ? '13px 14px' : '15px 18px',
+                  padding: isMobile ? '13px 14px' : '13px 16px',
                   boxShadow: '0 2px 8px rgba(107,58,42,0.07)',
                   border: `1px solid ${C.brownPale}`,
-                  display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
-                  gap: 12, flexWrap: isMobile ? 'wrap' : 'nowrap'
+                  display: 'flex', alignItems: 'center', gap: 12
                 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>{ex.titre}</p>
-                    {ex.competence_evaluee && <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{ex.competence_evaluee}</p>}
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre}</p>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ backgroundColor: diffBg[ex.difficulte], color: diffColor[ex.difficulte], padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>{diffLabel[ex.difficulte]}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: C.brownLight }}>{ex.points} pts</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: isMobile ? 'auto' : 0 }}>
-                    <span style={{ backgroundColor: diffBg[ex.difficulte], color: diffColor[ex.difficulte], padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{diffLabel[ex.difficulte]}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: C.brownLight, whiteSpace: 'nowrap' }}>{ex.points} pts</span>
-                  </div>
+                  <button onClick={() => navigate(`/session/${uaId}?exercice_id=${ex.id}&skip=1`)}
+                    style={{ padding: '8px 14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, boxShadow: `0 2px 8px ${C.brown}30` }}>
+                    <Play size={11} fill="white"/> Faire
+                  </button>
                 </div>
               )
 
               if (!hasGroups) {
-                // Comportement original : liste plate + bouton démarrer
                 return (
                   <div style={{ animation: 'fadeUp .3s ease' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                       {allEx.map((ex, i) => ExRow(ex, i))}
                     </div>
-                    <button onClick={() => navigate(`/session/${uaId}`)} style={{ width: '100%', padding: '15px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 14, fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52 }}>
-                      <Play size={15} fill="white"/> Démarrer la session <ChevronRight size={15}/>
-                    </button>
+                    {allEx.length > 1 && (
+                      <button onClick={() => navigate(`/session/${uaId}?skip=1`)} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        Tout faire en une session · {allEx.length} exercices
+                      </button>
+                    )}
                   </div>
                 )
               }
@@ -499,7 +503,7 @@ export default function CoursDetail() {
                                 <span style={{ fontSize: 11, color: C.brownLight, fontWeight: 600 }}>★ {tp} pts</span>
                               </div>
                             </div>
-                            <button onClick={() => navigate(`/session/${uaId}?groupe=${g}`)} style={{ padding: isMobile ? '10px 14px' : '11px 20px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 12px ${C.brown}30`, whiteSpace: 'nowrap' }}>
+                            <button onClick={() => navigate(`/session/${uaId}?groupe=${g}&skip=1`)} style={{ padding: isMobile ? '10px 14px' : '11px 20px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 12px ${C.brown}30`, whiteSpace: 'nowrap' }}>
                               <Play size={13} fill="white"/> Démarrer
                             </button>
                           </div>
@@ -524,7 +528,7 @@ export default function CoursDetail() {
                           <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: C.text }}>Exercices libres</p>
                           <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>{ungrouped.length} exercice{ungrouped.length > 1 ? 's' : ''} sans groupe assigné</p>
                         </div>
-                        <button onClick={() => navigate(`/session/${uaId}`)} style={{ padding: '9px 16px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <button onClick={() => navigate(`/session/${uaId}?skip=1`)} style={{ padding: '9px 16px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
                           <Play size={12} fill={C.brown}/> Faire
                         </button>
                       </div>
@@ -532,7 +536,7 @@ export default function CoursDetail() {
                   </div>
 
                   {/* Bouton tout faire */}
-                  <button onClick={() => navigate(`/session/${uaId}`)} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <button onClick={() => navigate(`/session/${uaId}?skip=1`)} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     Tout faire en une session · {allEx.length} exercices
                   </button>
                 </div>
