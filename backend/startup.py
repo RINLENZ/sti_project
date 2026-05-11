@@ -113,6 +113,13 @@ def main():
         else:
             print("[startup] 'groupe' column already exists — OK")
 
+        if not column_exists(conn, 'exercices', 'groupe_titre'):
+            print("[startup] Adding 'groupe_titre' column to exercices table")
+            conn.execute(sa.text('ALTER TABLE exercices ADD COLUMN groupe_titre VARCHAR(200)'))
+            conn.commit()
+        else:
+            print("[startup] 'groupe_titre' column already exists — OK")
+
     engine.dispose()
 
     # 4. Run alembic upgrade head to apply any remaining migrations

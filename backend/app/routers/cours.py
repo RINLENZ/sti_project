@@ -311,6 +311,7 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db)):
             "points": e.points,
             "ordre": e.ordre,
             "groupe": e.groupe,
+            "groupe_titre": e.groupe_titre,
             # reponse_correcte NON incluse — envoyée seulement après réponse
         } for e in exercices]
     }
@@ -924,6 +925,7 @@ def list_exercices(db: Session = Depends(get_db)):
             "difficulte":         ex.difficulte,
             "points":             ex.points,
             "groupe":             ex.groupe,
+            "groupe_titre":       ex.groupe_titre,
             "statut":             "publié",
             "ua_id":              str(ex.ua_id) if ex.ua_id else None,
         })
@@ -944,6 +946,7 @@ def create_exercice(body: dict, db: Session = Depends(get_db)):
         difficulte=int(body.get("difficulte", 1)),
         points=int(body.get("points", 10)),
         groupe=int(body["groupe"]) if body.get("groupe") is not None else None,
+        groupe_titre=body.get("groupe_titre") or None,
         ua_id=UUID(body["ua_id"]) if body.get("ua_id") else None,
     )
     db.add(ex); db.commit(); db.refresh(ex)
@@ -959,6 +962,8 @@ def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db)
         if k in body: setattr(ex, k, body[k])
     if "groupe" in body:
         ex.groupe = int(body["groupe"]) if body["groupe"] is not None else None
+    if "groupe_titre" in body:
+        ex.groupe_titre = body["groupe_titre"] or None
     if "ua_id" in body and body["ua_id"]:
         ex.ua_id = UUID(body["ua_id"])
     db.commit()

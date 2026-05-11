@@ -115,6 +115,7 @@ class Exercice(Base):
     points             = Column(Integer, default=10)
     ordre              = Column(Integer, default=1)
     groupe             = Column(Integer, nullable=True)
+    groupe_titre       = Column(String(200), nullable=True)
 
 
 class ProgressionApprenant(Base):

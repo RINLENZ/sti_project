@@ -282,6 +282,7 @@ def get_exercices(ua_id: UUID, db: Session = Depends(get_db),
         "points":           e.points,
         "ordre":            e.ordre,
         "groupe":           e.groupe,
+        "groupe_titre":     e.groupe_titre,
     } for e in exercices]
 
 @router.post("/exercice", status_code=201)
@@ -433,20 +434,30 @@ async def upload_media(
         raise HTTPException(400, f"Type non autorisé : {file.content_type}. "
                                  "Acceptés : images (jpg/png/webp/gif) et audio (mp3/wav/ogg/aac)")
 
-    if not settings.supabase_url or not settings.supabase_service_key:
-        raise HTTPException(503, "Supabase non configuré — ajoutez SUPABASE_URL et "
-                                 "SUPABASE_SERVICE_KEY dans les variables d'environnement Render")
+    import base64
 
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
+    MAX_B64  = 3 * 1024 * 1024   # 3 Mo max pour base64
+    MAX_SB   = 10 * 1024 * 1024  # 10 Mo max pour Supabase
+    folder   = "images" if file.content_type in ALLOWED_IMAGE else "audio"
+
+    # ── Fallback base64 si Supabase non configuré ──────────────────
+    if not settings.supabase_url or not settings.supabase_service_key:
+        if len(content) > MAX_B64:
+            raise HTTPException(413, "Fichier trop volumineux pour le mode sans Supabase (max 3 Mo). "
+                                     "Configurez SUPABASE_URL et SUPABASE_SERVICE_KEY pour aller jusqu'à 10 Mo.")
+        b64 = base64.b64encode(content).decode()
+        data_url = f"data:{file.content_type};base64,{b64}"
+        return {"url": data_url, "media_type": folder}
+
+    if len(content) > MAX_SB:
         raise HTTPException(413, "Fichier trop volumineux (max 10 Mo)")
 
     from supabase import create_client
     supabase = create_client(settings.supabase_url, settings.supabase_service_key)
 
-    ext    = (file.filename or "file").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
-    folder = "images" if file.content_type in ALLOWED_IMAGE else "audio"
-    path   = f"{folder}/{uuid.uuid4()}.{ext}"
+    ext  = (file.filename or "file").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
+    path = f"{folder}/{uuid.uuid4()}.{ext}"
 
     try:
         supabase.storage.from_("cours-media").upload(
@@ -457,6 +468,10 @@ async def upload_media(
         public_url = supabase.storage.from_("cours-media").get_public_url(path)
         return {"url": public_url, "media_type": folder}
     except Exception as e:
+        # Fallback base64 si Supabase échoue (bucket inexistant, etc.)
+        if len(content) <= MAX_B64:
+            b64 = base64.b64encode(content).decode()
+            return {"url": f"data:{file.content_type};base64,{b64}", "media_type": folder}
         raise HTTPException(500, f"Erreur Supabase Storage : {str(e)}")
 
 

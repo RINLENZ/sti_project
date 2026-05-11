@@ -1383,7 +1383,7 @@ export default function Session() {
         <div style={{ flex: 1, minWidth: 0 }}>
           {!isMobile && (
             <p style={{ fontSize: 10, color: C.textSec, fontWeight: 600, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {ua.reference_ue} — {ua.titre}{groupeParam != null ? ` · Groupe ${groupeParam}` : ''}
+              {ua.reference_ue} — {ua.titre}{groupeParam != null ? ` · Exercice ${groupeParam}${exercices[0]?.groupe_titre ? ` : ${exercices[0].groupe_titre}` : ''}` : ''}
             </p>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

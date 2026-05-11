@@ -711,6 +711,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     difficulte: initial.difficulte || 1, points: initial.points || 10,
     ua_id: initial.ua_id || uas[0]?.id || '',
     groupe: initial.groupe ?? null,
+    groupe_titre: initial.groupe_titre || '',
     image_url: initial.options?.[0]?.startsWith?.('__img__:') ? initial.options[0].slice(8) : '',
     apc: initAPC(),
   })
@@ -742,7 +743,9 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       indice_1: form.indice_1, indice_2: form.indice_2,
       competence_evaluee: form.competence_evaluee,
       difficulte: parseInt(form.difficulte), points: parseInt(form.points),
-      groupe: form.groupe, ua_id: form.ua_id }
+      groupe: form.groupe,
+      groupe_titre: form.groupe > 0 ? (form.groupe_titre || null) : null,
+      ua_id: form.ua_id }
   }
 
   async function handle(e) {
@@ -779,8 +782,12 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
           <FSelect label="Difficulté" value={form.difficulte} onChange={e => set('difficulte', e.target.value)}
             options={[{ value: 1, label: '▲ Facile' }, { value: 2, label: '▲▲ Moyen' }, { value: 3, label: '▲▲▲ Difficile' }]} />
           <FInput label="Points" value={form.points} type="number" onChange={e => set('points', e.target.value)} />
-          <FSelect label="Groupe" value={form.groupe ?? ''} onChange={e => set('groupe', e.target.value === '' ? null : parseInt(e.target.value))}
-            options={[{ value: '', label: '— Aucun —' }, { value: 1, label: 'Groupe 1' }, { value: 2, label: 'Groupe 2' }, { value: 3, label: 'Groupe 3' }, { value: 4, label: 'Groupe 4' }, { value: 5, label: 'Groupe 5' }]} />
+          <FSelect label="Exercice №" value={form.groupe ?? ''} onChange={e => set('groupe', e.target.value === '' ? null : parseInt(e.target.value))}
+            options={[{ value: '', label: '— Aucun —' }, { value: 1, label: 'Exercice 1' }, { value: 2, label: 'Exercice 2' }, { value: 3, label: 'Exercice 3' }, { value: 4, label: 'Exercice 4' }, { value: 5, label: 'Exercice 5' }]} />
+          {form.groupe != null && (
+            <FInput label="Titre de l'exercice" value={form.groupe_titre} onChange={e => set('groupe_titre', e.target.value)}
+              placeholder={`ex : Définitions, Classification, Calculs…`} />
+          )}
           <FInput label="Compétence APC ciblée" value={form.competence_evaluee} onChange={e => set('competence_evaluee', e.target.value)} placeholder="ex : Résoudre des problèmes" />
         </div>
       </div>
@@ -1215,9 +1222,10 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
                             {hasGroups && (
                               <div style={{ background: gKey === 'null' ? C.brownPale : `${C.emerald}12`, borderTop: `1px solid ${C.brownPale}`, padding: '5px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ fontSize: 10, fontWeight: 800, color: gKey === 'null' ? C.textSec : C.emerald, textTransform: 'uppercase', letterSpacing: .5 }}>
-                                  {gKey === 'null' ? 'Sans groupe' : `Groupe ${gKey}`}
+                                  {gKey === 'null' ? 'Sans exercice' : `Exercice ${gKey}`}
+                                  {gKey !== 'null' && gList[0]?.groupe_titre ? ` : ${gList[0].groupe_titre}` : ''}
                                 </span>
-                                <span style={{ fontSize: 9, background: gKey === 'null' ? C.brownPale : `${C.emerald}22`, color: gKey === 'null' ? C.textSec : C.emerald, borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>{gList.length}</span>
+                                <span style={{ fontSize: 9, background: gKey === 'null' ? C.brownPale : `${C.emerald}22`, color: gKey === 'null' ? C.textSec : C.emerald, borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>{gList.length} question{gList.length > 1 ? 's' : ''}</span>
                               </div>
                             )}
                             {gList.map((ex, i) => ExRow(ex, i, gList.length))}

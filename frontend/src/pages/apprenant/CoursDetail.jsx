@@ -469,27 +469,30 @@ export default function CoursDetail() {
                   <div style={{ background: C.brownPale, borderRadius: 10, padding: '9px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Target size={13} color={C.brown}/>
                     <p style={{ fontSize: 12, color: C.brown, fontWeight: 700, margin: 0 }}>
-                      Ce cours est divisé en {groupNums.length} groupe{groupNums.length > 1 ? 's' : ''} — choisis par où commencer.
+                      Ce cours contient {groupNums.length} exercice{groupNums.length > 1 ? 's' : ''} — choisis par où commencer.
                     </p>
                   </div>
 
-                  {/* Cartes de groupes */}
+                  {/* Cartes d'exercices */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
                     {groupNums.map(g => {
                       const gEx = allEx.filter(e => e.groupe === g)
                       const ad = avgDiff(gEx)
                       const tp = totalPts(gEx)
+                      const gTitre = gEx[0]?.groupe_titre || null
                       return (
                         <div key={g} style={{ backgroundColor: C.surface, borderRadius: 16, border: `1.5px solid ${C.brownPale}`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.08)' }}>
-                          {/* En-tête cliquable */}
+                          {/* En-tête */}
                           <div style={{ padding: isMobile ? '14px 16px' : '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
                             <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 4px 12px ${C.brown}30` }}>
                               <span style={{ fontSize: 18, fontWeight: 900, color: 'white' }}>{g}</span>
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 800, color: C.text }}>Groupe {g}</p>
+                              <p style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 800, color: C.text }}>
+                                Exercice {g}{gTitre ? ` : ${gTitre}` : ''}
+                              </p>
                               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{gEx.length} exercice{gEx.length > 1 ? 's' : ''}</span>
+                                <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{gEx.length} question{gEx.length > 1 ? 's' : ''}</span>
                                 <span style={{ fontSize: 11, fontWeight: 700, color: DIFF_COLORS[ad] }}>
                                   {'▲'.repeat(ad)} {ad === 1 ? 'Facile' : ad === 2 ? 'Moyen' : 'Difficile'}
                                 </span>
@@ -500,7 +503,7 @@ export default function CoursDetail() {
                               <Play size={13} fill="white"/> Démarrer
                             </button>
                           </div>
-                          {/* Aperçu exercices */}
+                          {/* Liste des questions */}
                           <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {gEx.map((ex, i) => (
                               <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
