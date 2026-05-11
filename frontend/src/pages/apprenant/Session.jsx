@@ -12,6 +12,7 @@ import {
 import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
+import ContentRenderer from '../../components/ContentRenderer'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = s =>
@@ -327,7 +328,7 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
 
         {/* Contenu principal */}
         <div style={{ background: C.surface, borderRadius: 16, padding: '24px 28px', border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', marginBottom: 20 }}>
-          <MarkdownRenderer content={res?.contenu || ''} />
+          <ContentRenderer content={res?.contenu || ''} />
         </div>
 
         {/* Points clés */}

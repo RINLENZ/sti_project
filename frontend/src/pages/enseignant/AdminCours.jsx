@@ -8,6 +8,7 @@ import {
   FileText, AlertTriangle, Sparkles, Loader, Upload
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
+import ContentRenderer from '../../components/ContentRenderer'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkList, Spinner } from '../../components/Skeleton'
 
@@ -1008,7 +1009,8 @@ function newBlock(type) {
   if (type === 'liste')  return { id, type, items: [''] }
   if (type === 'video')  return { id, type, url: '', titre: '' }
   if (type === 'image')  return { id, type, url: '', alt: '', legende: '' }
-  if (type === 'audio')  return { id, type, url: '', titre: '' }
+  if (type === 'audio')   return { id, type, url: '', titre: '' }
+  if (type === 'tableau') return { id, type, entetes: ['Colonne 1', 'Colonne 2'], lignes: [['', ''], ['', '']] }
   return { id, type }
 }
 
@@ -1019,8 +1021,9 @@ const BLOCK_META = {
   alerte: { label: 'Alerte', badge: '!',   color: '#1E40AF', bg: '#DBEAFE' },
   liste:  { label: 'Liste',  badge: '≡',   color: '#6B21A8', bg: '#F3E8FF' },
   video:  { label: 'Vidéo',  badge: '▶',   color: '#BE185D', bg: '#FCE7F3' },
-  image:  { label: 'Image',  badge: '⬚',   color: '#0369A1', bg: '#E0F2FE' },
-  audio:  { label: 'Audio',  badge: '♫',   color: '#7C3AED', bg: '#EDE9FE' },
+  image:   { label: 'Image',   badge: '⬚',  color: '#0369A1', bg: '#E0F2FE' },
+  audio:   { label: 'Audio',   badge: '♫',  color: '#7C3AED', bg: '#EDE9FE' },
+  tableau: { label: 'Tableau', badge: '⊞',  color: '#0F766E', bg: '#CCFBF1' },
 }
 
 const ALERTE_STYLES = {
@@ -1237,6 +1240,64 @@ function BlockEditorItem({ block, index, total, onChange, onDelete, onMove }) {
               onBlur={e => e.target.style.borderColor = C.brownPale} />
           </div>
         )}
+
+        {block.type === 'tableau' && (() => {
+          const entetes = block.entetes || []
+          const lignes  = block.lignes  || []
+          const setEntete = (ci, v) => { const e = [...entetes]; e[ci] = v; onChange({ ...block, entetes: e }) }
+          const setCell   = (ri, ci, v) => { const l = lignes.map((r, rj) => rj === ri ? r.map((c, cj) => cj === ci ? v : c) : r); onChange({ ...block, lignes: l }) }
+          const addCol    = () => onChange({ ...block, entetes: [...entetes, `Col ${entetes.length + 1}`], lignes: lignes.map(r => [...r, '']) })
+          const addRow    = () => onChange({ ...block, lignes: [...lignes, entetes.map(() => '')] })
+          const delCol    = ci => { if (entetes.length <= 1) return; onChange({ ...block, entetes: entetes.filter((_, j) => j !== ci), lignes: lignes.map(r => r.filter((_, j) => j !== ci)) }) }
+          const delRow    = ri => onChange({ ...block, lignes: lignes.filter((_, j) => j !== ri) })
+
+          return (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 280 }}>
+                <thead>
+                  <tr>
+                    {entetes.map((h, ci) => (
+                      <th key={ci} style={{ padding: '3px 4px', background: '#CCFBF1', border: `1px solid #5EEAD4` }}>
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          <input value={h} onChange={e => setEntete(ci, e.target.value)}
+                            style={{ ...inputBase, fontSize: 11, fontWeight: 800, padding: '4px 6px', background: 'transparent', border: 'none', outline: 'none', width: '100%', color: '#0F766E' }} />
+                          {entetes.length > 1 && (
+                            <button type="button" onClick={() => delCol(ci)}
+                              style={{ padding: '0 4px', background: '#FEE2E2', color: '#B91C1C', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: 9, flexShrink: 0 }}>✕</button>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                    <th style={{ width: 28, background: '#CCFBF1', border: `1px solid #5EEAD4` }}>
+                      <button type="button" onClick={addCol}
+                        style={{ width: '100%', padding: '4px 0', background: '#0F766E', color: 'white', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: 13, fontWeight: 900 }}>+</button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lignes.map((row, ri) => (
+                    <tr key={ri}>
+                      {row.map((cell, ci) => (
+                        <td key={ci} style={{ padding: '2px 4px', border: `1px solid ${C.brownPale}` }}>
+                          <input value={cell} onChange={e => setCell(ri, ci, e.target.value)}
+                            style={{ ...inputBase, fontSize: 12, padding: '5px 7px', border: 'none', outline: 'none', background: 'transparent', width: '100%' }} />
+                        </td>
+                      ))}
+                      <td style={{ width: 28, border: `1px solid ${C.brownPale}`, textAlign: 'center' }}>
+                        <button type="button" onClick={() => delRow(ri)}
+                          style={{ padding: '3px 6px', background: '#FEE2E2', color: '#B91C1C', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: 9 }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button type="button" onClick={addRow}
+                style={{ marginTop: 6, padding: '5px 14px', background: '#CCFBF1', color: '#0F766E', border: `1px solid #5EEAD4`, borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+                + Ligne
+              </button>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
@@ -1439,7 +1500,7 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
 
         {preview ? (
           <div style={{ border: `1.5px solid ${C.brownPale}`, borderRadius: 12, padding: 20, minHeight: 200, background: '#FAFAFA' }}>
-            <BlockRenderer contenu={JSON.stringify(blocks)} />
+            <ContentRenderer content={JSON.stringify(blocks)} />
           </div>
         ) : (
           <BlockEditor blocks={blocks} onChange={setBlocks} />

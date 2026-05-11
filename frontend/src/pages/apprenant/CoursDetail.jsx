@@ -9,6 +9,7 @@ import {
 import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
+import ContentRenderer from '../../components/ContentRenderer'
 
 const ProgressBar = ({ value, color, h = 6 }) => {
   const { C } = useTheme()
@@ -376,7 +377,7 @@ export default function CoursDetail() {
                     <h2 style={{ fontSize: isMobile ? 15 : 17, fontWeight: 800, color: C.brown, marginBottom: 16, paddingBottom: 10, borderBottom: `2px solid ${C.brownPale}` }}>
                       {lecon.titre}
                     </h2>
-                    <MarkdownRenderer content={lecon.contenu}/>
+                    <ContentRenderer content={lecon.contenu}/>
                   </div>
                 ) : (
                   <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${C.brownPale}` }}>
