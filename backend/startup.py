@@ -104,6 +104,15 @@ def main():
         ).fetchall()]
         print(f"[startup] alembic_version = {current}")
 
+    # Inline migrations for columns that can't use alembic files (root-owned dir)
+    with engine.connect() as conn:
+        if not column_exists(conn, 'exercices', 'groupe'):
+            print("[startup] Adding 'groupe' column to exercices table")
+            conn.execute(sa.text('ALTER TABLE exercices ADD COLUMN groupe INTEGER'))
+            conn.commit()
+        else:
+            print("[startup] 'groupe' column already exists — OK")
+
     engine.dispose()
 
     # 4. Run alembic upgrade head to apply any remaining migrations

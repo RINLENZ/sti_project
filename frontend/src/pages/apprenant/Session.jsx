@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -527,6 +527,8 @@ export default function Session() {
   const { C } = useTheme()
   const { uaId }   = useParams()
   const navigate   = useNavigate()
+  const [searchParams] = useSearchParams()
+  const groupeParam = searchParams.get('groupe') ? parseInt(searchParams.get('groupe')) : null
   const { user }   = useSelector(s => s.auth)
   const { mobile: isMobile, tablet } = useBreakpoint()
   const sessionIdRef = useRef(null)
@@ -610,7 +612,8 @@ export default function Session() {
       try {
         const { data: uaData } = await api.get(`/api/cours/ua/${uaId}`)
         setUA(uaData)
-        setExercices(uaData.exercices || [])
+        const allEx = uaData.exercices || []
+        setExercices(groupeParam != null ? allEx.filter(e => e.groupe === groupeParam) : allEx)
         const resos = uaData.ressources || []
         setRessources(resos)
         if (resos.length === 0) setPhase('exercices')
@@ -1380,7 +1383,7 @@ export default function Session() {
         <div style={{ flex: 1, minWidth: 0 }}>
           {!isMobile && (
             <p style={{ fontSize: 10, color: C.textSec, fontWeight: 600, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {ua.reference_ue} — {ua.titre}
+              {ua.reference_ue} — {ua.titre}{groupeParam != null ? ` · Groupe ${groupeParam}` : ''}
             </p>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

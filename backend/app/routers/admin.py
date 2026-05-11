@@ -280,7 +280,8 @@ def get_exercices(ua_id: UUID, db: Session = Depends(get_db),
         "competence_evaluee": e.competence_evaluee,
         "difficulte":       e.difficulte,
         "points":           e.points,
-        "ordre":            e.ordre
+        "ordre":            e.ordre,
+        "groupe":           e.groupe,
     } for e in exercices]
 
 @router.post("/exercice", status_code=201)

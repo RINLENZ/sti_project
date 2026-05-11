@@ -114,6 +114,7 @@ class Exercice(Base):
     difficulte         = Column(Integer, default=1)
     points             = Column(Integer, default=10)
     ordre              = Column(Integer, default=1)
+    groupe             = Column(Integer, nullable=True)
 
 
 class ProgressionApprenant(Base):

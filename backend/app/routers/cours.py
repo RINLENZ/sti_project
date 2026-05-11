@@ -309,7 +309,8 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db)):
             "competence_evaluee": e.competence_evaluee,
             "difficulte": e.difficulte,
             "points": e.points,
-            "ordre": e.ordre
+            "ordre": e.ordre,
+            "groupe": e.groupe,
             # reponse_correcte NON incluse — envoyée seulement après réponse
         } for e in exercices]
     }
@@ -922,7 +923,8 @@ def list_exercices(db: Session = Depends(get_db)):
             "competence_evaluee": ex.competence_evaluee,
             "difficulte":         ex.difficulte,
             "points":             ex.points,
-            "statut":             "publié",  # pas dans le modèle — valeur fixe
+            "groupe":             ex.groupe,
+            "statut":             "publié",
             "ua_id":              str(ex.ua_id) if ex.ua_id else None,
         })
     return result
@@ -941,6 +943,7 @@ def create_exercice(body: dict, db: Session = Depends(get_db)):
         competence_evaluee=body.get("competence_evaluee", ""),
         difficulte=int(body.get("difficulte", 1)),
         points=int(body.get("points", 10)),
+        groupe=int(body["groupe"]) if body.get("groupe") is not None else None,
         ua_id=UUID(body["ua_id"]) if body.get("ua_id") else None,
     )
     db.add(ex); db.commit(); db.refresh(ex)
@@ -954,6 +957,8 @@ def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db)
               "explication", "indice_1", "indice_2", "competence_evaluee",
               "difficulte", "points"]:
         if k in body: setattr(ex, k, body[k])
+    if "groupe" in body:
+        ex.groupe = int(body["groupe"]) if body["groupe"] is not None else None
     if "ua_id" in body and body["ua_id"]:
         ex.ua_id = UUID(body["ua_id"])
     db.commit()

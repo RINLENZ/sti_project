@@ -417,63 +417,124 @@ export default function CoursDetail() {
             )}
 
             {/* ── Exercices ── */}
-            {tab === 'exercices' && (
-              <div style={{ animation: 'fadeUp .3s ease' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                  {ua.exercices?.map((ex, i) => (
-                    <div key={ex.id} style={{
-                      backgroundColor: C.surface, borderRadius: 12,
-                      padding: isMobile ? '13px 14px' : '15px 18px',
-                      boxShadow: '0 2px 8px rgba(107,58,42,0.07)',
-                      border: `1px solid ${C.brownPale}`,
-                      display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
-                      gap: 12, flexWrap: isMobile ? 'wrap' : 'nowrap'
-                    }}>
-                      {/* Numéro */}
-                      <div style={{
-                        width: 34, height: 34, borderRadius: 9,
-                        background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-                        color: 'white', display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', fontSize: 13, fontWeight: 900, flexShrink: 0
-                      }}>
-                        {i + 1}
-                      </div>
+            {tab === 'exercices' && (() => {
+              const allEx = ua.exercices || []
+              const groupNums = [...new Set(allEx.map(e => e.groupe).filter(g => g != null))].sort((a,b) => a-b)
+              const hasGroups = groupNums.length > 0
 
-                      {/* Infos */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>
-                          {ex.titre}
-                        </p>
-                        <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>
-                          {ex.competence_evaluee}
-                        </p>
-                      </div>
-
-                      {/* Badges */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: isMobile ? 'auto' : 0 }}>
-                        <span style={{ backgroundColor: diffBg[ex.difficulte], color: diffColor[ex.difficulte], padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {diffLabel[ex.difficulte]}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: C.brownLight, whiteSpace: 'nowrap' }}>
-                          {ex.points} pts
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button onClick={() => navigate(`/session/${uaId}`)} style={{
-                  width: '100%', padding: '15px',
-                  background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-                  color: 'white', border: 'none', borderRadius: 14,
-                  fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                  boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52
+              const ExRow = (ex, i) => (
+                <div key={ex.id} style={{
+                  backgroundColor: C.surface, borderRadius: 12,
+                  padding: isMobile ? '13px 14px' : '15px 18px',
+                  boxShadow: '0 2px 8px rgba(107,58,42,0.07)',
+                  border: `1px solid ${C.brownPale}`,
+                  display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+                  gap: 12, flexWrap: isMobile ? 'wrap' : 'nowrap'
                 }}>
-                  <Play size={15} fill="white"/> Démarrer la session <ChevronRight size={15}/>
-                </button>
-              </div>
-            )}
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isMobile ? 'normal' : 'nowrap' }}>{ex.titre}</p>
+                    {ex.competence_evaluee && <p style={{ fontSize: 11, color: C.textSec, margin: 0 }}>{ex.competence_evaluee}</p>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: isMobile ? 'auto' : 0 }}>
+                    <span style={{ backgroundColor: diffBg[ex.difficulte], color: diffColor[ex.difficulte], padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{diffLabel[ex.difficulte]}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.brownLight, whiteSpace: 'nowrap' }}>{ex.points} pts</span>
+                  </div>
+                </div>
+              )
+
+              if (!hasGroups) {
+                // Comportement original : liste plate + bouton démarrer
+                return (
+                  <div style={{ animation: 'fadeUp .3s ease' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                      {allEx.map((ex, i) => ExRow(ex, i))}
+                    </div>
+                    <button onClick={() => navigate(`/session/${uaId}`)} style={{ width: '100%', padding: '15px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 14, fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52 }}>
+                      <Play size={15} fill="white"/> Démarrer la session <ChevronRight size={15}/>
+                    </button>
+                  </div>
+                )
+              }
+
+              // Mode groupes : cartes de sélection + liste dépliable
+              const ungrouped = allEx.filter(e => e.groupe == null)
+              const DIFF_COLORS = { 1: C.emerald, 2: '#D97706', 3: C.red }
+              const avgDiff = (list) => list.length ? Math.round(list.reduce((s,e) => s + (e.difficulte||1), 0) / list.length) : 1
+              const totalPts = (list) => list.reduce((s,e) => s + (e.points||0), 0)
+
+              return (
+                <div style={{ animation: 'fadeUp .3s ease' }}>
+                  {/* Info */}
+                  <div style={{ background: C.brownPale, borderRadius: 10, padding: '9px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Target size={13} color={C.brown}/>
+                    <p style={{ fontSize: 12, color: C.brown, fontWeight: 700, margin: 0 }}>
+                      Ce cours est divisé en {groupNums.length} groupe{groupNums.length > 1 ? 's' : ''} — choisis par où commencer.
+                    </p>
+                  </div>
+
+                  {/* Cartes de groupes */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                    {groupNums.map(g => {
+                      const gEx = allEx.filter(e => e.groupe === g)
+                      const ad = avgDiff(gEx)
+                      const tp = totalPts(gEx)
+                      return (
+                        <div key={g} style={{ backgroundColor: C.surface, borderRadius: 16, border: `1.5px solid ${C.brownPale}`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.08)' }}>
+                          {/* En-tête cliquable */}
+                          <div style={{ padding: isMobile ? '14px 16px' : '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 4px 12px ${C.brown}30` }}>
+                              <span style={{ fontSize: 18, fontWeight: 900, color: 'white' }}>{g}</span>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 800, color: C.text }}>Groupe {g}</p>
+                              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{gEx.length} exercice{gEx.length > 1 ? 's' : ''}</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: DIFF_COLORS[ad] }}>
+                                  {'▲'.repeat(ad)} {ad === 1 ? 'Facile' : ad === 2 ? 'Moyen' : 'Difficile'}
+                                </span>
+                                <span style={{ fontSize: 11, color: C.brownLight, fontWeight: 600 }}>★ {tp} pts</span>
+                              </div>
+                            </div>
+                            <button onClick={() => navigate(`/session/${uaId}?groupe=${g}`)} style={{ padding: isMobile ? '10px 14px' : '11px 20px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 12px ${C.brown}30`, whiteSpace: 'nowrap' }}>
+                              <Play size={13} fill="white"/> Démarrer
+                            </button>
+                          </div>
+                          {/* Aperçu exercices */}
+                          <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {gEx.map((ex, i) => (
+                              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ width: 18, height: 18, borderRadius: 5, background: C.brownPale, color: C.textSec, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, flexShrink: 0 }}>{i+1}</span>
+                                <span style={{ fontSize: 12, color: C.text, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre}</span>
+                                <span style={{ fontSize: 10, color: DIFF_COLORS[ex.difficulte], fontWeight: 700 }}>{'▲'.repeat(ex.difficulte)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Exercices sans groupe (si existants) */}
+                    {ungrouped.length > 0 && (
+                      <div style={{ backgroundColor: C.surface, borderRadius: 14, border: `1px dashed ${C.brownLight}`, padding: isMobile ? '12px 14px' : '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: C.text }}>Exercices libres</p>
+                          <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>{ungrouped.length} exercice{ungrouped.length > 1 ? 's' : ''} sans groupe assigné</p>
+                        </div>
+                        <button onClick={() => navigate(`/session/${uaId}`)} style={{ padding: '9px 16px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Play size={12} fill={C.brown}/> Faire
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bouton tout faire */}
+                  <button onClick={() => navigate(`/session/${uaId}`)} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    Tout faire en une session · {allEx.length} exercices
+                  </button>
+                </div>
+              )
+            })()}
           </div>
 
           {/* ── Sidebar ── */}

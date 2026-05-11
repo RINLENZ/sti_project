@@ -710,6 +710,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     indice_2: initial.indice_2 || '', competence_evaluee: initial.competence_evaluee || '',
     difficulte: initial.difficulte || 1, points: initial.points || 10,
     ua_id: initial.ua_id || uas[0]?.id || '',
+    groupe: initial.groupe ?? null,
     image_url: initial.options?.[0]?.startsWith?.('__img__:') ? initial.options[0].slice(8) : '',
     apc: initAPC(),
   })
@@ -740,7 +741,8 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       reponse_correcte: rcTrou, explication: form.explication,
       indice_1: form.indice_1, indice_2: form.indice_2,
       competence_evaluee: form.competence_evaluee,
-      difficulte: parseInt(form.difficulte), points: parseInt(form.points), ua_id: form.ua_id }
+      difficulte: parseInt(form.difficulte), points: parseInt(form.points),
+      groupe: form.groupe, ua_id: form.ua_id }
   }
 
   async function handle(e) {
@@ -772,11 +774,13 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
               { value: 'situation_apc', label: '🎯 Situation-problème APC' },
             ]} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: uas.length ? '2fr 1fr 1fr 2fr' : '1fr 1fr 2fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: uas.length ? '2fr 1fr 1fr 1fr 2fr' : '1fr 1fr 1fr 2fr', gap: 10 }}>
           {uas.length > 0 && <FSelect label="UA parente" value={form.ua_id} onChange={e => set('ua_id', e.target.value)} required options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 40) }))} />}
           <FSelect label="Difficulté" value={form.difficulte} onChange={e => set('difficulte', e.target.value)}
             options={[{ value: 1, label: '▲ Facile' }, { value: 2, label: '▲▲ Moyen' }, { value: 3, label: '▲▲▲ Difficile' }]} />
           <FInput label="Points" value={form.points} type="number" onChange={e => set('points', e.target.value)} />
+          <FSelect label="Groupe" value={form.groupe ?? ''} onChange={e => set('groupe', e.target.value === '' ? null : parseInt(e.target.value))}
+            options={[{ value: '', label: '— Aucun —' }, { value: 1, label: 'Groupe 1' }, { value: 2, label: 'Groupe 2' }, { value: 3, label: 'Groupe 3' }, { value: 4, label: 'Groupe 4' }, { value: 5, label: 'Groupe 5' }]} />
           <FInput label="Compétence APC ciblée" value={form.competence_evaluee} onChange={e => set('competence_evaluee', e.target.value)} placeholder="ex : Résoudre des problèmes" />
         </div>
       </div>
@@ -1168,31 +1172,60 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
                       {exList.length}
                     </span>
                   </button>
-                  {!isCollapsed && (
-                    <div style={{ border: `1.5px solid ${C.brownLight}60`, borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
-                      {exList.map((ex, i) => (
-                        <div key={ex.id} style={{ backgroundColor: i % 2 === 0 ? C.surface : C.bg, padding: mobile ? '10px 12px' : '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: i < exList.length - 1 ? `1px solid ${C.brownPale}` : 'none' }}>
-                          <div style={{ width: 26, height: 26, borderRadius: 7, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre || ex.enonce?.substring(0, 50) + '…'}</p>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <TypeBadge type={ex.type} options={ex.options} enonce={ex.enonce} />
-                              <span style={{ fontSize: 10, color: C.textSec }}>Diff. {ex.difficulte} · {ex.points} pts</span>
-                              {ex.competence_evaluee && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.competence_evaluee}</span>}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                            <button onClick={() => setModal(ex)} style={{ padding: '5px 9px', background: C.bluePale, color: C.blue, border: 'none', borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700 }}>
-                              <Edit3 size={11} />{!mobile && ' Modifier'}
-                            </button>
-                            <button onClick={() => setDeleting(ex)} style={{ padding: '5px 8px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-                              <Trash2 size={12} />
-                            </button>
+                  {!isCollapsed && (() => {
+                    // Sub-group by groupe within the UA
+                    const hasGroups = exList.some(e => e.groupe != null)
+                    const subGroups = hasGroups
+                      ? Object.entries(
+                          exList.reduce((acc, e) => {
+                            const k = e.groupe != null ? String(e.groupe) : 'null'
+                            if (!acc[k]) acc[k] = []
+                            acc[k].push(e)
+                            return acc
+                          }, {})
+                        ).sort(([a], [b]) => (a === 'null' ? 1 : b === 'null' ? -1 : parseInt(a) - parseInt(b)))
+                      : [['all', exList]]
+
+                    const ExRow = (ex, i, total) => (
+                      <div key={ex.id} style={{ backgroundColor: i % 2 === 0 ? C.surface : C.bg, padding: mobile ? '10px 12px' : '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: i < total - 1 ? `1px solid ${C.brownPale}` : 'none' }}>
+                        <div style={{ width: 26, height: 26, borderRadius: 7, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre || ex.enonce?.substring(0, 50) + '…'}</p>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <TypeBadge type={ex.type} options={ex.options} enonce={ex.enonce} />
+                            <span style={{ fontSize: 10, color: C.textSec }}>Diff. {ex.difficulte} · {ex.points} pts</span>
+                            {ex.competence_evaluee && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.competence_evaluee}</span>}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                          <button onClick={() => setModal(ex)} style={{ padding: '5px 9px', background: C.bluePale, color: C.blue, border: 'none', borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700 }}>
+                            <Edit3 size={11} />{!mobile && ' Modifier'}
+                          </button>
+                          <button onClick={() => setDeleting(ex)} style={{ padding: '5px 8px', background: '#FEE2E2', color: C.red, border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+
+                    return (
+                      <div style={{ border: `1.5px solid ${C.brownLight}60`, borderTop: 'none', borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+                        {subGroups.map(([gKey, gList]) => (
+                          <div key={gKey}>
+                            {hasGroups && (
+                              <div style={{ background: gKey === 'null' ? C.brownPale : `${C.emerald}12`, borderTop: `1px solid ${C.brownPale}`, padding: '5px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, color: gKey === 'null' ? C.textSec : C.emerald, textTransform: 'uppercase', letterSpacing: .5 }}>
+                                  {gKey === 'null' ? 'Sans groupe' : `Groupe ${gKey}`}
+                                </span>
+                                <span style={{ fontSize: 9, background: gKey === 'null' ? C.brownPale : `${C.emerald}22`, color: gKey === 'null' ? C.textSec : C.emerald, borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>{gList.length}</span>
+                              </div>
+                            )}
+                            {gList.map((ex, i) => ExRow(ex, i, gList.length))}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}
