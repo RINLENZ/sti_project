@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -989,16 +989,382 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
 }
 
 
-// ════════════════════════════════════════════════════════════════
-// TAB CONTENU — ajoute ce composant dans AdminCours.jsx
-// avant le composant "export default AdminCours"
-//
-// Dans AdminCours, modifie :
-// 1. TABS array : ajoute { id: 'contenu', label: 'Contenu', icon: FileText, badge: '...' }
-// 2. loadAll : déjà OK (structure contient les UA avec nb_ressources)
-// 3. Rendu : ajoute {activeTab === 'contenu' && <TabContenu structure={structure} onReload={loadAll} />}
-// 4. Import : ajoute FileText depuis lucide-react
-// ════════════════════════════════════════════════════════════════
+// ── Block Editor ─────────────────────────────────────────────────
+function parseBlocks(contenu) {
+  if (!contenu) return [newBlock('texte')]
+  try {
+    const p = JSON.parse(contenu)
+    if (Array.isArray(p) && p.length > 0) return p
+  } catch {}
+  return [{ id: crypto.randomUUID(), type: 'texte', valeur: contenu }]
+}
+
+function newBlock(type) {
+  const id = crypto.randomUUID()
+  if (type === 'texte')  return { id, type, valeur: '' }
+  if (type === 'titre')  return { id, type, valeur: '', niveau: 'h2' }
+  if (type === 'code')   return { id, type, valeur: '', langage: 'python' }
+  if (type === 'alerte') return { id, type, valeur: '', style: 'info' }
+  if (type === 'liste')  return { id, type, items: [''] }
+  if (type === 'video')  return { id, type, url: '', titre: '' }
+  if (type === 'image')  return { id, type, url: '', alt: '', legende: '' }
+  if (type === 'audio')  return { id, type, url: '', titre: '' }
+  return { id, type }
+}
+
+const BLOCK_META = {
+  texte:  { label: 'Texte',  badge: '¶',   color: '#4B5563', bg: '#F9FAFB' },
+  titre:  { label: 'Titre',  badge: 'Hx',  color: '#92400E', bg: '#FEF3C7' },
+  code:   { label: 'Code',   badge: '</>',  color: '#065F46', bg: '#D1FAE5' },
+  alerte: { label: 'Alerte', badge: '!',   color: '#1E40AF', bg: '#DBEAFE' },
+  liste:  { label: 'Liste',  badge: '≡',   color: '#6B21A8', bg: '#F3E8FF' },
+  video:  { label: 'Vidéo',  badge: '▶',   color: '#BE185D', bg: '#FCE7F3' },
+  image:  { label: 'Image',  badge: '⬚',   color: '#0369A1', bg: '#E0F2FE' },
+  audio:  { label: 'Audio',  badge: '♫',   color: '#7C3AED', bg: '#EDE9FE' },
+}
+
+const ALERTE_STYLES = {
+  info:    { bg: '#EFF6FF', border: '#3B82F6', color: '#1E40AF', emoji: 'ℹ' },
+  success: { bg: '#F0FDF4', border: '#22C55E', color: '#166534', emoji: '✓' },
+  warning: { bg: '#FFFBEB', border: '#F59E0B', color: '#92400E', emoji: '⚠' },
+  danger:  { bg: '#FEF2F2', border: '#EF4444', color: '#991B1B', emoji: '✕' },
+}
+
+function countWords(contenu) {
+  if (!contenu) return 0
+  try {
+    const p = JSON.parse(contenu)
+    if (Array.isArray(p)) return p.reduce((s, b) => {
+      if (b.valeur) return s + b.valeur.split(/\s+/).filter(Boolean).length
+      if (b.items)  return s + b.items.join(' ').split(/\s+/).filter(Boolean).length
+      return s
+    }, 0)
+  } catch {}
+  return contenu.split(/\s+/).filter(Boolean).length
+}
+
+function BlockMediaPicker({ value, accept, onChange: onUrlChange, previewEl }) {
+  const { C } = useTheme()
+  const inputBase = getInputBase(C)
+  const [uploading, setUploading] = useState(false)
+  const ref = useRef(null)
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const { data } = await api.post('/api/admin/upload-media', fd)
+      onUrlChange(data.url)
+      toast.success('Fichier envoyé !')
+    } catch (err) {
+      toast.error('Upload échoué : ' + (err?.response?.data?.detail || 'Vérifiez SUPABASE_URL et SUPABASE_SERVICE_KEY'))
+    } finally {
+      setUploading(false)
+      if (ref.current) ref.current.value = ''
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="text" value={value} onChange={e => onUrlChange(e.target.value)}
+          placeholder="Coller une URL ou cliquer sur Envoyer…"
+          style={{ ...inputBase, flex: 1 }}
+          onFocus={e => e.target.style.borderColor = C.brown}
+          onBlur={e => e.target.style.borderColor = C.brownPale} />
+        <button type="button" onClick={() => ref.current?.click()} disabled={uploading}
+          style={{ padding: '8px 14px', background: uploading ? C.brownPale : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: uploading ? C.brown : 'white', border: 'none', borderRadius: 8, cursor: uploading ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {uploading ? <><Loader size={13} /> Envoi…</> : <><Upload size={13} /> Envoyer</>}
+        </button>
+        <input ref={ref} type="file" accept={accept} onChange={handleFile} style={{ display: 'none' }} />
+      </div>
+      {value && <div style={{ marginTop: 10 }}>{previewEl}</div>}
+    </div>
+  )
+}
+
+function BlockEditorItem({ block, index, total, onChange, onDelete, onMove }) {
+  const { C } = useTheme()
+  const inputBase = getInputBase(C)
+  const meta = BLOCK_META[block.type] || BLOCK_META.texte
+  const set = (key, val) => onChange({ ...block, [key]: val })
+
+  return (
+    <div style={{ background: C.surface, borderRadius: 12, border: `1.5px solid ${meta.color}25`, marginBottom: 10, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: meta.bg, borderBottom: `1px solid ${meta.color}15` }}>
+        <span style={{ width: 22, height: 22, borderRadius: 5, background: meta.color, color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, flexShrink: 0 }}>{meta.badge}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: meta.color, flex: 1 }}>{meta.label}</span>
+        <button type="button" onClick={() => onMove(-1)} disabled={index === 0}
+          style={{ padding: '2px 7px', background: 'none', border: `1px solid ${meta.color}30`, borderRadius: 4, cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? .3 : 1, color: meta.color, fontSize: 12 }}>↑</button>
+        <button type="button" onClick={() => onMove(1)} disabled={index === total - 1}
+          style={{ padding: '2px 7px', background: 'none', border: `1px solid ${meta.color}30`, borderRadius: 4, cursor: index === total - 1 ? 'default' : 'pointer', opacity: index === total - 1 ? .3 : 1, color: meta.color, fontSize: 12 }}>↓</button>
+        <button type="button" onClick={onDelete}
+          style={{ padding: '3px 7px', background: '#FEE2E2', color: '#B91C1C', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>✕</button>
+      </div>
+
+      <div style={{ padding: '12px 14px' }}>
+        {block.type === 'texte' && (
+          <textarea value={block.valeur} onChange={e => set('valeur', e.target.value)}
+            placeholder="Écrivez votre paragraphe ici…" rows={4}
+            style={{ ...inputBase, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.7 }}
+            onFocus={e => e.target.style.borderColor = C.brown}
+            onBlur={e => e.target.style.borderColor = C.brownPale} />
+        )}
+
+        {block.type === 'titre' && (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <select value={block.niveau} onChange={e => set('niveau', e.target.value)}
+              style={{ ...inputBase, width: 72, flex: 'none', fontWeight: 800 }}>
+              <option value="h1">H1</option>
+              <option value="h2">H2</option>
+              <option value="h3">H3</option>
+            </select>
+            <input value={block.valeur} onChange={e => set('valeur', e.target.value)}
+              placeholder="Titre de section…"
+              style={{ ...inputBase, fontSize: block.niveau === 'h1' ? 17 : block.niveau === 'h2' ? 15 : 13, fontWeight: 800, color: C.brownDark }}
+              onFocus={e => e.target.style.borderColor = C.brown}
+              onBlur={e => e.target.style.borderColor = C.brownPale} />
+          </div>
+        )}
+
+        {block.type === 'code' && (
+          <>
+            <select value={block.langage} onChange={e => set('langage', e.target.value)}
+              style={{ ...inputBase, width: 'auto', marginBottom: 8 }}>
+              {['python','javascript','java','c','cpp','html','css','sql','bash','autre'].map(l =>
+                <option key={l} value={l}>{l}</option>)}
+            </select>
+            <textarea value={block.valeur} onChange={e => set('valeur', e.target.value)}
+              placeholder={`print("Hello")`} rows={6}
+              style={{ ...inputBase, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, background: '#0F172A', color: '#E2E8F0', border: '1.5px solid #1E293B' }} />
+          </>
+        )}
+
+        {block.type === 'alerte' && (
+          <>
+            <select value={block.style} onChange={e => set('style', e.target.value)}
+              style={{ ...inputBase, width: 'auto', marginBottom: 8 }}>
+              <option value="info">ℹ Info</option>
+              <option value="success">✓ Succès</option>
+              <option value="warning">⚠ Attention</option>
+              <option value="danger">✕ Danger</option>
+            </select>
+            <textarea value={block.valeur} onChange={e => set('valeur', e.target.value)}
+              placeholder="Message important à retenir…" rows={3}
+              style={{ ...inputBase, resize: 'vertical', background: ALERTE_STYLES[block.style]?.bg || '#EFF6FF', border: `1.5px solid ${ALERTE_STYLES[block.style]?.border || '#3B82F6'}` }}
+              onFocus={e => e.target.style.borderColor = ALERTE_STYLES[block.style]?.border}
+              onBlur={e => e.target.style.borderColor = ALERTE_STYLES[block.style]?.border} />
+          </>
+        )}
+
+        {block.type === 'liste' && (
+          <div>
+            {(block.items || []).map((item, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                <span style={{ color: C.brown, fontWeight: 900, flexShrink: 0 }}>•</span>
+                <input value={item} onChange={e => {
+                  const items = [...block.items]; items[i] = e.target.value; onChange({ ...block, items })
+                }}
+                  placeholder={`Élément ${i + 1}…`} style={{ ...inputBase, flex: 1 }}
+                  onFocus={e => e.target.style.borderColor = C.brown}
+                  onBlur={e => e.target.style.borderColor = C.brownPale} />
+                {block.items.length > 1 && (
+                  <button type="button" onClick={() => onChange({ ...block, items: block.items.filter((_, j) => j !== i) })}
+                    style={{ padding: '4px 6px', background: '#FEE2E2', color: '#B91C1C', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={() => onChange({ ...block, items: [...(block.items || []), ''] })}
+              style={{ padding: '5px 12px', background: '#F3E8FF', color: '#6B21A8', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, marginTop: 2 }}>
+              + Élément
+            </button>
+          </div>
+        )}
+
+        {block.type === 'video' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input value={block.url} onChange={e => set('url', e.target.value)}
+              placeholder="URL (YouTube, Vimeo, lien direct…)" style={{ ...inputBase }}
+              onFocus={e => e.target.style.borderColor = C.brown}
+              onBlur={e => e.target.style.borderColor = C.brownPale} />
+            <input value={block.titre} onChange={e => set('titre', e.target.value)}
+              placeholder="Légende (optionnel)" style={{ ...inputBase }}
+              onFocus={e => e.target.style.borderColor = C.brown}
+              onBlur={e => e.target.style.borderColor = C.brownPale} />
+          </div>
+        )}
+
+        {block.type === 'image' && (
+          <div>
+            <BlockMediaPicker
+              value={block.url || ''}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={url => onChange({ ...block, url })}
+              previewEl={<img src={block.url} alt={block.alt || ''} style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 8, display: 'block', objectFit: 'contain' }} />}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input value={block.alt || ''} onChange={e => set('alt', e.target.value)}
+                placeholder="Texte alternatif (accessibilité)"
+                style={{ ...inputBase, flex: 1 }}
+                onFocus={e => e.target.style.borderColor = C.brown}
+                onBlur={e => e.target.style.borderColor = C.brownPale} />
+              <input value={block.legende || ''} onChange={e => set('legende', e.target.value)}
+                placeholder="Légende sous l'image"
+                style={{ ...inputBase, flex: 1 }}
+                onFocus={e => e.target.style.borderColor = C.brown}
+                onBlur={e => e.target.style.borderColor = C.brownPale} />
+            </div>
+          </div>
+        )}
+
+        {block.type === 'audio' && (
+          <div>
+            <BlockMediaPicker
+              value={block.url || ''}
+              accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/x-m4a"
+              onChange={url => onChange({ ...block, url })}
+              previewEl={<audio controls src={block.url} style={{ width: '100%' }} />}
+            />
+            <input value={block.titre || ''} onChange={e => set('titre', e.target.value)}
+              placeholder="Titre de l'audio (optionnel)"
+              style={{ ...inputBase, marginTop: 8 }}
+              onFocus={e => e.target.style.borderColor = C.brown}
+              onBlur={e => e.target.style.borderColor = C.brownPale} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BlockEditor({ blocks, onChange }) {
+  const { C } = useTheme()
+  const add    = type => onChange([...blocks, newBlock(type)])
+  const update = (i, b) => { const n = [...blocks]; n[i] = b; onChange(n) }
+  const remove = i => onChange(blocks.length === 1 ? [newBlock('texte')] : blocks.filter((_, j) => j !== i))
+  const move   = (i, dir) => {
+    const n = [...blocks], t = i + dir
+    if (t < 0 || t >= n.length) return
+    ;[n[i], n[t]] = [n[t], n[i]]; onChange(n)
+  }
+
+  return (
+    <div>
+      {blocks.map((b, i) => (
+        <BlockEditorItem key={b.id} block={b} index={i} total={blocks.length}
+          onChange={upd => update(i, upd)}
+          onDelete={() => remove(i)}
+          onMove={dir => move(i, dir)} />
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '9px 12px', background: C.bg, borderRadius: 10, border: `1.5px dashed ${C.brownPale}` }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: C.textSec, alignSelf: 'center', marginRight: 2 }}>+ Ajouter :</span>
+        {Object.entries(BLOCK_META).map(([type, m]) => (
+          <button key={type} type="button" onClick={() => add(type)}
+            style={{ padding: '4px 10px', background: m.bg, color: m.color, border: `1px solid ${m.color}35`, borderRadius: 20, cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontWeight: 900, fontSize: 10 }}>{m.badge}</span> {m.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BlockRenderer({ contenu }) {
+  const { C } = useTheme()
+  if (!contenu) return <p style={{ color: C.textSec, fontStyle: 'italic', fontSize: 13 }}>Aucun contenu.</p>
+
+  let blocks = null
+  try {
+    const p = JSON.parse(contenu)
+    if (Array.isArray(p) && p.length > 0) blocks = p
+  } catch {}
+
+  if (!blocks) return <MarkdownPreview content={contenu} />
+
+  return (
+    <div style={{ fontSize: 13, lineHeight: 1.7, color: C.text }}>
+      {blocks.map((block, i) => {
+        if (block.type === 'texte') return (
+          <p key={i} style={{ margin: '0 0 12px', whiteSpace: 'pre-wrap' }}>{block.valeur}</p>
+        )
+        if (block.type === 'titre') {
+          const s = {
+            h1: { fontSize: 20, fontWeight: 900, color: C.brownDark, margin: '4px 0 14px', borderBottom: `2px solid ${C.brownPale}`, paddingBottom: 6 },
+            h2: { fontSize: 16, fontWeight: 800, color: C.brown, margin: '18px 0 10px', borderBottom: `2px solid ${C.brownPale}`, paddingBottom: 4 },
+            h3: { fontSize: 14, fontWeight: 800, color: C.brown, margin: '14px 0 8px', borderLeft: `3px solid ${C.brownLight}`, paddingLeft: 8 },
+          }[block.niveau] || {}
+          return <div key={i} style={s}>{block.valeur}</div>
+        }
+        if (block.type === 'code') return (
+          <div key={i} style={{ margin: '14px 0', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ background: '#1E293B', padding: '5px 14px' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>{block.langage}</span>
+            </div>
+            <pre style={{ background: '#0F172A', color: '#E2E8F0', padding: '14px 16px', margin: 0, overflow: 'auto', fontSize: 12, lineHeight: 1.6, fontFamily: 'monospace' }}>
+              <code>{block.valeur}</code>
+            </pre>
+          </div>
+        )
+        if (block.type === 'alerte') {
+          const s = ALERTE_STYLES[block.style] || ALERTE_STYLES.info
+          return (
+            <div key={i} style={{ background: s.bg, border: `1.5px solid ${s.border}`, borderRadius: 10, padding: '12px 16px', margin: '12px 0', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>{s.emoji}</span>
+              <p style={{ margin: 0, color: s.color, fontWeight: 600 }}>{block.valeur}</p>
+            </div>
+          )
+        }
+        if (block.type === 'liste') return (
+          <ul key={i} style={{ margin: '8px 0 14px', paddingLeft: 0, listStyle: 'none' }}>
+            {(block.items || []).map((item, j) => (
+              <li key={j} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                <span style={{ color: C.brownLight, fontWeight: 900, flexShrink: 0 }}>•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        )
+        if (block.type === 'video') {
+          const ytM = block.url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/)
+          if (ytM) return (
+            <div key={i} style={{ margin: '14px 0', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
+              <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
+                <iframe src={`https://www.youtube.com/embed/${ytM[1]}`}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                  allowFullScreen frameBorder="0" title={block.titre || 'Vidéo'} />
+              </div>
+              {block.titre && <p style={{ padding: '6px 12px', background: '#1F2937', color: '#9CA3AF', fontSize: 11, margin: 0 }}>{block.titre}</p>}
+            </div>
+          )
+          return (
+            <div key={i} style={{ margin: '12px 0' }}>
+              <a href={block.url} target="_blank" rel="noopener noreferrer" style={{ color: C.blue, textDecoration: 'underline' }}>🎬 {block.titre || block.url}</a>
+            </div>
+          )
+        }
+        if (block.type === 'image' && block.url) return (
+          <figure key={i} style={{ margin: '14px 0', textAlign: 'center' }}>
+            <img src={block.url} alt={block.alt || ''}
+              style={{ maxWidth: '100%', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,0,0,.1)', display: 'block', margin: '0 auto' }} />
+            {block.legende && <figcaption style={{ fontSize: 11, color: C.textSec, marginTop: 6, fontStyle: 'italic' }}>{block.legende}</figcaption>}
+          </figure>
+        )
+        if (block.type === 'audio' && block.url) return (
+          <div key={i} style={{ margin: '14px 0', background: '#F5F3FF', borderRadius: 12, padding: '14px 16px', border: '1.5px solid #DDD6FE' }}>
+            {block.titre && <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: '#6D28D9' }}>🎵 {block.titre}</p>}
+            <audio controls src={block.url} style={{ width: '100%' }} />
+          </div>
+        )
+        return null
+      })}
+    </div>
+  )
+}
 
 function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
   const { C } = useTheme()
@@ -1011,6 +1377,7 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
     ordre:       initial.ordre       || 1,
     ua_id:       initial.ua_id       || uas[0]?.id || '',
   })
+  const [blocks,   setBlocks]   = useState(() => parseBlocks(initial.contenu || ''))
   const [loading,  setLoading]  = useState(false)
   const [pkDraft,  setPkDraft]  = useState('')
   const [preview,  setPreview]  = useState(false)
@@ -1034,7 +1401,7 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
         ua_id:       form.ua_id,
         titre:       form.titre,
         type:        form.type,
-        contenu:     form.contenu,
+        contenu:     JSON.stringify(blocks),
         points_cles: form.points_cles,
         ordre:       parseInt(form.ordre),
       })
@@ -1057,10 +1424,10 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
         onChange={e => setForm(f => ({ ...f, titre: e.target.value }))}
         placeholder="ex: Cours — Les structures de contrôle" required />
 
-      {/* Éditeur avec preview */}
+      {/* Éditeur par blocs */}
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <FieldLabel required>Contenu (Markdown)</FieldLabel>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <FieldLabel required>Contenu</FieldLabel>
           <button type="button" onClick={() => setPreview(p => !p)} style={{
             padding: '3px 10px', background: preview ? C.brownPale : C.bluePale,
             color: preview ? C.brown : C.blue, border: 'none', borderRadius: 6,
@@ -1071,21 +1438,12 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
         </div>
 
         {preview ? (
-          <div style={{ border: `1.5px solid ${C.brownPale}`, borderRadius: 8, padding: 16, minHeight: 200, background: '#FAFAFA' }}>
-            <MarkdownPreview content={form.contenu} />
+          <div style={{ border: `1.5px solid ${C.brownPale}`, borderRadius: 12, padding: 20, minHeight: 200, background: '#FAFAFA' }}>
+            <BlockRenderer contenu={JSON.stringify(blocks)} />
           </div>
         ) : (
-          <textarea value={form.contenu} onChange={e => setForm(f => ({ ...f, contenu: e.target.value }))}
-            placeholder={`# Titre\n\nIntroduction...\n\n## Définition\n\nTexte explicatif...\n\n- Point 1\n- Point 2\n\n\`\`\`\nExemple de code\n\`\`\``}
-            rows={12}
-            style={{ ...inputBase, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 }}
-            onFocus={e => e.target.style.borderColor = C.brown}
-            onBlur={e => e.target.style.borderColor = C.brownPale}
-          />
+          <BlockEditor blocks={blocks} onChange={setBlocks} />
         )}
-        <p style={{ fontSize: 10, color: C.textSec, marginTop: 4 }}>
-          Supports : # Titres, **gras**, `code`, ```blocs```, - listes, &gt; citations
-        </p>
       </div>
 
       {/* Points clés */}
@@ -1227,7 +1585,10 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
         <div>
           <p style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: '0 0 4px' }}>Contenu pédagogique</p>
           <p style={{ fontSize: 12, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
-            Les ressources sont affichées à l'apprenant <strong>avant les exercices</strong>. Utilisez le Markdown pour structurer : <code style={{ background: C.brownPale, padding: '0 4px', borderRadius: 4, fontSize: 11 }}># Titre</code>, <code style={{ background: C.brownPale, padding: '0 4px', borderRadius: 4, fontSize: 11 }}>**gras**</code>, <code style={{ background: C.brownPale, padding: '0 4px', borderRadius: 4, fontSize: 11 }}>```code```</code>
+            Les ressources sont affichées à l'apprenant <strong>avant les exercices</strong>. Composez par blocs :{' '}
+            {[['Hx','Titre','#92400E','#FEF3C7'],['</>','Code','#065F46','#D1FAE5'],['!','Alerte','#1E40AF','#DBEAFE'],['≡','Liste','#6B21A8','#F3E8FF']].map(([b,l,c,bg]) => (
+              <span key={l} style={{ background: bg, color: c, padding: '1px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, marginRight: 4 }}>{b} {l}</span>
+            ))}
           </p>
         </div>
       </div>
@@ -1266,7 +1627,7 @@ function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onRelo
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.map(r => {
             const ts = TYPE_STYLE[r.type] || TYPE_STYLE.lecon
-            const wordCount = r.contenu?.split(' ').length || 0
+            const wordCount = countWords(r.contenu)
             const readMin = Math.max(1, Math.round(wordCount / 200))
             return (
               <div key={r.id} style={{ background: C.surface, borderRadius: 14, padding: mobile ? '14px' : '14px 20px', border: `1px solid ${C.brownPale}`, boxShadow: '0 2px 8px rgba(107,58,42,0.06)', display: 'flex', alignItems: 'center', gap: 14 }}>

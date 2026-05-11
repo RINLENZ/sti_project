@@ -412,6 +412,53 @@ def create_niveau(body: NiveauCreate, db: Session = Depends(get_db),
     return {"id": str(niveau.id), "nom": niveau.nom, "message": "Niveau créé"}
 
 
+# ── Upload média (image / audio) vers Supabase Storage ───────────
+
+@router.post("/upload-media")
+async def upload_media(
+    file: UploadFile = File(...),
+    _: UserModel = Depends(require_super_admin)
+):
+    """Upload une image ou un fichier audio vers Supabase Storage (bucket cours-media)."""
+    import uuid
+    from ..config import settings
+
+    ALLOWED_IMAGE = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"}
+    ALLOWED_AUDIO = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg",
+                     "audio/mp4", "audio/aac", "audio/x-m4a"}
+    all_allowed = ALLOWED_IMAGE | ALLOWED_AUDIO
+
+    if file.content_type not in all_allowed:
+        raise HTTPException(400, f"Type non autorisé : {file.content_type}. "
+                                 "Acceptés : images (jpg/png/webp/gif) et audio (mp3/wav/ogg/aac)")
+
+    if not settings.supabase_url or not settings.supabase_service_key:
+        raise HTTPException(503, "Supabase non configuré — ajoutez SUPABASE_URL et "
+                                 "SUPABASE_SERVICE_KEY dans les variables d'environnement Render")
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Fichier trop volumineux (max 10 Mo)")
+
+    from supabase import create_client
+    supabase = create_client(settings.supabase_url, settings.supabase_service_key)
+
+    ext    = (file.filename or "file").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
+    folder = "images" if file.content_type in ALLOWED_IMAGE else "audio"
+    path   = f"{folder}/{uuid.uuid4()}.{ext}"
+
+    try:
+        supabase.storage.from_("cours-media").upload(
+            path=path,
+            file=content,
+            file_options={"content-type": file.content_type, "upsert": "false"},
+        )
+        public_url = supabase.storage.from_("cours-media").get_public_url(path)
+        return {"url": public_url, "media_type": folder}
+    except Exception as e:
+        raise HTTPException(500, f"Erreur Supabase Storage : {str(e)}")
+
+
 # ── Import PDF via IA ─────────────────────────────────────────────
 
 @router.post("/import/pdf")
