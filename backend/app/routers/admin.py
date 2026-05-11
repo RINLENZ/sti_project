@@ -157,7 +157,7 @@ def get_structure_complete(db: Session = Depends(get_db),
     matieres = db.query(Matiere).filter(Matiere.actif == True).all()
     result = []
     for mat in matieres:
-        modules = db.query(Module).filter(Module.matiere_id == mat.id).all()
+        modules = db.query(Module).filter(Module.matiere_id == mat.id, Module.actif == True).all()
         mods = []
         for mod in modules:
             familles = db.query(FamilleSituation).filter(
@@ -166,7 +166,8 @@ def get_structure_complete(db: Session = Depends(get_db),
             fams = []
             for fam in familles:
                 uas = db.query(UniteApprentissage).filter(
-                    UniteApprentissage.famille_id == fam.id
+                    UniteApprentissage.famille_id == fam.id,
+                    UniteApprentissage.actif == True
                 ).order_by(UniteApprentissage.ordre).all()
                 ua_list = []
                 for ua in uas:
