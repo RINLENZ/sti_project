@@ -194,11 +194,12 @@ def get_structure_complete(db: Session = Depends(get_db),
                     "unites":  ua_list
                 })
             mods.append({
-                "id":        str(mod.id),
-                "numero":    mod.numero,
-                "titre":     mod.titre,
-                "niveau_id": str(mod.niveau_id) if mod.niveau_id else None,
-                "familles":  fams
+                "id":         str(mod.id),
+                "numero":     mod.numero,
+                "titre":      mod.titre,
+                "niveau_id":  str(mod.niveau_id)  if mod.niveau_id  else None,
+                "filiere_id": str(mod.filiere_id) if mod.filiere_id else None,
+                "familles":   fams
             })
         result.append({
             "id":      str(mat.id),
@@ -656,7 +657,8 @@ def create_module(body: dict, db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)):
     mod = Module(
         matiere_id  = UUID(body["matiere_id"]),
-        niveau_id   = UUID(body["niveau_id"]) if body.get("niveau_id") else None,
+        niveau_id   = UUID(body["niveau_id"])  if body.get("niveau_id")  else None,
+        filiere_id  = UUID(body["filiere_id"]) if body.get("filiere_id") else None,
         numero      = int(body.get("numero", 1)),
         titre       = body["titre"],
         description = body.get("description", ""),
@@ -674,6 +676,8 @@ def update_module(module_id: UUID, body: dict, db: Session = Depends(get_db),
         if k in body: setattr(mod, k, body[k])
     if "niveau_id" in body:
         mod.niveau_id = UUID(body["niveau_id"]) if body["niveau_id"] else None
+    if "filiere_id" in body:
+        mod.filiere_id = UUID(body["filiere_id"]) if body["filiere_id"] else None
     if body.get("matiere_id"):
         mod.matiere_id = UUID(body["matiere_id"])
     db.commit()
