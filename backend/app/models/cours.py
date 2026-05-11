@@ -29,9 +29,8 @@ class Module(Base):
     __tablename__ = "modules"
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    niveau_id   = Column(UUID(as_uuid=True), ForeignKey("niveaux.id"),   nullable=True)
-    filiere_id  = Column(UUID(as_uuid=True), ForeignKey("filieres.id"),  nullable=True)
-    matiere_id  = Column(UUID(as_uuid=True), ForeignKey("matieres.id"),  nullable=False)
+    niveau_id   = Column(UUID(as_uuid=True), ForeignKey("niveaux.id"),  nullable=True)
+    matiere_id  = Column(UUID(as_uuid=True), ForeignKey("matieres.id"), nullable=False)
     numero      = Column(Integer, nullable=False)
     titre       = Column(String, nullable=False)
     description = Column(Text, nullable=True)
