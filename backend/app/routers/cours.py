@@ -860,7 +860,6 @@ def create_ua(body: dict, db: Session = Depends(get_db)):
     ua = UniteApprentissage(
         titre=body["titre"],
         reference_ue=body.get("reference_ue", ""),
-        description=body.get("description", ""),
         situation_probleme=body.get("situation_probleme", ""),
         duree_estimee=int(body.get("duree_estimee", 60)),
         competences=body.get("competences", []),
