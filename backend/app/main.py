@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import redis as redis_lib
+import sqlalchemy as sa
 import time
 from .config import settings
 from .database import Base, engine
@@ -27,8 +28,18 @@ app = FastAPI(
 
 @app.on_event("startup")
 def create_missing_tables():
-    """Crée toutes les tables manquantes (idempotent — checkfirst=True)."""
+    """Crée toutes les tables manquantes et applique les migrations DDL idempotentes."""
     Base.metadata.create_all(bind=engine, checkfirst=True)
+    # Migrations DDL idempotentes (ALTER TYPE hors transaction PostgreSQL)
+    with engine.connect() as conn:
+        conn.execute(sa.text("COMMIT"))
+        conn.execute(sa.text("ALTER TYPE exercice_type ADD VALUE IF NOT EXISTS 'vrai_faux'"))
+        conn.execute(sa.text("COMMIT"))
+        conn.execute(sa.text("ALTER TYPE statut_enum ADD VALUE IF NOT EXISTS 'en_attente_correction'"))
+        conn.execute(sa.text("COMMIT"))
+        conn.execute(sa.text(
+            "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS commentaire_enseignant TEXT"
+        ))
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────
 try:

@@ -1244,7 +1244,9 @@ export default function Session() {
   const identChoices = isIdentification ? ex.options.slice(1) : (ex.options || [])
   const isAPC  = ex.type === 'reponse_libre' && !!ex.enonce?.startsWith?.('__APC__')
   const apcData = isAPC ? (() => { try { return JSON.parse(ex.enonce.slice(7)) } catch { return null } })() : null
-  const isVraiFaux = ex.type === 'qcm' && !isIdentification && ex.options?.length === 2 &&
+  const isVraiFaux = !isIdentification &&
+    (ex.type === 'vrai_faux' || ex.type === 'qcm') &&
+    ex.options?.length === 2 &&
     (ex.options.includes('Vrai') || ex.options.includes('Faux'))
   const nbBlanksInEnonce = ex.type === 'texte_trou' ? (ex.enonce.match(/___/g) || []).length : 0
   const isMultiBlank     = nbBlanksInEnonce > 1
@@ -1939,8 +1941,47 @@ export default function Session() {
               </div>
             )}
 
-            {/* Feedback résultat */}
-            {resultat && (
+            {/* Feedback résultat — En attente (réponse libre) */}
+            {resultat?.en_attente && (
+              <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, padding: '14px 16px', marginBottom: 16, animation: 'slideDown .3s ease' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>⏳</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: '#92400E' }}>
+                      Réponse soumise — en attente de correction
+                    </p>
+                    <p style={{ margin: '0 0 10px', fontSize: 13, color: '#78350F', lineHeight: 1.6 }}>
+                      {resultat.msg}
+                    </p>
+                    {/* Réponse modèle pour auto-évaluation */}
+                    <div style={{ background: '#FEF9C3', borderRadius: 10, padding: '10px 14px', borderLeft: '4px solid #EAB308' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 800, color: '#713F12', textTransform: 'uppercase', letterSpacing: .5 }}>
+                        📋 Réponse modèle (auto-évaluation)
+                      </p>
+                      <p style={{ margin: 0, fontSize: 13, color: '#1A1207', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                        {resultat.reponse_correcte}
+                      </p>
+                    </div>
+                    {resultat.explication && (
+                      <p style={{ margin: '8px 0 0', fontSize: 12, color: '#92400E', lineHeight: 1.6 }}>
+                        💡 {resultat.explication}
+                      </p>
+                    )}
+                    {/* Feedback enseignant si déjà évalué */}
+                    {resultat.commentaire_enseignant && (
+                      <div style={{ marginTop: 10, background: C.emeraldPale, borderRadius: 10, padding: '8px 12px', border: `1px solid ${C.emerald}30` }}>
+                        <p style={{ margin: 0, fontSize: 12, color: C.emerald, fontWeight: 700 }}>
+                          ✅ Commentaire enseignant : {resultat.commentaire_enseignant}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Feedback résultat — Correct / Incorrect */}
+            {resultat && !resultat.en_attente && (
               <div style={{
                 backgroundColor: resultat.correct ? C.emeraldPale : '#FEE2E2',
                 borderRadius: 14, padding: '14px 16px', marginBottom: 16,

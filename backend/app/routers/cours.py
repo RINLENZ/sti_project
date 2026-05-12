@@ -13,6 +13,42 @@ from uuid import UUID
 import uuid as uuid_module
 from datetime import datetime
 import json
+import unicodedata
+
+router = APIRouter(prefix="/api/cours", tags=["cours"])
+
+
+def _normaliser(texte: str) -> str:
+    """Normalise un texte pour comparaison tolérante : minuscules, sans accents, sans espaces superflus."""
+    t = str(texte).strip().lower()
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return t
+
+
+def _comparer_reponse(submitted, expected) -> bool:
+    """Compare réponse soumise et attendue avec tolérance (accents, casse, alternatives |)."""
+    # Cas listes (multi-trous)
+    if isinstance(submitted, list) and isinstance(expected, list):
+        return len(submitted) == len(expected) and all(
+            _normaliser(u) == _normaliser(c) for u, c in zip(submitted, expected)
+        )
+    if isinstance(submitted, list) and isinstance(expected, str):
+        # reponse_correcte peut être "mot1|mot2" ou une seule valeur
+        parts = None
+        for sep in ['|', ',', ';']:
+            if sep in expected:
+                parts = [p.strip() for p in expected.split(sep)]
+                break
+        if parts and len(parts) == len(submitted):
+            return all(_normaliser(u) == _normaliser(c) for u, c in zip(submitted, parts))
+        if len(submitted) == 1:
+            return _normaliser(submitted[0]) == _normaliser(expected)
+        return False
+    # Cas simple — vérifie aussi les alternatives séparées par |
+    s = _normaliser(submitted)
+    alternatives = [_normaliser(a.strip()) for a in str(expected).split('|')]
+    return s in alternatives
 
 router = APIRouter(prefix="/api/cours", tags=["cours"])
 
@@ -347,6 +383,49 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
     if not exercice:
         raise HTTPException(404, "Exercice introuvable")
 
+    # ── Réponse libre → soumission en attente de correction enseignant ────────
+    if exercice.type == "reponse_libre":
+        reponse_text = str(body.reponse).strip()
+        if len(reponse_text) < 10:
+            raise HTTPException(400, "La réponse est trop courte.")
+
+        prog = db.query(ProgressionApprenant).filter(
+            ProgressionApprenant.user_id == body.user_id,
+            ProgressionApprenant.exercice_id == body.exercice_id
+        ).first()
+        if prog:
+            prog.tentatives     += 1
+            prog.reponse_donnee  = body.reponse
+            prog.correct         = None
+            prog.statut          = "en_attente_correction"
+            prog.score           = 0
+        else:
+            prog = ProgressionApprenant(
+                user_id=body.user_id,
+                exercice_id=body.exercice_id,
+                ua_id=exercice.ua_id,
+                reponse_donnee=body.reponse,
+                correct=None,
+                statut="en_attente_correction",
+                score=0,
+                tentatives=1,
+                date_debut=datetime.utcnow(),
+            )
+            db.add(prog)
+        db.commit()
+
+        return {
+            "correct":           None,
+            "en_attente":        True,
+            "reponse_correcte":  exercice.reponse_correcte,
+            "explication":       exercice.explication,
+            "points_gagnes":     0,
+            "tentatives":        prog.tentatives,
+            "bkt":               None,
+            "msg":               "Réponse soumise — l'enseignant va l'évaluer et t'attribuer les points."
+        }
+
+    # ── Comparaison avec tolérance (accents, casse, alternatives |) ──────────
     try:
         submitted = json.loads(body.reponse)
     except (json.JSONDecodeError, TypeError):
@@ -357,30 +436,7 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
     except (json.JSONDecodeError, TypeError):
         expected = exercice.reponse_correcte
 
-    if isinstance(submitted, list) and isinstance(expected, list):
-        correct = (len(submitted) == len(expected) and all(
-            str(u).strip().lower() == str(c).strip().lower()
-            for u, c in zip(submitted, expected)
-        ))
-    elif isinstance(submitted, list) and isinstance(expected, str):
-        # Réponses soumises sous forme JSON array, reponse_correcte est une chaîne
-        # Essayer de découper par séparateur courant
-        parts = None
-        for sep in ['|', ',', ';']:
-            if sep in expected:
-                parts = [p.strip() for p in expected.split(sep)]
-                break
-        if parts and len(parts) == len(submitted):
-            correct = all(
-                str(u).strip().lower() == str(c).strip().lower()
-                for u, c in zip(submitted, parts)
-            )
-        elif len(submitted) == 1:
-            correct = str(submitted[0]).strip().lower() == expected.strip().lower()
-        else:
-            correct = False
-    else:
-        correct = str(submitted).strip().lower() == str(expected).strip().lower()
+    correct = _comparer_reponse(submitted, expected)
 
     # Enregistre ou met à jour la progression
     prog = db.query(ProgressionApprenant).filter(
@@ -441,7 +497,7 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
             mastery.nb_correct += 1
         db.commit()
 
-        p_avant = mastery.p_mastery  # valeur avant mise à jour (déjà écrasée — on lit après commit)
+        p_avant = mastery.p_mastery
         interp = interpret_mastery(mastery.p_mastery)
         bkt_result = {
             "competence":  exercice.competence_evaluee,
@@ -451,17 +507,15 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
             "color":       interp["color"]
         }
 
-        # ── Notifications BKT ──────────────────────────────────────
         try:
             from ..services.notification_service import (
                 notif_badge, notif_competence_maitrisee, notif_competence_progres
             )
-            p_new  = mastery.p_mastery
-            p_old  = round(p_avant - (p_new - p_avant), 4)   # approximation avant update
-            pct    = round(p_new * 100)
+            p_new   = mastery.p_mastery
+            p_old   = round(p_avant - (p_new - p_avant), 4)
+            pct     = round(p_new * 100)
             pct_old = round(p_old * 100) if p_old >= 0 else 0
 
-            # Paliers de maîtrise (notif une seule fois par franchissement)
             if pct >= 95 and pct_old < 95:
                 notif_competence_maitrisee(db, body.user_id, exercice.competence_evaluee)
             elif pct >= 70 and pct_old < 70:
@@ -469,13 +523,11 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
             elif pct >= 40 and pct_old < 40:
                 notif_competence_progres(db, body.user_id, exercice.competence_evaluee, 40)
 
-            # Badges basés sur nb_tentatives
             BADGE_TENTATIVES = {1: "premier_pas", 10: "studieux", 50: "assidu", 100: "expert"}
             for seuil, badge_id in BADGE_TENTATIVES.items():
                 if mastery.nb_tentatives == seuil:
                     notif_badge(db, body.user_id, badge_id)
 
-            # Badges basés sur nb_maitrisees (toutes compétences confondues)
             from ..models.cours import BKTMastery as _BKT
             nb_maitrisees = db.query(_BKT).filter(
                 _BKT.user_id == body.user_id,
@@ -486,7 +538,7 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
                 if nb_maitrisees == seuil:
                     notif_badge(db, body.user_id, badge_id)
         except Exception:
-            pass  # les notifications ne doivent jamais bloquer la réponse
+            pass
 
     return {
         "correct":          correct,
@@ -1042,4 +1094,93 @@ def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depend
         }
         for s in sessions
     ]
+
+
+# ── Correction des réponses libres par l'enseignant ───────────────────────────
+
+@router.get("/corrections/en_attente")
+def get_reponses_en_attente(
+    ua_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Liste toutes les réponses libres en attente de correction."""
+    from ..models.user import User as UserModel
+    q = (
+        db.query(ProgressionApprenant, Exercice, UserModel)
+        .join(Exercice, ProgressionApprenant.exercice_id == Exercice.id)
+        .join(UserModel, ProgressionApprenant.user_id == UserModel.id)
+        .filter(ProgressionApprenant.statut == "en_attente_correction")
+    )
+    if ua_id:
+        q = q.filter(ProgressionApprenant.ua_id == uuid_module.UUID(ua_id))
+    rows = q.order_by(ProgressionApprenant.date_debut.desc()).all()
+
+    return [
+        {
+            "progression_id":       str(prog.id),
+            "apprenant_nom":        f"{u.prenom} {u.nom}",
+            "apprenant_id":         str(u.id),
+            "exercice_id":          str(ex.id),
+            "exercice_titre":       ex.titre,
+            "exercice_enonce":      ex.enonce,
+            "reponse_modele":       ex.reponse_correcte,
+            "reponse_apprenant":    prog.reponse_donnee,
+            "points_max":           ex.points,
+            "commentaire":          prog.commentaire_enseignant,
+            "date_soumission":      prog.date_debut.isoformat() if prog.date_debut else None,
+        }
+        for prog, ex, u in rows
+    ]
+
+
+class EvaluationBody(BaseModel):
+    correct: bool
+    points: Optional[int] = None
+    commentaire: Optional[str] = None
+
+
+@router.post("/corrections/{progression_id}/evaluer")
+def evaluer_reponse_libre(
+    progression_id: UUID,
+    body: EvaluationBody,
+    db: Session = Depends(get_db)
+):
+    """L'enseignant valide ou invalide une réponse libre et attribue les points."""
+    prog = db.query(ProgressionApprenant).filter(
+        ProgressionApprenant.id == progression_id
+    ).first()
+    if not prog:
+        raise HTTPException(404, "Progression introuvable")
+
+    exercice = db.query(Exercice).filter(Exercice.id == prog.exercice_id).first()
+
+    prog.correct                = body.correct
+    prog.statut                 = "termine" if body.correct else "en_cours"
+    prog.score                  = body.points if body.points is not None else (exercice.points if body.correct else 0)
+    prog.commentaire_enseignant = body.commentaire
+    prog.date_fin               = datetime.utcnow() if body.correct else None
+    db.commit()
+
+    # Mise à jour BKT si compétence renseignée
+    if exercice and exercice.competence_evaluee:
+        from ..services.bkt_service import update_knowledge, interpret_mastery
+        mastery = db.query(BKTMastery).filter(
+            BKTMastery.user_id == prog.user_id,
+            BKTMastery.competence == exercice.competence_evaluee
+        ).first()
+        if not mastery:
+            mastery = BKTMastery(
+                user_id=prog.user_id,
+                competence=exercice.competence_evaluee,
+                ua_id=prog.ua_id,
+                p_mastery=0.1, nb_tentatives=0, nb_correct=0
+            )
+            db.add(mastery)
+        mastery.p_mastery     = update_knowledge(mastery.p_mastery, body.correct)
+        mastery.nb_tentatives += 1
+        if body.correct:
+            mastery.nb_correct += 1
+        db.commit()
+
+    return {"message": "Évaluation enregistrée", "correct": body.correct, "points": prog.score}
     return {"message": "Exercice supprimé"}

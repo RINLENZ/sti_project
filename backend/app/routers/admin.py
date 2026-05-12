@@ -576,185 +576,228 @@ async def import_from_pdf(
     db: Session = Depends(get_db),
     _: UserModel = Depends(require_super_admin)
 ):
-    """Importe une fiche de préparation PDF via l'API Claude."""
+    """
+    Importe une fiche de préparation PDF via l'API Claude.
+    Utilise 2 appels séparés pour contourner la limite de tokens :
+      Appel 1 (avec PDF) → structure UA + contenu leçon
+      Appel 2 (sans PDF) → 9 exercices pédagogiques
+    """
     import anthropic, base64, json, os
 
     if not file.filename.endswith('.pdf'):
         raise HTTPException(400, "Seuls les fichiers PDF sont acceptés")
 
     pdf_bytes = await file.read()
-    pdf_b64   = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+    if len(pdf_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(400, "PDF trop volumineux (max 20 Mo). Réduisez le fichier avant import.")
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    pdf_b64  = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+    api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise HTTPException(500, "ANTHROPIC_API_KEY non configurée dans le .env")
 
     client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8000,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "document",
-                    "source": {
-                        "type":       "base64",
-                        "media_type": "application/pdf",
-                        "data":       pdf_b64
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": """Tu es un expert en ingénierie pédagogique APC (Approche Par Compétences) du MINESEC Cameroun.
-Analyse cette fiche de préparation et génère un cours complet et structuré selon les normes APC.
 
-━━━ STRUCTURE APC ATTENDUE ━━━
+    def _call_claude(messages, max_tokens, label):
+        try:
+            msg = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=max_tokens,
+                messages=messages,
+            )
+        except anthropic.APIStatusError as e:
+            raise HTTPException(500, f"Erreur API Claude [{label}] ({e.status_code}) : {e.message}")
+        except anthropic.APIConnectionError:
+            raise HTTPException(503, f"Impossible de joindre l'API Claude [{label}].")
+        except anthropic.APITimeoutError:
+            raise HTTPException(504, f"Délai dépassé lors de [{label}]. Réessayez.")
+        except Exception as e:
+            raise HTTPException(500, f"Erreur Claude [{label}] : {str(e)}")
+        if getattr(msg, "stop_reason", None) == "max_tokens":
+            raise HTTPException(500, f"Réponse tronquée [{label}] — le PDF est trop dense pour ce modèle.")
+        return msg.content[0].text
 
-1. UNITÉ D'APPRENTISSAGE
-   • titre          : Intitulé précis de la leçon (tel que dans la fiche)
-   • reference_ue   : Référence officielle (UE 01, Chapitre 3…)
-   • competences    : 2-4 compétences APC ("Être capable de…", "Savoir identifier…", "Maîtriser…")
-   • situation_probleme : OBLIGATOIRE — Situation CONCRÈTE et RÉALISTE ancrée dans le quotidien camerounais/africain.
-       ✓ BON : "Le lycée technique de Bafoussam veut informatiser sa cantine. Le proviseur charge un élève de Tle D de concevoir la base de données pour gérer les repas et les paiements des élèves…"
-       ✗ MAUVAIS : "Dans un contexte professionnel, il est important de maîtriser ce concept…"
-   • prerequis      : Notions déjà vues
-   • duree_estimee  : Durée en minutes
+    # ── Appel 1 : structure UA + contenu leçon (sans exercices) ──────────────
+    prompt_ua = """Tu es un expert en ingénierie pédagogique APC (Approche Par Compétences) du MINESEC Cameroun.
+Analyse cette fiche de préparation et extrais la structure pédagogique.
 
-2. CONTENU DE LA LEÇON (contenu_lecon — Markdown structuré)
-   ## Mise en situation
-   [Lien avec la situation-problème, question déclencheuse pour motiver l'élève]
+━━━ CHAMPS ATTENDUS ━━━
+• titre            : Intitulé précis de la leçon (tel que dans la fiche)
+• reference_ue     : Référence officielle (UE 01, Chapitre 3…)
+• competences      : 2-4 compétences APC ("Être capable de…")
+• situation_probleme : Situation CONCRÈTE ancrée dans le quotidien camerounais/africain.
+    ✓ BON : "Le lycée de Bafoussam veut informatiser sa cantine. Le proviseur charge un élève de Tle D de concevoir la base de données…"
+    ✗ MAUVAIS : "Dans un contexte professionnel, il est important de maîtriser…"
+• prerequis        : Notions déjà vues (liste)
+• duree_estimee    : Durée en minutes (entier)
+• contenu_lecon    : Cours complet en Markdown structuré :
+    ## Mise en situation
+    ## I. [Notion principale]
+    ### Exemple appliqué  ← avec noms/lieux africains
+    ## II. [Deuxième notion]
+    ## Synthèse
+• points_cles      : 4-6 points essentiels (phrases courtes)
 
-   ## I. [Première notion principale]
-   [Cours clair avec définitions encadrées, exemples concrets du Cameroun/Afrique]
-
-   ### Exemple appliqué
-   [Exemple pratique avec noms, lieux, situations du Cameroun ou d'Afrique]
-
-   ## II. [Deuxième notion]
-   …
-
-   ## Synthèse
-   [Tableau récapitulatif ou résumé structuré des notions essentielles]
-
-3. POINTS CLÉS : 4-6 points essentiels à retenir (phrases courtes, percutantes)
-
-4. EXERCICES — 9 exercices répartis en 3 groupes pédagogiques :
-
-   GROUPE 1 — "Évaluation des ressources"  (groupe=1, difficulte=1, points=5)
-   → 3 exercices : 1 QCM + 1 vrai_faux + 1 texte_trou
-   → Testent la mémorisation et la compréhension directe du cours
-
-   GROUPE 2 — "Application et compréhension"  (groupe=2, difficulte=2, points=10)
-   → 3 exercices : 2 QCM + 1 texte_trou
-   → Nécessitent d'appliquer les notions sur des cas simples
-
-   GROUPE 3 — "Résolution de problèmes"  (groupe=3, difficulte=3, points=15)
-   → 3 exercices : 1 QCM + 2 reponse_libre
-   → Exigent analyse et résolution en lien DIRECT avec la situation-problème
-
-━━━ RÈGLES IMPÉRATIVES ━━━
-• La situation-problème DOIT être contextualisée au Cameroun ou en Afrique
-• Les exemples du cours DOIVENT utiliser des noms, lieux, situations africains
-• vrai_faux  → options = ["Vrai", "Faux"]
-• texte_trou → l'énoncé contient un ou plusieurs ___ ; options = liste de 4-8 mots couvrant tous les blancs ;
-              si 1 seul ___ : reponse_correcte = "mot exact" ;
-              si 2+ blancs  : reponse_correcte = JSON array dans l'ordre ["mot1", "mot2"]
-• reponse_libre → options = null ; reponse_correcte = modèle de réponse complet (2-4 phrases)
-• Les exercices du groupe 3 DOIVENT se référer à la situation-problème de l'UA
-• Réponds UNIQUEMENT avec un JSON valide — aucun texte avant ni après
-
-━━━ FORMAT JSON (strict) ━━━
+Réponds UNIQUEMENT avec ce JSON (sans texte autour) :
 {
   "titre": "…",
   "reference_ue": "…",
-  "competences": ["Être capable de…", "Savoir…"],
-  "situation_probleme": "Situation concrète et contextualisée au Cameroun…",
+  "competences": ["Être capable de…"],
+  "situation_probleme": "…",
   "prerequis": ["…"],
   "duree_estimee": 55,
   "contenu_lecon": "## Mise en situation\\n…",
-  "points_cles": ["…", "…", "…", "…"],
+  "points_cles": ["…", "…", "…", "…"]
+}"""
+
+    raw_ua = _call_claude(
+        messages=[{"role": "user", "content": [
+            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
+            {"type": "text", "text": prompt_ua},
+        ]}],
+        max_tokens=4096,
+        label="structure UA",
+    )
+    try:
+        ua_data = _repair_and_parse_json(raw_ua)
+    except Exception as e:
+        raise HTTPException(500, f"Erreur JSON structure UA : {str(e)[:200]}")
+
+    # ── Appel 2 : génération des 9 exercices (sans PDF, juste le contenu) ────
+    situation   = ua_data.get("situation_probleme", "")
+    contenu_txt = ua_data.get("contenu_lecon", "")[:3000]  # tronquer si trop long
+    titre_cours = ua_data.get("titre", "")
+
+    prompt_ex = f"""Tu es un expert en ingénierie pédagogique APC du MINESEC Cameroun.
+Génère 9 exercices pédagogiques pour le cours suivant :
+
+TITRE : {titre_cours}
+SITUATION-PROBLÈME : {situation}
+CONTENU (extrait) :
+{contenu_txt}
+
+━━━ GROUPES APC ━━━
+GROUPE 1 — "Évaluation des ressources"  (groupe=1, difficulte=1, points=5)
+  → 3 exercices : 1 qcm + 1 vrai_faux + 1 texte_trou
+  → Mémorisation et compréhension directe du cours
+
+GROUPE 2 — "Application et compréhension"  (groupe=2, difficulte=2, points=10)
+  → 3 exercices : 2 qcm + 1 texte_trou
+  → Application sur des cas simples
+
+GROUPE 3 — "Résolution de problèmes"  (groupe=3, difficulte=3, points=15)
+  → 3 exercices : 1 qcm + 2 reponse_libre
+  → Analyse en lien DIRECT avec la situation-problème
+
+━━━ RÈGLES ━━━
+• vrai_faux  → options = ["Vrai", "Faux"]
+• texte_trou → énoncé avec ___ ; options = 4-8 mots ;
+               1 blanc → reponse_correcte = "mot" ;
+               2+ blancs → reponse_correcte = ["mot1", "mot2"]
+• reponse_libre → options = null ; reponse_correcte = modèle 2-4 phrases
+• Groupe 3 doit référencer la situation-problème
+
+Réponds UNIQUEMENT avec ce JSON :
+{{
   "exercices": [
-    {
+    {{
       "titre": "…",
       "type": "qcm|vrai_faux|texte_trou|reponse_libre",
       "enonce": "…",
       "options": ["A. …", "B. …", "C. …", "D. …"],
-      "reponse_correcte": "texte exact de la bonne réponse",
-      "explication": "Explication pédagogique citant le cours",
-      "indice_1": "Indice vague",
-      "indice_2": "Indice plus précis",
+      "reponse_correcte": "…",
+      "explication": "…",
+      "indice_1": "…",
+      "indice_2": "…",
       "competence_evaluee": "…",
       "difficulte": 1,
       "points": 5,
       "groupe": 1,
       "groupe_titre": "Évaluation des ressources"
-    }
+    }}
   ]
-}"""
-                }
-            ]
-        }]
-    )
+}}"""
 
+    raw_ex = _call_claude(
+        messages=[{"role": "user", "content": prompt_ex}],
+        max_tokens=6000,
+        label="exercices",
+    )
     try:
-        extracted = _repair_and_parse_json(message.content[0].text)
+        ex_data = _repair_and_parse_json(raw_ex)
     except Exception as e:
-        raise HTTPException(500, f"Erreur d'extraction : {str(e)}")
+        raise HTTPException(500, f"Erreur JSON exercices : {str(e)[:200]}")
 
-    ua = UniteApprentissage(
-        famille_id=UUID(famille_id),
-        titre=extracted.get("titre", "Nouvelle UA"),
-        reference_ue=extracted.get("reference_ue"),
-        competences=extracted.get("competences", []),
-        situation_probleme=extracted.get("situation_probleme"),
-        prerequis=extracted.get("prerequis", []),
-        duree_estimee=extracted.get("duree_estimee", 60),
-        ordre=1
-    )
-    db.add(ua)
-    db.flush()
-
-    if extracted.get("contenu_lecon"):
-        ressource = RessourcePedagogique(
-            ua_id=ua.id,
-            titre=f"Leçon — {ua.titre}",
-            type="lecon",
-            contenu=extracted["contenu_lecon"],
-            points_cles=extracted.get("points_cles", []),
+    # ── Enregistrement en base ────────────────────────────────────────────────
+    try:
+        ua = UniteApprentissage(
+            famille_id=UUID(famille_id),
+            titre=ua_data.get("titre", "Nouvelle UA"),
+            reference_ue=ua_data.get("reference_ue"),
+            competences=ua_data.get("competences", []),
+            situation_probleme=ua_data.get("situation_probleme"),
+            prerequis=ua_data.get("prerequis", []),
+            duree_estimee=ua_data.get("duree_estimee", 60),
             ordre=1
         )
-        db.add(ressource)
+        db.add(ua)
+        db.flush()
 
-    exercices_crees = 0
-    for i, ex_data in enumerate(extracted.get("exercices", [])):
-        type_val = ex_data.get("type", "qcm")
-        opts = ex_data.get("options")
-        if type_val in ("qcm", "vrai_faux", "texte_trou") and isinstance(opts, list):
-            options_val = opts
-        else:
-            options_val = None
-        ex = Exercice(
-            ua_id=ua.id,
-            titre=ex_data.get("titre", f"Exercice {i+1}"),
-            type=type_val,
-            enonce=ex_data.get("enonce", ""),
-            options=options_val,
-            reponse_correcte=ex_data.get("reponse_correcte", ""),
-            explication=ex_data.get("explication"),
-            indice_1=ex_data.get("indice_1"),
-            indice_2=ex_data.get("indice_2"),
-            competence_evaluee=ex_data.get("competence_evaluee"),
-            difficulte=ex_data.get("difficulte", 1),
-            points=ex_data.get("points", 5),
-            groupe=ex_data.get("groupe"),
-            groupe_titre=ex_data.get("groupe_titre"),
-            ordre=i + 1
-        )
-        db.add(ex)
-        exercices_crees += 1
+        if ua_data.get("contenu_lecon"):
+            db.add(RessourcePedagogique(
+                ua_id=ua.id,
+                titre=f"Leçon — {ua.titre}",
+                type="lecon",
+                contenu=ua_data["contenu_lecon"],
+                points_cles=ua_data.get("points_cles", []),
+                ordre=1
+            ))
 
-    db.commit()
+        exercices_crees = 0
+        for i, ex in enumerate(ex_data.get("exercices", [])):
+            type_val    = ex.get("type", "qcm")
+            opts        = ex.get("options")
+            options_val = opts if type_val in ("qcm", "vrai_faux", "texte_trou") and isinstance(opts, list) else None
+
+            # Groupe 3 reponse_libre → format APC avec situation/consigne/critères
+            raw_enonce = ex.get("enonce", "")
+            if type_val == "reponse_libre" and ex.get("groupe") == 3 and not raw_enonce.startswith("__APC__"):
+                apc_payload = json.dumps({
+                    "contexte":   ua_data.get("situation_probleme", ""),
+                    "ressources": ua_data.get("reference_ue", ""),
+                    "consigne":   raw_enonce,
+                    "criteres":   ex.get("explication", "")
+                }, ensure_ascii=False)
+                enonce_val = f"__APC__{apc_payload}"
+            else:
+                enonce_val = raw_enonce
+
+            db.add(Exercice(
+                ua_id=ua.id,
+                titre=ex.get("titre", f"Exercice {i+1}"),
+                type=type_val,
+                enonce=enonce_val,
+                options=options_val,
+                reponse_correcte=ex.get("reponse_correcte", ""),
+                explication=ex.get("explication"),
+                indice_1=ex.get("indice_1"),
+                indice_2=ex.get("indice_2"),
+                competence_evaluee=ex.get("competence_evaluee"),
+                difficulte=ex.get("difficulte", 1),
+                points=ex.get("points", 5),
+                groupe=ex.get("groupe"),
+                groupe_titre=ex.get("groupe_titre"),
+                ordre=i + 1
+            ))
+            exercices_crees += 1
+
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Erreur base de données : {str(e)[:200]}")
+
     return {
         "message":           "Import réussi",
         "ua_id":             str(ua.id),

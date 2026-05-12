@@ -10,7 +10,7 @@ import {
   GraduationCap, ChevronLeft, ChevronRight,
   BarChart2, Bell, Shield, UserCircle,
   Map, Menu, X, Home, Sun, Moon, FileText, ClipboardList,
-  Camera, Mic, FlaskConical,
+  Camera, Mic, FlaskConical, PenLine,
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
 
@@ -159,6 +159,7 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
     enseignant: {
       main: [
         { path: '/prof',          label: 'Suivi des apprenants', icon: BarChart2      },
+        { path: '/corrections',   label: 'Corrections',          icon: PenLine        },
         { path: '/prof/examens',  label: 'Épreuves IA',          icon: FileText       },
         { path: '/profil',        label: 'Mon profil',            icon: UserCircle     },
         { path: '/contribuer',    label: 'Contribuer à l\'IA',   icon: FlaskConical   },
@@ -512,6 +513,7 @@ function MobileBottomNav({ activeView, onViewChange }) {
     { path: '/dashboard',         label: 'Tableau de bord',     icon: LayoutDashboard, show: user?.role === 'apprenant' },
     { path: '/epreuves',          label: 'Mes épreuves',         icon: ClipboardList,   show: user?.role === 'apprenant' },
     { path: '/prof',              label: 'Suivi des apprenants', icon: BarChart2,       show: ['enseignant','super_admin'].includes(user?.role) },
+    { path: '/corrections',       label: 'Corrections',          icon: PenLine,         show: ['enseignant','super_admin'].includes(user?.role) },
     { path: '/prof/examens',      label: 'Épreuves IA',          icon: FileText,        show: user?.role === 'enseignant' },
     { path: '/admin',             label: 'Gestion des cours',    icon: Shield,          show: user?.role === 'super_admin' },
     { path: '/admin/referentiel', label: 'Référentiel',          icon: BookOpen,        show: user?.role === 'super_admin' },

@@ -101,7 +101,7 @@ class Exercice(Base):
     ua_id              = Column(UUID(as_uuid=True), ForeignKey("unites_apprentissage.id"), nullable=False)
     titre              = Column(String, nullable=False)
     type               = Column(
-        Enum("qcm", "texte_trou", "reponse_libre", name="exercice_type"),
+        Enum("qcm", "vrai_faux", "texte_trou", "reponse_libre", name="exercice_type"),
         nullable=False
     )
     enonce             = Column(Text, nullable=False)
@@ -130,15 +130,16 @@ class ProgressionApprenant(Base):
     ua_id          = Column(UUID(as_uuid=True), ForeignKey("unites_apprentissage.id"), nullable=True)
     exercice_id    = Column(UUID(as_uuid=True), ForeignKey("exercices.id"), nullable=True)
     statut         = Column(
-        Enum("non_commence", "en_cours", "termine", name="statut_enum"),
+        Enum("non_commence", "en_cours", "termine", "en_attente_correction", name="statut_enum"),
         default="non_commence"
     )
-    score          = Column(Integer, default=0)
-    tentatives     = Column(Integer, default=0)
-    reponse_donnee = Column(Text, nullable=True)
-    correct        = Column(Boolean, nullable=True)
-    date_debut     = Column(DateTime(timezone=True), nullable=True)
-    date_fin       = Column(DateTime(timezone=True), nullable=True)
+    score                  = Column(Integer, default=0)
+    tentatives             = Column(Integer, default=0)
+    reponse_donnee         = Column(Text, nullable=True)
+    correct                = Column(Boolean, nullable=True)
+    commentaire_enseignant = Column(Text, nullable=True)
+    date_debut             = Column(DateTime(timezone=True), nullable=True)
+    date_fin               = Column(DateTime(timezone=True), nullable=True)
 
 
 class BKTMastery(Base):

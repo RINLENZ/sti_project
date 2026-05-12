@@ -26,6 +26,7 @@ import AdminCours         from './pages/enseignant/AdminCours'
 import AdminReferentiel   from './pages/enseignant/AdminReferentiel'
 import ProfilEnseignant   from './pages/enseignant/ProfilEnseignant'
 import AdminExamen        from './pages/enseignant/AdminExamen'
+import Corrections        from './pages/enseignant/Corrections'
 import DataCollection   from './pages/DataCollection'
 import AudioCollection  from './pages/AudioCollection'
 import Contribuer       from './pages/Contribuer'
@@ -154,6 +155,12 @@ export default function App() {
         <PrivateRoute role="super_admin">
           <AppLayout><AdminReferentiel/></AppLayout>
         </PrivateRoute>
+      }/>
+
+      <Route path="/corrections" element={
+        <EnseignantRoute>
+          <AppLayout><Corrections/></AppLayout>
+        </EnseignantRoute>
       }/>
 
       {/* ── Contribution données ML (tous les utilisateurs) ── */}
