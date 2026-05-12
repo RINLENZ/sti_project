@@ -229,6 +229,7 @@ export default function AudioCollection() {
         stream.getTracks().forEach(t => t.stop())
         ctx.close()
         try {
+          if (!chunksRef.current.length) throw new Error('aucun chunk audio capturé')
           const blob   = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' })
           const wavBuf = await blobToWav16k(blob)
           const b64    = arrayBufferToBase64(wavBuf)
@@ -236,18 +237,18 @@ export default function AudioCollection() {
           const playUrl = URL.createObjectURL(new Blob([wavBuf], { type: 'audio/wav' }))
           setAudioUrl(playUrl)
           setPhase('review')
-        } catch {
-          toast.error('Erreur de traitement audio')
+        } catch (err) {
+          toast.error('Erreur de traitement audio : ' + (err?.message || String(err)))
           setPhase('idle')
         }
       }
 
       mediaRecRef.current = mr
-      mr.start()
+      mr.start(100)
       setPhase('recording')
 
-      // Stop automatique après 2s
-      setTimeout(() => { if (mr.state === 'recording') mr.stop() }, 2000)
+      // Stop automatique après 3s
+      setTimeout(() => { if (mr.state === 'recording') mr.stop() }, 3000)
 
     } catch {
       toast.error('Micro non disponible')

@@ -19,10 +19,9 @@ router = APIRouter(prefix="/api/admin", tags=["administration"])
 def _repair_and_parse_json(raw: str) -> dict:
     """
     Extrait et répare le JSON produit par un LLM.
-    Problèmes gérés :
-      - Blocs markdown ```json ... ```
-      - Newlines / tabs littéraux non-échappés à l'intérieur des strings
-      - Caractères de contrôle parasites
+    Couche 1 : suppression markdown + isolation { ... }
+    Couche 2 : réparation char-par-char (contrôles, JSON tronqué)
+    Couche 3 : truncation progressive jusqu'au dernier } valide
     """
     import json
 
@@ -42,14 +41,14 @@ def _repair_and_parse_json(raw: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # 4. Réparer les caractères de contrôle non-échappés dans les strings
-    result = []
-    in_string = False
+    # 4. Réparation char-par-char : contrôles + tracking de structure
+    result      = []
+    in_string   = False
+    depth_stack = []   # '{' ou '['
     i = 0
     while i < len(text):
         c = text[i]
         if c == '\\' and in_string:
-            # Séquence d'échappement valide → garder les 2 caractères
             result.append(c)
             if i + 1 < len(text):
                 result.append(text[i + 1])
@@ -61,21 +60,51 @@ def _repair_and_parse_json(raw: str) -> dict:
             in_string = not in_string
             result.append(c)
         elif in_string:
-            if c == '\n':
-                result.append('\\n')
-            elif c == '\r':
-                result.append('\\r')
-            elif c == '\t':
-                result.append('\\t')
-            elif ord(c) < 0x20:
-                pass  # ignorer les autres caractères de contrôle
-            else:
-                result.append(c)
+            if   c == '\n': result.append('\\n')
+            elif c == '\r': result.append('\\r')
+            elif c == '\t': result.append('\\t')
+            elif ord(c) < 0x20: pass
+            else: result.append(c)
         else:
+            if c in ('{', '['):
+                depth_stack.append(c)
+            elif c == '}' and depth_stack and depth_stack[-1] == '{':
+                depth_stack.pop()
+            elif c == ']' and depth_stack and depth_stack[-1] == '[':
+                depth_stack.pop()
             result.append(c)
         i += 1
 
-    return json.loads(''.join(result))
+    # Fermer une string non terminée (JSON tronqué)
+    if in_string:
+        result.append('"')
+
+    # Fermer les conteneurs ouverts
+    for opener in reversed(depth_stack):
+        result.append('}' if opener == '{' else ']')
+
+    repaired = ''.join(result)
+    # Nettoyer les virgules orphelines avant } ou ]
+    repaired = _re_global.sub(r',(\s*[}\]])', r'\1', repaired)
+
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
+
+    # 5. Fallback : trouver le dernier } qui donne un JSON valide
+    pos = len(repaired)
+    while True:
+        pos = repaired.rfind('}', 0, pos)
+        if pos == -1:
+            break
+        try:
+            return json.loads(repaired[:pos + 1])
+        except json.JSONDecodeError:
+            pass
+        pos -= 1
+
+    raise ValueError("Impossible de réparer le JSON généré par le LLM")
 
 
 @router.get("/db-check")
@@ -563,7 +592,7 @@ async def import_from_pdf(
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4000,
+        max_tokens=8000,
         messages=[{
             "role": "user",
             "content": [
@@ -1103,7 +1132,7 @@ Instructions pour le type "{type_ex}" :
     try:
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
+            max_tokens=8000,
             messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.APIError as e:
@@ -1111,8 +1140,8 @@ Instructions pour le type "{type_ex}" :
 
     try:
         data = _repair_and_parse_json(message.content[0].text)
-    except Exception:
-        raise HTTPException(500, f"Réponse IA invalide — relancez ({message.content[0].text[:80]}…)")
+    except Exception as e:
+        raise HTTPException(500, f"Erreur d'extraction PDF : {e} — extrait: {message.content[0].text[:120]}…")
 
     # Sauvegarde les exercices générés en base
     created = []

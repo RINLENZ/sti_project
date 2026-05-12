@@ -100,13 +100,20 @@ export default function DataCollection() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 320, height: 240, facingMode: 'user' }
       })
-      videoRef.current.srcObject = stream
       streamRef.current = stream
-      setCameraActive(true)
-    } catch {
-      toast.error('Caméra non disponible')
+      setCameraActive(true)   // rendre visible EN PREMIER, puis srcObject dans useEffect
+    } catch (err) {
+      toast.error('Caméra non disponible : ' + (err?.message || ''))
     }
   }
+
+  /* Attacher le stream dès que la vidéo est visible */
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [cameraActive])
 
   /* Arrêter caméra */
   function stopCamera() {
