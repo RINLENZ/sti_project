@@ -11,16 +11,14 @@ Prérequis :
 Usage :
     python train_emotion_model.py [--epochs 30] [--batch 32] [--img 96]
 """
-import argparse, os, sys, json, pathlib, subprocess as _sp
+import argparse, os, sys, json, pathlib, subprocess, textwrap, time
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
-import tf2onnx
-import onnx
 from PIL import Image
 from tqdm import tqdm
 
@@ -40,6 +38,7 @@ parser.add_argument("--img",    type=int, default=96,
                     help="Taille de l'image (px). 96 = entrée face-api.js")
 args = parser.parse_args()
 IMG_SIZE = (args.img, args.img)
+IMG_H, IMG_W = args.img, args.img
 
 
 # ── 1. Chargement des images ─────────────────────────────────────────
@@ -136,11 +135,7 @@ model.compile(
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"],
 )
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-keras_path = str(OUT_DIR / "emotion_africain.keras")
 cb2 = [
-    # Sauvegarde pendant fit() — évite le segfault post-training de TF 2.21
-    ModelCheckpoint(keras_path, save_best_only=True, monitor="val_accuracy"),
     EarlyStopping(patience=7, restore_best_weights=True, monitor="val_accuracy"),
     ReduceLROnPlateau(factor=0.5, patience=3, min_lr=1e-7),
 ]
@@ -171,32 +166,80 @@ report = classification_report(y_test, y_pred, target_names=LABELS,
 report_path = SCRIPT_DIR / "evaluation_report.json"
 with open(report_path, "w") as f:
     json.dump({"accuracy": float(acc), "loss": float(loss),
-               "report": report, "labels": LABELS}, f, indent=2)
+               "report": report, "labels": LABELS,
+               "trained_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, f, indent=2)
 print(f"\n✅ Rapport sauvegardé → {report_path}")
 
-# ── 8. Export ONNX ───────────────────────────────────────────────────
-import subprocess as _sp
+# ── 8. Sauvegarde poids numpy (évite le segfault de model.save() sur TF 2.21) ──
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-onnx_path = OUT_DIR / "emotion_africain.onnx"
-saved_model_dir = str(OUT_DIR / "emotion_savedmodel")
+weights_path = str(OUT_DIR / "emotion_weights.npz")
+weights = model.get_weights()
+np.savez(weights_path, *weights)
+print(f"📦 Poids numpy → {weights_path}")
 
-# Le modèle est déjà sauvegardé par ModelCheckpoint pendant fit()
-print(f"\n📦 Modèle Keras (sauvegardé pendant training) → {keras_path}")
-print(f"📦 Conversion ONNX → {onnx_path}…")
-res = _sp.run(
-    [sys.executable, "-m", "tf2onnx.convert",
-     "--keras", keras_path,
-     "--output", str(onnx_path),
-     "--opset", "13"],
-    capture_output=True, text=True
+# ── 9. Export ONNX via subprocess isolé ─────────────────────────────
+onnx_path   = str(OUT_DIR / "emotion_africain.onnx")
+labels_path = str(OUT_DIR / "emotion_labels.json")
+
+conv_script = textwrap.dedent(f"""
+import os, sys, numpy as np
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+from tensorflow.keras.applications import MobileNetV2
+import tf2onnx, onnx
+
+IMG_H, IMG_W = {IMG_H}, {IMG_W}
+N_LABELS     = {len(LABELS)}
+WEIGHTS_PATH = r"{weights_path}"
+ONNX_PATH    = r"{onnx_path}"
+
+# Reconstruit l'architecture identique (sans augmentation, training=False)
+base = MobileNetV2(input_shape=(IMG_H, IMG_W, 3), include_top=False, weights=None)
+inp  = tf.keras.Input(shape=(IMG_H, IMG_W, 3))
+x    = base(inp, training=False)
+x    = layers.GlobalAveragePooling2D()(x)
+x    = layers.Dropout(0.3)(x)
+x    = layers.Dense(128, activation="relu")(x)
+x    = layers.Dropout(0.2)(x)
+out  = layers.Dense(N_LABELS, activation="softmax")(x)
+model_inf = Model(inp, out)
+
+# Charge les poids — attention : le modèle d'inférence n'a pas la couche aug
+# → on saute les poids qui correspondent à l'augmentation (premiers N poids)
+data = np.load(WEIGHTS_PATH, allow_pickle=True)
+saved_weights = [data[k] for k in sorted(data.files, key=lambda x: int(x.replace("arr_","")))]
+
+# Le modèle d'entraînement a la couche aug en plus.
+# La couche aug (RandomFlip, RandomRotation...) n'a pas de poids entraînables,
+# mais les indices peuvent différer. On tente set_weights directement.
+try:
+    model_inf.set_weights(saved_weights)
+    print("Poids chargés directement")
+except ValueError as e:
+    # Si décalage dû à la couche aug, on cherche le bon sous-ensemble
+    print(f"Ajustement poids nécessaire: {{e}}")
+    inf_count = len(model_inf.get_weights())
+    model_inf.set_weights(saved_weights[-inf_count:])
+    print(f"Poids chargés (derniers {{inf_count}})")
+
+inp_sig = [tf.TensorSpec(shape=(None, IMG_H, IMG_W, 3), dtype=tf.float32, name="input_1")]
+model_proto, _ = tf2onnx.convert.from_keras(
+    model_inf, input_signature=inp_sig, opset=13, output_path=ONNX_PATH
 )
+onnx.checker.check_model(onnx.load(ONNX_PATH))
+print("ONNX OK")
+""")
+
+print(f"\n📦 Conversion ONNX → {onnx_path}…")
+res = subprocess.run([sys.executable, "-c", conv_script], capture_output=True, text=True)
 if res.returncode != 0:
-    print(f"[ERREUR tf2onnx] {res.stderr[-500:]}")
+    print(f"[ERREUR export_onnx]\n{res.stderr[-800:]}")
     sys.exit(1)
+print(res.stdout.strip())
 print("✅ Export ONNX terminé")
 
-# Sauvegarde du mapping label→index
-labels_path = OUT_DIR / "emotion_labels.json"
+# ── 10. Labels ───────────────────────────────────────────────────────
 with open(labels_path, "w") as f:
     json.dump(LABELS, f)
 print(f"✅ Labels → {labels_path}")
@@ -204,7 +247,7 @@ print(f"✅ Labels → {labels_path}")
 print(f"""
 ╔══════════════════════════════════════════════════════════╗
 ║  Entraînement terminé                                    ║
-║  Accuracy test : {acc:.1%:<41}║
+║  Accuracy test : {acc:.1%}{"" :<{41 - len(f"{acc:.1%}")}}║
 ║  Modèle ONNX   : frontend/public/models/emotion_africain.onnx  ║
 ╚══════════════════════════════════════════════════════════╝
 """)

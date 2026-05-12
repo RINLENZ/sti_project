@@ -1,0 +1,28 @@
+{
+  "labels": {
+    "0": "aide",
+    "1": "oui",
+    "2": "non",
+    "3": "repeter",
+    "4": "incompris",
+    "5": "lentement",
+    "6": "bruit_silence"
+  },
+  "n_mfcc": 40,
+  "n_frames": 101,
+  "sample_rate": 16000,
+  "duration_s": 1.0,
+  "hop_length": 160,
+  "n_fft": 512,
+  "val_accuracy": 0.1644,
+  "trained_at": "2026-05-12T07:43:17Z",
+  "commandes": [
+    "aide",
+    "oui",
+    "non",
+    "repeter",
+    "incompris",
+    "lentement",
+    "bruit_silence"
+  ]
+}

@@ -15,6 +15,12 @@ build/
 backend/data/frames/
 backend/data/audio/
 
+# Modèles ML entraînés (trop lourds pour git)
+frontend/public/models/*.onnx
+frontend/public/models/*.npz
+frontend/public/models/*.keras
+frontend/public/models/kws_savedmodel/
+
 # IDE
 .vscode/
 .idea/

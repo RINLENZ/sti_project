@@ -13,6 +13,9 @@ import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import ContentRenderer from '../../components/ContentRenderer'
+import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
+import { useKWSModel } from '../../hooks/useKWSModel'
+import { MODELS_READY } from '../../config/models'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = s =>
@@ -584,7 +587,11 @@ export default function Session() {
   const lastSendRef      = useRef(0)
   const earBufferRef     = useRef([])
   const termineeRef      = useRef(false)
-  const cnnEmotionRef    = useRef({ emotion: null, probs: null })  // dernière détection CNN
+  const cnnEmotionRef    = useRef({ emotion: null, probs: null })  // dernière détection CNN (face-api.js ou ONNX)
+
+  // ── Modèles ONNX africains ───────────────────────────────────────
+  const { predict: predictEmotionOnnx } = useEmotionOnnx()
+  const { lastKeyword }                 = useKWSModel(audioActive)
   const faceApiIntervalRef = useRef(null)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
@@ -595,6 +602,23 @@ export default function Session() {
   const vadIntervalRef   = useRef(null) // intervalle rapide VAD
   const vadSpeechRef     = useRef(false)// état courant parole (sans re-render)
   const vadSpeechStart   = useRef(0)    // timestamp début de parole (durée)
+
+  /* ── KWS : réaction aux mots-clés détectés ─────────────────────── */
+  useEffect(() => {
+    if (!lastKeyword || !MODELS_READY) return
+    const sid = sessionIdRef.current
+    if (sid) {
+      api.post('/api/interaction', {
+        session_id: sid, user_id: user.id,
+        type: 'kws_keyword',
+        data: { keyword: lastKeyword.keyword, confidence: Math.round(lastKeyword.confidence * 100) / 100 }
+      }).catch(() => {})
+    }
+    // Réponses TTS aux commandes
+    if (lastKeyword.keyword === 'aide')      tts('Je t\'envoie une explication.')
+    if (lastKeyword.keyword === 'repeter')   tts('Je répète la question.')
+    if (lastKeyword.keyword === 'lentement') tts('D\'accord, je vais plus lentement.')
+  }, [lastKeyword])
 
   /* Afficher le banner caméra 4s après le chargement (mobile seulement) */
   useEffect(() => {
@@ -767,14 +791,26 @@ export default function Session() {
         toast.success('Modèle CNN expression chargé ✓', { duration: 2000 })
         faceApiIntervalRef.current = setInterval(async () => {
           const vid = videoRef.current
-          if (!vid || !vid.videoWidth || !faceApiReady) return
+          if (!vid || !vid.videoWidth) return
+
+          // Priorité au modèle ONNX africain quand MODELS_READY
+          if (MODELS_READY) {
+            const res = await predictEmotionOnnx(vid)
+            if (res) {
+              cnnEmotionRef.current = { emotion: res.emotion, probs: res.probs, dominant: res.emotion, source: 'onnx' }
+              return
+            }
+          }
+
+          // Fallback : face-api.js (modèle générique Ekman)
+          if (!faceApiReady) return
           try {
             const opts = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 })
             const det  = await window.faceapi.detectSingleFace(vid, opts).withFaceExpressions()
             if (det?.expressions) {
               const probs = det.expressions
               const dominant = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0]
-              cnnEmotionRef.current = { emotion: CNN_TO_ETAT[dominant] || 'neutre', probs, dominant }
+              cnnEmotionRef.current = { emotion: CNN_TO_ETAT[dominant] || 'neutre', probs, dominant, source: 'faceapi' }
             }
           } catch {}
         }, 3000)

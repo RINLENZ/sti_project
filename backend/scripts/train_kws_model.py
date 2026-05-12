@@ -241,10 +241,6 @@ def train(epochs: int, batch_size: int, augment: bool):
         tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss", factor=0.5, patience=4, min_lr=1e-5
         ),
-        # Sauvegarde pendant fit() — contexte stable, évite le segfault post-training
-        tf.keras.callbacks.ModelCheckpoint(
-            KERAS_PATH, save_best_only=True, monitor="val_accuracy", verbose=0
-        ),
     ]
 
     print("\n── Entraînement ───────────────────────────────────────────")
@@ -265,45 +261,76 @@ def train(epochs: int, batch_size: int, augment: bool):
     print("\n── Évaluation ─────────────────────────────────────────────")
     y_pred = np.argmax(model.predict(X_val, verbose=0), axis=1)
     target_names = [COMMANDES[i] for i in present_classes]
-    print(classification_report(y_val, y_pred, target_names=target_names))
+    print(classification_report(y_val, y_pred, target_names=target_names, zero_division=0))
 
     val_acc = max(history.history["val_accuracy"])
     print(f"  Meilleure val_accuracy : {val_acc:.3f}")
 
-    return model, label_map_final, val_acc
+    # ── Sauvegarde poids en numpy (évite le segfault de model.save() sur TF 2.21) ──
+    weights_path = os.path.join(OUTPUT_DIR, "kws_weights.npz")
+    weights = model.get_weights()
+    np.savez(weights_path, *weights)
+    print(f"  Poids numpy → {weights_path}")
+
+    return model, label_map_final, val_acc, n_classes
 
 
 # ═══════════════════════════════════════════════════════════════════════
 #  5. Export ONNX
 # ═══════════════════════════════════════════════════════════════════════
 
-def export_onnx(model: tf.keras.Model):
-    import subprocess, sys, onnx
+def export_onnx(n_classes: int):
+    """
+    Reconstruction du modèle depuis les poids numpy + conversion ONNX
+    dans un sous-processus isolé pour éviter le segfault de TF 2.21.
+    """
+    import subprocess, sys, textwrap
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    weights_path = os.path.join(OUTPUT_DIR, "kws_weights.npz")
 
-    # Le modèle est déjà sauvegardé par ModelCheckpoint pendant fit()
-    print(f"  Modèle Keras (sauvegardé pendant training) → {KERAS_PATH}")
+    # Script de conversion exécuté dans un processus Python séparé
+    conv_script = textwrap.dedent(f"""
+import os, sys, numpy as np
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+import tensorflow as tf
+import tf2onnx, onnx
 
-    # 2. Conversion ONNX via CLI dans un sous-processus séparé
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "tf2onnx.convert",
-            "--keras", KERAS_PATH,
-            "--output", ONNX_PATH,
-            "--opset", "13",
-        ],
-        capture_output=True, text=True
-    )
+N_MFCC, N_FRAMES, N_CLASSES = {N_MFCC}, {N_FRAMES}, {n_classes}
+WEIGHTS_PATH = r"{weights_path}"
+ONNX_PATH    = r"{ONNX_PATH}"
+
+def build_cnn(n_classes):
+    inputs = tf.keras.Input(shape=(N_MFCC, N_FRAMES, 1), name="mfcc_input")
+    x = tf.keras.layers.Conv2D(32, (3,3), padding="same", activation="relu")(inputs)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.MaxPooling2D((2,2))(x)
+    x = tf.keras.layers.Dropout(0.25)(x)
+    x = tf.keras.layers.Conv2D(64, (3,3), padding="same", activation="relu")(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.MaxPooling2D((2,2))(x)
+    x = tf.keras.layers.Dropout(0.25)(x)
+    x = tf.keras.layers.Conv2D(128, (3,3), padding="same", activation="relu")(x)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dropout(0.40)(x)
+    x = tf.keras.layers.Dense(64, activation="relu")(x)
+    outputs = tf.keras.layers.Dense(n_classes, activation="softmax", name="output")(x)
+    return tf.keras.Model(inputs, outputs)
+
+model = build_cnn(N_CLASSES)
+data  = np.load(WEIGHTS_PATH, allow_pickle=True)
+model.set_weights([data[k] for k in sorted(data.files, key=lambda x: int(x.replace("arr_","")))])
+
+inp_sig = [tf.TensorSpec(shape=(None, N_MFCC, N_FRAMES, 1), dtype=tf.float32, name="mfcc_input")]
+model_proto, _ = tf2onnx.convert.from_keras(model, input_signature=inp_sig, opset=13, output_path=ONNX_PATH)
+onnx.checker.check_model(onnx.load(ONNX_PATH))
+print("ONNX OK")
+""")
+
+    result = subprocess.run([sys.executable, "-c", conv_script], capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"  [ERREUR tf2onnx] {result.stderr[-500:]}")
+        print(f"  [ERREUR conversion] {result.stderr[-600:]}")
         raise RuntimeError("Conversion ONNX échouée")
-    print(f"  Modèle ONNX  → {ONNX_PATH}")
-
-    # 3. Vérification
-    onnx_model = onnx.load(ONNX_PATH)
-    onnx.checker.check_model(onnx_model)
-    print("  Vérification ONNX : OK")
+    print(f"  Modèle ONNX → {ONNX_PATH} ✓")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -349,14 +376,14 @@ def main():
     print(f"  Output    : {OUTPUT_DIR}")
     print("═" * 60)
 
-    model, label_map, val_acc = train(
+    model, label_map, val_acc, n_classes = train(
         epochs=args.epochs,
         batch_size=args.batch,
         augment=args.aug,
     )
 
     print("\n── Export ─────────────────────────────────────────────────")
-    export_onnx(model)
+    export_onnx(n_classes)
     save_labels(label_map, val_acc)
 
     print("\n" + "═" * 60)
