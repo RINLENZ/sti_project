@@ -514,30 +514,89 @@ async def import_from_pdf(
                 },
                 {
                     "type": "text",
-                    "text": """Analyse cette fiche de préparation et extrais le contenu.
-Retourne UNIQUEMENT un JSON valide :
+                    "text": """Tu es un expert en ingénierie pédagogique APC (Approche Par Compétences) du MINESEC Cameroun.
+Analyse cette fiche de préparation et génère un cours complet et structuré selon les normes APC.
+
+━━━ STRUCTURE APC ATTENDUE ━━━
+
+1. UNITÉ D'APPRENTISSAGE
+   • titre          : Intitulé précis de la leçon (tel que dans la fiche)
+   • reference_ue   : Référence officielle (UE 01, Chapitre 3…)
+   • competences    : 2-4 compétences APC ("Être capable de…", "Savoir identifier…", "Maîtriser…")
+   • situation_probleme : OBLIGATOIRE — Situation CONCRÈTE et RÉALISTE ancrée dans le quotidien camerounais/africain.
+       ✓ BON : "Le lycée technique de Bafoussam veut informatiser sa cantine. Le proviseur charge un élève de Tle D de concevoir la base de données pour gérer les repas et les paiements des élèves…"
+       ✗ MAUVAIS : "Dans un contexte professionnel, il est important de maîtriser ce concept…"
+   • prerequis      : Notions déjà vues
+   • duree_estimee  : Durée en minutes
+
+2. CONTENU DE LA LEÇON (contenu_lecon — Markdown structuré)
+   ## Mise en situation
+   [Lien avec la situation-problème, question déclencheuse pour motiver l'élève]
+
+   ## I. [Première notion principale]
+   [Cours clair avec définitions encadrées, exemples concrets du Cameroun/Afrique]
+
+   ### Exemple appliqué
+   [Exemple pratique avec noms, lieux, situations du Cameroun ou d'Afrique]
+
+   ## II. [Deuxième notion]
+   …
+
+   ## Synthèse
+   [Tableau récapitulatif ou résumé structuré des notions essentielles]
+
+3. POINTS CLÉS : 4-6 points essentiels à retenir (phrases courtes, percutantes)
+
+4. EXERCICES — 9 exercices répartis en 3 groupes pédagogiques :
+
+   GROUPE 1 — "Évaluation des ressources"  (groupe=1, difficulte=1, points=5)
+   → 3 exercices : 1 QCM + 1 vrai_faux + 1 texte_trou
+   → Testent la mémorisation et la compréhension directe du cours
+
+   GROUPE 2 — "Application et compréhension"  (groupe=2, difficulte=2, points=10)
+   → 3 exercices : 2 QCM + 1 texte_trou
+   → Nécessitent d'appliquer les notions sur des cas simples
+
+   GROUPE 3 — "Résolution de problèmes"  (groupe=3, difficulte=3, points=15)
+   → 3 exercices : 1 QCM + 2 reponse_libre
+   → Exigent analyse et résolution en lien DIRECT avec la situation-problème
+
+━━━ RÈGLES IMPÉRATIVES ━━━
+• La situation-problème DOIT être contextualisée au Cameroun ou en Afrique
+• Les exemples du cours DOIVENT utiliser des noms, lieux, situations africains
+• vrai_faux  → options = ["Vrai", "Faux"]
+• texte_trou → l'énoncé contient un ou plusieurs ___ ; options = liste de 4-8 mots couvrant tous les blancs ;
+              si 1 seul ___ : reponse_correcte = "mot exact" ;
+              si 2+ blancs  : reponse_correcte = JSON array dans l'ordre ["mot1", "mot2"]
+• reponse_libre → options = null ; reponse_correcte = modèle de réponse complet (2-4 phrases)
+• Les exercices du groupe 3 DOIVENT se référer à la situation-problème de l'UA
+• Réponds UNIQUEMENT avec un JSON valide — aucun texte avant ni après
+
+━━━ FORMAT JSON (strict) ━━━
 {
-  "titre": "titre de la leçon",
-  "reference_ue": "UE XX",
-  "competences": ["compétence 1", "compétence 2"],
-  "situation_probleme": "texte",
-  "prerequis": ["prérequis 1"],
-  "duree_estimee": 60,
-  "contenu_lecon": "contenu Markdown complet",
-  "points_cles": ["point 1", "point 2"],
+  "titre": "…",
+  "reference_ue": "…",
+  "competences": ["Être capable de…", "Savoir…"],
+  "situation_probleme": "Situation concrète et contextualisée au Cameroun…",
+  "prerequis": ["…"],
+  "duree_estimee": 55,
+  "contenu_lecon": "## Mise en situation\\n…",
+  "points_cles": ["…", "…", "…", "…"],
   "exercices": [
     {
-      "titre": "titre",
-      "type": "qcm",
-      "enonce": "énoncé",
-      "options": ["A", "B", "C", "D"],
-      "reponse_correcte": "A",
-      "explication": "explication",
-      "indice_1": "indice 1",
-      "indice_2": "indice 2",
-      "competence_evaluee": "compétence",
+      "titre": "…",
+      "type": "qcm|vrai_faux|texte_trou|reponse_libre",
+      "enonce": "…",
+      "options": ["A. …", "B. …", "C. …", "D. …"],
+      "reponse_correcte": "texte exact de la bonne réponse",
+      "explication": "Explication pédagogique citant le cours",
+      "indice_1": "Indice vague",
+      "indice_2": "Indice plus précis",
+      "competence_evaluee": "…",
       "difficulte": 1,
-      "points": 10
+      "points": 5,
+      "groupe": 1,
+      "groupe_titre": "Évaluation des ressources"
     }
   ]
 }"""
@@ -579,19 +638,27 @@ Retourne UNIQUEMENT un JSON valide :
 
     exercices_crees = 0
     for i, ex_data in enumerate(extracted.get("exercices", [])):
+        type_val = ex_data.get("type", "qcm")
+        opts = ex_data.get("options")
+        if type_val in ("qcm", "vrai_faux", "texte_trou") and isinstance(opts, list):
+            options_val = opts
+        else:
+            options_val = None
         ex = Exercice(
             ua_id=ua.id,
             titre=ex_data.get("titre", f"Exercice {i+1}"),
-            type=ex_data.get("type", "qcm"),
+            type=type_val,
             enonce=ex_data.get("enonce", ""),
-            options=ex_data.get("options"),
+            options=options_val,
             reponse_correcte=ex_data.get("reponse_correcte", ""),
             explication=ex_data.get("explication"),
             indice_1=ex_data.get("indice_1"),
             indice_2=ex_data.get("indice_2"),
             competence_evaluee=ex_data.get("competence_evaluee"),
             difficulte=ex_data.get("difficulte", 1),
-            points=ex_data.get("points", 10),
+            points=ex_data.get("points", 5),
+            groupe=ex_data.get("groupe"),
+            groupe_titre=ex_data.get("groupe_titre"),
             ordre=i + 1
         )
         db.add(ex)
@@ -889,21 +956,31 @@ async def generer_exercices_ia(
             '"options" = ["Vrai", "Faux"]. "reponse_correcte" = "Vrai" ou "Faux".'
         ),
         "texte_trou": (
-            'L\'énoncé contient exactement un blanc noté ___ . '
-            '"options" = liste de 4 mots possibles (dont le bon). "reponse_correcte" = le mot exact qui remplit le blanc.'
+            'L\'énoncé contient un ou plusieurs blancs notés ___ . '
+            '"options" = liste de 4-8 mots possibles couvrant tous les blancs. '
+            'Si 1 seul ___ : "reponse_correcte" = "le mot exact". '
+            'Si 2+ blancs  : "reponse_correcte" = JSON array dans l\'ordre des blancs, ex: \'["mot1", "mot2"]\'.'
         ),
         "reponse_libre": (
             '"options" = null. "reponse_correcte" = réponse modèle complète et concise (1-3 phrases).'
         ),
     }.get(type_ex, '"options" = null, "reponse_correcte" = réponse attendue.')
 
-    competences_str = "\n".join(f"  • {c}" for c in (ua.competences or []))
-    points_cles_str = "\n".join(f"  • {p}" for p in tous_points) if tous_points else ""
-    non_dupliquer   = "\n".join(f"  - {e}" for e in enonces_existants[:10]) if enonces_existants else "  (aucun)"
+    competences_str  = "\n".join(f"  • {c}" for c in (ua.competences or []))
+    points_cles_str  = "\n".join(f"  • {p}" for p in tous_points) if tous_points else ""
+    non_dupliquer    = "\n".join(f"  - {e}" for e in enonces_existants[:10]) if enonces_existants else "  (aucun)"
 
-    prompt = f"""Tu es un enseignant expert au Cameroun. Tu crées des exercices pédagogiques rigoureusement fondés sur le contenu d'un cours réel.
+    groupe_titre_str = {
+        1: "Évaluation des ressources",
+        2: "Application et compréhension",
+        3: "Résolution de problèmes",
+    }.get(difficulte, "Application et compréhension")
 
-═══ CONTEXTE PROGRAMME ═══
+    prompt = f"""Tu es un enseignant expert en APC (Approche Par Compétences) au Cameroun.
+Tu crées des exercices pédagogiques RIGOUREUSEMENT fondés sur le contenu d'un cours réel,
+ancrés dans le contexte camerounais et africain.
+
+━━━ CONTEXTE PROGRAMME ━━━
 Matière      : {matiere.nom if matiere else "Informatique"}
 Niveau/Classe: {niveau.nom if niveau else "Non précisé"} ({niveau.code if niveau else ""})
 Module       : {module.titre if module else ""}
@@ -911,48 +988,52 @@ Famille      : {famille.titre if famille else ""}
 UA           : {ua.titre} ({ua.reference_ue or ""})
 Durée UA     : {ua.duree_estimee} min
 
-═══ CONTENU DU COURS ═══
-{contenu_cours if contenu_cours else "(Aucune leçon rédigée — génère à partir des compétences)"}
+━━━ CONTENU DU COURS ━━━
+{contenu_cours if contenu_cours else "(Aucune leçon — génère à partir des compétences et de la situation-problème)"}
 
-═══ POINTS CLÉS ═══
+━━━ POINTS CLÉS ━━━
 {points_cles_str if points_cles_str else "  (non renseignés)"}
 
-═══ COMPÉTENCES VISÉES ═══
+━━━ COMPÉTENCES VISÉES ━━━
 {competences_str if competences_str else "  • Maîtriser les concepts fondamentaux de la UA"}
 
-═══ SITUATION-PROBLÈME ═══
+━━━ SITUATION-PROBLÈME ━━━
 {ua.situation_probleme or "(non renseignée)"}
 
-═══ CONSIGNES DE GÉNÉRATION ═══
-Type d'exercice : {type_ex}
-Niveau de difficulté : {diff_cfg["label"]}
-Conseil pédagogique : {diff_cfg["conseil"]}
-Points suggérés par exercice : {diff_cfg["points"]}
-Nombre d'exercices à créer : {nb}
+━━━ CONSIGNES DE GÉNÉRATION ━━━
+Type d'exercice demandé : {type_ex}
+Niveau de difficulté    : {diff_cfg["label"]}
+Conseil pédagogique     : {diff_cfg["conseil"]}
+Points par exercice     : {diff_cfg["points"]}
+Nombre à créer          : {nb}
+Groupe pédagogique      : {groupe_titre_str}
 
-Instructions pour ce type :
+Instructions pour le type "{type_ex}" :
 {type_instructions}
 
-RÈGLES ABSOLUES :
+━━━ RÈGLES IMPÉRATIVES ━━━
 1. Chaque exercice doit être DIRECTEMENT tiré du contenu du cours ci-dessus.
 2. N'invente rien qui ne soit pas dans le cours ou les compétences.
-3. Adapte le vocabulaire au niveau {niveau.nom if niveau else "scolaire"}.
-4. Ne reproduis pas ces énoncés déjà existants :
+3. Utilise des exemples, noms ou contextes camerounais/africains dans les énoncés.
+4. Adapte le vocabulaire au niveau {niveau.nom if niveau else "scolaire"}.
+5. Si la difficulté est 3, relie au moins un exercice à la situation-problème.
+6. N'utilise PAS ces énoncés déjà existants (anti-doublons) :
 {non_dupliquer}
-5. Réponds UNIQUEMENT avec un JSON valide, sans texte ni markdown autour.
+7. Réponds UNIQUEMENT avec un JSON valide — aucun texte ni markdown autour.
 
-FORMAT DE RÉPONSE (JSON strict) :
+━━━ FORMAT JSON (strict) ━━━
 {{
   "exercices": [
     {{
       "titre": "Titre court et précis",
-      "enonce": "Énoncé clair et complet",
-      "options": ["...", "...", "...", "..."],
-      "reponse_correcte": "...",
-      "explication": "Explication pédagogique (cite la leçon si pertinent)",
+      "enonce": "Énoncé clair, ancré dans le contexte africain si possible",
+      "options": ["A. …", "B. …", "C. …", "D. …"],
+      "reponse_correcte": "Texte exact de la bonne réponse",
+      "explication": "Explication pédagogique qui cite le cours",
       "indice_1": "Indice vague pour débloquer l'élève",
       "indice_2": "Indice plus précis",
-      "competence_evaluee": "Compétence exacte parmi celles listées"
+      "competence_evaluee": "Compétence exacte parmi celles listées",
+      "points": {diff_cfg["points"]}
     }}
   ]
 }}"""
@@ -999,6 +1080,8 @@ FORMAT DE RÉPONSE (JSON strict) :
             competence_evaluee = ex_data.get("competence_evaluee", ""),
             difficulte         = difficulte,
             points             = int(ex_data.get("points") or diff_cfg["points"]),
+            groupe             = difficulte,
+            groupe_titre       = groupe_titre_str,
             ordre              = len(ex_existants) + len(created) + 1,
         )
         db.add(ex)

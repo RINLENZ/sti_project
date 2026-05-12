@@ -348,17 +348,39 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
         raise HTTPException(404, "Exercice introuvable")
 
     try:
-        ua = json.loads(body.reponse)
-        ca = json.loads(exercice.reponse_correcte)
-        if isinstance(ua, list) and isinstance(ca, list):
-            correct = (len(ua) == len(ca) and all(
-                str(u).strip().lower() == str(c).strip().lower()
-                for u, c in zip(ua, ca)
-            ))
-        else:
-            correct = body.reponse.strip().lower() == exercice.reponse_correcte.strip().lower()
+        submitted = json.loads(body.reponse)
     except (json.JSONDecodeError, TypeError):
-        correct = body.reponse.strip().lower() == exercice.reponse_correcte.strip().lower()
+        submitted = body.reponse
+
+    try:
+        expected = json.loads(exercice.reponse_correcte)
+    except (json.JSONDecodeError, TypeError):
+        expected = exercice.reponse_correcte
+
+    if isinstance(submitted, list) and isinstance(expected, list):
+        correct = (len(submitted) == len(expected) and all(
+            str(u).strip().lower() == str(c).strip().lower()
+            for u, c in zip(submitted, expected)
+        ))
+    elif isinstance(submitted, list) and isinstance(expected, str):
+        # Réponses soumises sous forme JSON array, reponse_correcte est une chaîne
+        # Essayer de découper par séparateur courant
+        parts = None
+        for sep in ['|', ',', ';']:
+            if sep in expected:
+                parts = [p.strip() for p in expected.split(sep)]
+                break
+        if parts and len(parts) == len(submitted):
+            correct = all(
+                str(u).strip().lower() == str(c).strip().lower()
+                for u, c in zip(submitted, parts)
+            )
+        elif len(submitted) == 1:
+            correct = str(submitted[0]).strip().lower() == expected.strip().lower()
+        else:
+            correct = False
+    else:
+        correct = str(submitted).strip().lower() == str(expected).strip().lower()
 
     # Enregistre ou met à jour la progression
     prog = db.query(ProgressionApprenant).filter(

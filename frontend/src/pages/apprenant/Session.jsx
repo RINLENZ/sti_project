@@ -1245,11 +1245,10 @@ export default function Session() {
   const apcData = isAPC ? (() => { try { return JSON.parse(ex.enonce.slice(7)) } catch { return null } })() : null
   const isVraiFaux = ex.type === 'qcm' && !isIdentification && ex.options?.length === 2 &&
     (ex.options.includes('Vrai') || ex.options.includes('Faux'))
-  const isMultiBlank = ex.type === 'texte_trou' && (() => {
-    try { return Array.isArray(JSON.parse(ex.reponse_correcte)) } catch { return false }
-  })()
-  const multiParts    = isMultiBlank ? ex.enonce.split('___') : []
-  const multiNbBlanks = multiParts.length - 1
+  const nbBlanksInEnonce = ex.type === 'texte_trou' ? (ex.enonce.match(/___/g) || []).length : 0
+  const isMultiBlank     = nbBlanksInEnonce > 1
+  const multiParts       = isMultiBlank ? ex.enonce.split('___') : []
+  const multiNbBlanks    = nbBlanksInEnonce
   const MASCOT = {
 
     engagement_eleve:'🦁', engagement_modere:'🐘', engagement_faible:'🐢',
