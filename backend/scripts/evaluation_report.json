@@ -1,0 +1,63 @@
+{
+  "accuracy": 0.17962466180324554,
+  "loss": 1.788941740989685,
+  "report": {
+    "engagement_eleve": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 64.0
+    },
+    "engagement_faible": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 63.0
+    },
+    "confusion": {
+      "precision": 0.16333333333333333,
+      "recall": 0.7777777777777778,
+      "f1-score": 0.2699724517906336,
+      "support": 63.0
+    },
+    "frustration": {
+      "precision": 0.32432432432432434,
+      "recall": 0.2,
+      "f1-score": 0.24742268041237114,
+      "support": 60.0
+    },
+    "ennui": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 58.0
+    },
+    "neutre": {
+      "precision": 0.2222222222222222,
+      "recall": 0.09230769230769231,
+      "f1-score": 0.13043478260869565,
+      "support": 65.0
+    },
+    "accuracy": 0.17962466487935658,
+    "macro avg": {
+      "precision": 0.11831331331331331,
+      "recall": 0.1783475783475784,
+      "f1-score": 0.10797165246861674,
+      "support": 373.0
+    },
+    "weighted avg": {
+      "precision": 0.1184823160962571,
+      "recall": 0.17962466487935658,
+      "f1-score": 0.10812838111827722,
+      "support": 373.0
+    }
+  },
+  "labels": [
+    "engagement_eleve",
+    "engagement_faible",
+    "confusion",
+    "frustration",
+    "ennui",
+    "neutre"
+  ]
+}

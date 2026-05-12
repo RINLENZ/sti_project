@@ -233,12 +233,17 @@ def train(epochs: int, batch_size: int, augment: bool):
     model = build_cnn(n_classes)
     model.summary()
 
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     callbacks = [
         tf.keras.callbacks.EarlyStopping(
             monitor="val_accuracy", patience=8, restore_best_weights=True
         ),
         tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss", factor=0.5, patience=4, min_lr=1e-5
+        ),
+        # Sauvegarde pendant fit() — contexte stable, évite le segfault post-training
+        tf.keras.callbacks.ModelCheckpoint(
+            KERAS_PATH, save_best_only=True, monitor="val_accuracy", verbose=0
         ),
     ]
 
@@ -273,32 +278,29 @@ def train(epochs: int, batch_size: int, augment: bool):
 # ═══════════════════════════════════════════════════════════════════════
 
 def export_onnx(model: tf.keras.Model):
-    import tf2onnx
-    import onnx
+    import subprocess, sys, onnx
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Sauvegarde Keras d'abord (reprise facile)
-    model.save(KERAS_PATH)
-    print(f"  Modèle Keras → {KERAS_PATH}")
+    # Le modèle est déjà sauvegardé par ModelCheckpoint pendant fit()
+    print(f"  Modèle Keras (sauvegardé pendant training) → {KERAS_PATH}")
 
-    # Conversion ONNX
-    input_signature = [
-        tf.TensorSpec(
-            shape=(None, N_MFCC, N_FRAMES, 1),
-            dtype=tf.float32,
-            name="mfcc_input"
-        )
-    ]
-    model_proto, _ = tf2onnx.convert.from_keras(
-        model,
-        input_signature=input_signature,
-        opset=13,
-        output_path=ONNX_PATH,
+    # 2. Conversion ONNX via CLI dans un sous-processus séparé
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "tf2onnx.convert",
+            "--keras", KERAS_PATH,
+            "--output", ONNX_PATH,
+            "--opset", "13",
+        ],
+        capture_output=True, text=True
     )
+    if result.returncode != 0:
+        print(f"  [ERREUR tf2onnx] {result.stderr[-500:]}")
+        raise RuntimeError("Conversion ONNX échouée")
     print(f"  Modèle ONNX  → {ONNX_PATH}")
 
-    # Vérification rapide
+    # 3. Vérification
     onnx_model = onnx.load(ONNX_PATH)
     onnx.checker.check_model(onnx_model)
     print("  Vérification ONNX : OK")

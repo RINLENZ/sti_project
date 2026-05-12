@@ -11,7 +11,7 @@ Prérequis :
 Usage :
     python train_emotion_model.py [--epochs 30] [--batch 32] [--img 96]
 """
-import argparse, os, sys, json, pathlib
+import argparse, os, sys, json, pathlib, subprocess as _sp
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, Model
@@ -136,9 +136,11 @@ model.compile(
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"],
 )
-ckpt_path = SCRIPT_DIR / "best_emotion_model.keras"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+keras_path = str(OUT_DIR / "emotion_africain.keras")
 cb2 = [
-    ModelCheckpoint(str(ckpt_path), save_best_only=True, monitor="val_accuracy"),
+    # Sauvegarde pendant fit() — évite le segfault post-training de TF 2.21
+    ModelCheckpoint(keras_path, save_best_only=True, monitor="val_accuracy"),
     EarlyStopping(patience=7, restore_best_weights=True, monitor="val_accuracy"),
     ReduceLROnPlateau(factor=0.5, patience=3, min_lr=1e-7),
 ]
@@ -173,17 +175,24 @@ with open(report_path, "w") as f:
 print(f"\n✅ Rapport sauvegardé → {report_path}")
 
 # ── 8. Export ONNX ───────────────────────────────────────────────────
+import subprocess as _sp
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 onnx_path = OUT_DIR / "emotion_africain.onnx"
-print(f"\n📦 Export ONNX → {onnx_path}…")
+saved_model_dir = str(OUT_DIR / "emotion_savedmodel")
 
-input_signature = [tf.TensorSpec(
-    shape=(None, *IMG_SIZE, 3), dtype=tf.float32, name="input"
-)]
-model_proto, _ = tf2onnx.convert.from_keras(
-    model, input_signature=input_signature, opset=13
+# Le modèle est déjà sauvegardé par ModelCheckpoint pendant fit()
+print(f"\n📦 Modèle Keras (sauvegardé pendant training) → {keras_path}")
+print(f"📦 Conversion ONNX → {onnx_path}…")
+res = _sp.run(
+    [sys.executable, "-m", "tf2onnx.convert",
+     "--keras", keras_path,
+     "--output", str(onnx_path),
+     "--opset", "13"],
+    capture_output=True, text=True
 )
-onnx.save(model_proto, str(onnx_path))
+if res.returncode != 0:
+    print(f"[ERREUR tf2onnx] {res.stderr[-500:]}")
+    sys.exit(1)
 print("✅ Export ONNX terminé")
 
 # Sauvegarde du mapping label→index
