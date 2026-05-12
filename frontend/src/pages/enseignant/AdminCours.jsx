@@ -542,7 +542,7 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
       const { data } = await api.post(
         `/api/admin/import/pdf?famille_id=${pdfFamille}`,
         fd,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        { timeout: 120000 }  // Claude Sonnet peut prendre jusqu'à 60-90s
       )
       toast.success(`UA importée : ${data.titre || 'succès'} (${data.nb_exercices_crees || 0} exercice(s))`)
       setPdfModal(false); setPdfFile(null); setPdfFamille(''); onReload()

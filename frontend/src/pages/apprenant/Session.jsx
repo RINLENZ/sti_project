@@ -545,6 +545,7 @@ export default function Session() {
   const [current, setCurrent]     = useState(0)
   const [reponse, setReponse]     = useState(null)
   const [blanks, setBlanks]       = useState([])
+  const [activeBlank, setActiveBlank] = useState(null)   // index du trou sélectionné
   const [resultat, setResultat]   = useState(null)
   const [indices, setIndices]     = useState(0)
   const [termine, setTermine]     = useState(false)
@@ -1044,7 +1045,7 @@ export default function Session() {
       }
       setTermine(true)
     } else {
-      setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([])
+      setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
       setIndices(0); setAdaptation(null); setExplicationIA(null)
       setAnswerFlash(null); setFeedbackMsg('')
       setQuestionTime(Date.now())
@@ -1204,7 +1205,7 @@ export default function Session() {
                 }}>
                   <ArrowLeft size={15}/> Retour au cours
                 </button>
-                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]) }} style={{
+                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null) }} style={{
                   padding: '13px', background: C.brownPale,
                   color: C.brown, border: `1.5px solid ${C.brownLight}40`,
                   borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
@@ -1718,11 +1719,21 @@ export default function Session() {
             {/* ── Texte à trous — multi-blancs ── */}
             {ex.type === 'texte_trou' && isMultiBlank && (
               <div style={{ marginBottom:16 }}>
+                {/* Instruction contextuelle */}
+                {!resultat && (
+                  <p style={{ fontSize:11, fontWeight:800, color: activeBlank !== null ? C.brown : C.textSec, textTransform:'uppercase', letterSpacing:.6, margin:'0 0 10px', transition:'color .2s' }}>
+                    {activeBlank !== null
+                      ? `→ Trou ${activeBlank + 1} sélectionné — choisis un mot ci-dessous`
+                      : 'Clique sur un trou pour le sélectionner, puis choisis un mot'}
+                  </p>
+                )}
+
                 {/* Phrase avec slots inline */}
-                <div style={{ background: C.brownPale, borderRadius: 12, padding: isMobile ? '12px 14px' : '14px 18px', marginBottom: 14, lineHeight: 2.4, fontSize: isMobile ? 14 : 15, fontWeight: 600, color: C.text }}>
+                <div style={{ background: C.brownPale, borderRadius: 12, padding: isMobile ? '12px 14px' : '14px 18px', marginBottom: 14, lineHeight: 2.8, fontSize: isMobile ? 14 : 15, fontWeight: 600, color: C.text }}>
                   {multiParts.map((part, i) => {
                     const correctArr = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
-                    const filled = blanks[i] ?? null
+                    const filled = (blanks.length === multiNbBlanks ? blanks[i] : null) ?? null
+                    const isActive      = !resultat && activeBlank === i
                     const isCorrectSlot = resultat && filled?.toLowerCase() === (correctArr[i] || '').toLowerCase()
                     const isWrongSlot   = resultat && filled !== null && !isCorrectSlot
                     return (
@@ -1731,20 +1742,42 @@ export default function Session() {
                         {i < multiNbBlanks && (
                           <span
                             onClick={() => {
-                              if (resultat || filled === null) return
+                              if (resultat) return
+                              // Cliquer sur un trou : l'activer (et le vider si déjà rempli)
                               const nb = blanks.length === multiNbBlanks ? [...blanks] : Array(multiNbBlanks).fill(null)
-                              nb[i] = null
-                              const allFilled = nb.slice(0, multiNbBlanks).every(b => b !== null)
-                              setBlanks(nb); setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
+                              if (activeBlank === i) {
+                                // Désélectionner
+                                setActiveBlank(null)
+                              } else {
+                                // Sélectionner ce trou (le vider pour permettre re-sélection)
+                                nb[i] = null
+                                const allFilled = nb.slice(0, multiNbBlanks).every(b => b !== null)
+                                setBlanks(nb)
+                                setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
+                                setActiveBlank(i)
+                              }
                             }}
                             style={{
-                              display: 'inline-block', minWidth: 72, padding: '2px 10px', margin: '0 3px',
-                              borderRadius: 7, textAlign: 'center', fontWeight: 800,
-                              border: `2px dashed ${resultat ? (isCorrectSlot ? C.emerald : C.red) : (filled ? C.brown : C.brownLight)}`,
-                              background: resultat ? (isCorrectSlot ? C.emeraldPale : '#FEE2E2') : (filled ? C.brownPale : 'transparent'),
-                              color: resultat ? (isCorrectSlot ? C.emerald : C.red) : (filled ? C.brown : C.textSec),
-                              cursor: filled && !resultat ? 'pointer' : 'default',
+                              display: 'inline-block', minWidth: 80, padding: '3px 12px', margin: '0 3px',
+                              borderRadius: 8, textAlign: 'center', fontWeight: 800,
+                              border: resultat
+                                ? `2px solid ${isCorrectSlot ? C.emerald : C.red}`
+                                : isActive
+                                  ? `2.5px solid ${C.brown}`
+                                  : `2px dashed ${filled ? C.brown : C.brownLight}`,
+                              background: resultat
+                                ? (isCorrectSlot ? C.emeraldPale : '#FEE2E2')
+                                : isActive
+                                  ? C.brown
+                                  : (filled ? C.brownPale : 'transparent'),
+                              color: resultat
+                                ? (isCorrectSlot ? C.emerald : C.red)
+                                : isActive
+                                  ? 'white'
+                                  : (filled ? C.brown : C.textSec),
+                              cursor: resultat ? 'default' : 'pointer',
                               fontStyle: filled ? 'normal' : 'italic', fontSize: 13,
+                              boxShadow: isActive ? `0 0 0 3px ${C.brown}30` : 'none',
                               transition: 'all .15s',
                             }}>
                             {filled ?? `trou ${i+1}`}
@@ -1770,39 +1803,45 @@ export default function Session() {
 
                 {/* Banque de mots */}
                 {!resultat && ex.options?.length > 0 && (
-                  <>
-                    <p style={{ fontSize:11, fontWeight:800, color:C.textSec, textTransform:'uppercase', letterSpacing:.6, margin:'0 0 10px' }}>
-                      Clique pour placer dans un trou :
-                    </p>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                      {ex.options.map((opt, i) => {
-                        const usedIdx = (blanks.length === multiNbBlanks ? blanks : []).indexOf(opt)
-                        const isUsed = usedIdx !== -1
-                        return (
-                          <button key={i} onClick={() => {
-                            if (isUsed) return
-                            const nb = blanks.length === multiNbBlanks ? [...blanks] : Array(multiNbBlanks).fill(null)
-                            const emptyIdx = nb.findIndex((b, idx) => idx < multiNbBlanks && b === null)
-                            if (emptyIdx === -1) return
-                            nb[emptyIdx] = opt
-                            const allFilled = nb.slice(0, multiNbBlanks).every(b => b !== null)
-                            setBlanks(nb); setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
-                          }} style={{
-                            padding:'9px 18px', borderRadius:24,
-                            background: isUsed ? '#E5E7EB' : C.surface,
-                            color: isUsed ? '#9CA3AF' : C.text,
-                            border:`2px solid ${isUsed ? '#E5E7EB' : C.brownPale}`,
-                            fontSize:14, fontWeight:700, cursor: isUsed ? 'not-allowed' : 'pointer',
-                            opacity: isUsed ? 0.5 : 1,
-                            textDecoration: isUsed ? 'line-through' : 'none',
-                            transition:'all .15s',
-                          }}>
-                            {opt}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {ex.options.map((opt, i) => {
+                      // Un mot est "placé" seulement dans le trou qui le contient (pas les autres)
+                      const placedInSlot = blanks.length === multiNbBlanks
+                        ? blanks.findIndex((b, idx) => idx !== activeBlank && b === opt)
+                        : -1
+                      const isPlaced = placedInSlot !== -1
+                      return (
+                        <button key={i} onClick={() => {
+                          // Cliquer un mot : le placer dans le trou actif
+                          const targetSlot = activeBlank !== null
+                            ? activeBlank
+                            : (blanks.length === multiNbBlanks
+                                ? blanks.findIndex((b, idx) => idx < multiNbBlanks && b === null)
+                                : 0)
+                          if (targetSlot === -1) return
+                          const nb = blanks.length === multiNbBlanks ? [...blanks] : Array(multiNbBlanks).fill(null)
+                          nb[targetSlot] = opt
+                          const allFilled = nb.slice(0, multiNbBlanks).every(b => b !== null)
+                          setBlanks(nb)
+                          setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
+                          // Passer automatiquement au prochain trou vide
+                          const nextEmpty = nb.findIndex((b, idx) => idx < multiNbBlanks && b === null)
+                          setActiveBlank(nextEmpty !== -1 ? nextEmpty : null)
+                        }} style={{
+                          padding:'9px 18px', borderRadius:24,
+                          background: isPlaced ? '#E5E7EB' : (activeBlank !== null ? C.brown + '15' : C.surface),
+                          color: isPlaced ? '#9CA3AF' : C.text,
+                          border:`2px solid ${isPlaced ? '#D1D5DB' : (activeBlank !== null ? C.brown : C.brownPale)}`,
+                          fontSize:14, fontWeight:700, cursor: isPlaced ? 'default' : 'pointer',
+                          opacity: isPlaced ? 0.5 : 1,
+                          textDecoration: isPlaced ? 'line-through' : 'none',
+                          transition:'all .15s',
+                        }}>
+                          {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
 
                 {/* Saisie libre multi-blancs (sans banque de mots) */}
@@ -1818,7 +1857,8 @@ export default function Session() {
                           const allFilled = nb.slice(0, multiNbBlanks).every(b => b && b.trim())
                           setBlanks(nb); setReponse(allFilled ? JSON.stringify(nb.slice(0, multiNbBlanks)) : null)
                         }}
-                        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.brownLight}`, borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', backgroundColor:C.surface, fontWeight:600 }}/>
+                        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${activeBlank === i ? C.brown : C.brownLight}`, borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', backgroundColor:C.surface, fontWeight:600 }}
+                        onFocus={() => setActiveBlank(i)} onBlur={() => setActiveBlank(null)}/>
                     ))}
                   </div>
                 )}

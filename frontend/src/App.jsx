@@ -28,6 +28,7 @@ import ProfilEnseignant   from './pages/enseignant/ProfilEnseignant'
 import AdminExamen        from './pages/enseignant/AdminExamen'
 import DataCollection   from './pages/DataCollection'
 import AudioCollection  from './pages/AudioCollection'
+import Contribuer       from './pages/Contribuer'
 
 import AppLayout from './components/layout/AppLayout'
 
@@ -155,16 +156,19 @@ export default function App() {
         </PrivateRoute>
       }/>
 
-      {/* ── Collecte données émotions (super_admin) ── */}
+      {/* ── Contribution données ML (tous les utilisateurs) ── */}
+      <Route path="/contribuer" element={
+        <PrivateRoute>
+          <AppLayout><Contribuer/></AppLayout>
+        </PrivateRoute>
+      }/>
       <Route path="/collect-emotions" element={
-        <PrivateRoute role="super_admin">
+        <PrivateRoute>
           <DataCollection/>
         </PrivateRoute>
       }/>
-
-      {/* ── Collecte clips audio KWS (super_admin) ── */}
       <Route path="/collect-audio" element={
-        <PrivateRoute role="super_admin">
+        <PrivateRoute>
           <AudioCollection/>
         </PrivateRoute>
       }/>

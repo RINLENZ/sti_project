@@ -10,7 +10,7 @@ import {
   GraduationCap, ChevronLeft, ChevronRight,
   BarChart2, Bell, Shield, UserCircle,
   Map, Menu, X, Home, Sun, Moon, FileText, ClipboardList,
-  Camera, Mic,
+  Camera, Mic, FlaskConical,
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
 
@@ -158,16 +158,18 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
     },
     enseignant: {
       main: [
-        { path: '/prof',          label: 'Suivi des apprenants', icon: BarChart2  },
-        { path: '/prof/examens',  label: 'Épreuves IA',          icon: FileText   },
-        { path: '/profil',        label: 'Mon profil',            icon: UserCircle },
+        { path: '/prof',          label: 'Suivi des apprenants', icon: BarChart2      },
+        { path: '/prof/examens',  label: 'Épreuves IA',          icon: FileText       },
+        { path: '/profil',        label: 'Mon profil',            icon: UserCircle     },
+        { path: '/contribuer',    label: 'Contribuer à l\'IA',   icon: FlaskConical   },
       ],
     },
     apprenant: {
       main: [
-        { path: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard  },
-        { path: '/epreuves',  label: 'Mes épreuves',    icon: ClipboardList    },
-        { path: '/profil',    label: 'Mon profil',       icon: UserCircle       },
+        { path: '/dashboard',  label: 'Tableau de bord',   icon: LayoutDashboard  },
+        { path: '/epreuves',   label: 'Mes épreuves',       icon: ClipboardList    },
+        { path: '/profil',     label: 'Mon profil',          icon: UserCircle       },
+        { path: '/contribuer', label: 'Contribuer à l\'IA', icon: FlaskConical     },
       ],
     },
   }
