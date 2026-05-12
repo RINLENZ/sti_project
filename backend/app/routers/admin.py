@@ -11,8 +11,71 @@ from ..models.cours import Matiere, Module, FamilleSituation, UniteApprentissage
 from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
 
 import sqlalchemy as sa
+import re as _re_global
 
 router = APIRouter(prefix="/api/admin", tags=["administration"])
+
+
+def _repair_and_parse_json(raw: str) -> dict:
+    """
+    Extrait et répare le JSON produit par un LLM.
+    Problèmes gérés :
+      - Blocs markdown ```json ... ```
+      - Newlines / tabs littéraux non-échappés à l'intérieur des strings
+      - Caractères de contrôle parasites
+    """
+    import json
+
+    # 1. Supprimer les balises markdown
+    text = _re_global.sub(r'```(?:json)?\s*', '', raw)
+    text = _re_global.sub(r'```', '', text).strip()
+
+    # 2. Isoler le premier objet JSON { ... }
+    start = text.find('{')
+    end   = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        text = text[start:end + 1]
+
+    # 3. Essai direct
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. Réparer les caractères de contrôle non-échappés dans les strings
+    result = []
+    in_string = False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == '\\' and in_string:
+            # Séquence d'échappement valide → garder les 2 caractères
+            result.append(c)
+            if i + 1 < len(text):
+                result.append(text[i + 1])
+                i += 2
+            else:
+                i += 1
+            continue
+        if c == '"':
+            in_string = not in_string
+            result.append(c)
+        elif in_string:
+            if c == '\n':
+                result.append('\\n')
+            elif c == '\r':
+                result.append('\\r')
+            elif c == '\t':
+                result.append('\\t')
+            elif ord(c) < 0x20:
+                pass  # ignorer les autres caractères de contrôle
+            else:
+                result.append(c)
+        else:
+            result.append(c)
+        i += 1
+
+    return json.loads(''.join(result))
 
 
 @router.get("/db-check")
@@ -606,9 +669,7 @@ Analyse cette fiche de préparation et génère un cours complet et structuré s
     )
 
     try:
-        content = message.content[0].text
-        content = content.replace("```json", "").replace("```", "").strip()
-        extracted = json.loads(content)
+        extracted = _repair_and_parse_json(message.content[0].text)
     except Exception as e:
         raise HTTPException(500, f"Erreur d'extraction : {str(e)}")
 
@@ -1048,15 +1109,10 @@ Instructions pour le type "{type_ex}" :
     except anthropic.APIError as e:
         raise HTTPException(500, f"Erreur API Claude : {str(e)}")
 
-    content = message.content[0].text.strip()
-    content = _re.sub(r'^```[a-zA-Z]*\n?', '', content)
-    content = _re.sub(r'\n?```\s*$', '', content)
-    content = content.strip()
-
     try:
-        data = _json.loads(content)
+        data = _repair_and_parse_json(message.content[0].text)
     except Exception:
-        raise HTTPException(500, f"Réponse IA invalide — relancez ({content[:80]}…)")
+        raise HTTPException(500, f"Réponse IA invalide — relancez ({message.content[0].text[:80]}…)")
 
     # Sauvegarde les exercices générés en base
     created = []
