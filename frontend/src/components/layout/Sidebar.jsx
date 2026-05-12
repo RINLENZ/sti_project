@@ -515,6 +515,7 @@ function MobileBottomNav({ activeView, onViewChange }) {
     { path: '/prof/examens',      label: 'Épreuves IA',          icon: FileText,        show: user?.role === 'enseignant' },
     { path: '/admin',             label: 'Gestion des cours',    icon: Shield,          show: user?.role === 'super_admin' },
     { path: '/admin/referentiel', label: 'Référentiel',          icon: BookOpen,        show: user?.role === 'super_admin' },
+    { path: '/contribuer',        label: 'Contribuer à l\'IA',   icon: FlaskConical,    show: ['apprenant','enseignant'].includes(user?.role) },
     { path: '/collect-emotions',  label: 'Collecte émotions',    icon: Camera,          show: user?.role === 'super_admin' },
     { path: '/collect-audio',     label: 'Collecte audio',       icon: Mic,             show: user?.role === 'super_admin' },
     { path: '/profil',            label: 'Mon profil',           icon: UserCircle,      show: true },

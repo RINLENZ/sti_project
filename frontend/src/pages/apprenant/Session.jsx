@@ -1642,7 +1642,7 @@ export default function Session() {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : !isMultiBlank ? (
               <div style={{
                 backgroundColor: C.brownPale, borderRadius: 14,
                 padding: isMobile ? '14px 16px' : '18px 22px',
@@ -1658,7 +1658,7 @@ export default function Session() {
                   {speaking ? '⏹' : '🔊'}
                 </button>
               </div>
-            )}
+            ) : null}
 
             {/* Image schéma (identification) */}
             {isIdentification && identImgUrl && (
@@ -1719,14 +1719,21 @@ export default function Session() {
             {/* ── Texte à trous — multi-blancs ── */}
             {ex.type === 'texte_trou' && isMultiBlank && (
               <div style={{ marginBottom:16 }}>
-                {/* Instruction contextuelle */}
-                {!resultat && (
-                  <p style={{ fontSize:11, fontWeight:800, color: activeBlank !== null ? C.brown : C.textSec, textTransform:'uppercase', letterSpacing:.6, margin:'0 0 10px', transition:'color .2s' }}>
-                    {activeBlank !== null
-                      ? `→ Trou ${activeBlank + 1} sélectionné — choisis un mot ci-dessous`
-                      : 'Clique sur un trou pour le sélectionner, puis choisis un mot'}
+                {/* Instruction + TTS (remplace le bloc énoncé général) */}
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 8 }}>
+                  <p style={{ fontSize:11, fontWeight:800, color: activeBlank !== null ? C.brown : C.textSec, textTransform:'uppercase', letterSpacing:.6, margin:0, transition:'color .2s', flex:1 }}>
+                    {resultat
+                      ? 'Résultat'
+                      : activeBlank !== null
+                        ? `→ Trou ${activeBlank + 1} sélectionné — choisis un mot`
+                        : 'Clique un trou, puis un mot pour le remplir'}
                   </p>
-                )}
+                  <button onClick={() => speaking ? stopTts() : tts(ex.enonce)}
+                    title={speaking ? 'Arrêter' : 'Lire l\'énoncé'}
+                    style={{ width:28, height:28, borderRadius:'50%', background: speaking ? C.red : C.brown, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}>
+                    {speaking ? '⏹' : '🔊'}
+                  </button>
+                </div>
 
                 {/* Phrase avec slots inline */}
                 <div style={{ background: C.brownPale, borderRadius: 12, padding: isMobile ? '12px 14px' : '14px 18px', marginBottom: 14, lineHeight: 2.8, fontSize: isMobile ? 14 : 15, fontWeight: 600, color: C.text }}>
