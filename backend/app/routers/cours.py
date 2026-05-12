@@ -266,7 +266,7 @@ def get_programme_par_niveau(
 
 
 @router.get("/ua/{ua_id}")
-def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db)):
+def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db), user_id: Optional[str] = None):
     """Retourne le détail complet d'une UA avec ressources et exercices."""
     ua = db.query(UniteApprentissage).filter(
         UniteApprentissage.id == ua_id
@@ -282,6 +282,21 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db)):
         Exercice.ua_id == ua_id
     ).order_by(Exercice.ordre).all()
 
+    # Score BKT moyen sur les compétences de l'UA (pour recommandation de niveau)
+    bkt_score = None
+    if user_id:
+        try:
+            uid = UUID(user_id)
+            competences = ua.competences or []
+            if competences:
+                bkt_records = db.query(BKTMastery).filter(
+                    BKTMastery.user_id == uid,
+                    BKTMastery.competence.in_(competences)
+                ).all()
+                bkt_score = round(sum(b.p_mastery for b in bkt_records) / len(bkt_records), 3) if bkt_records else 0.1
+        except Exception:
+            pass
+
     return {
         "id": str(ua.id),
         "titre": ua.titre,
@@ -290,6 +305,7 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db)):
         "situation_probleme": ua.situation_probleme,
         "prerequis": ua.prerequis,
         "duree_estimee": ua.duree_estimee,
+        "bkt_score": bkt_score,
         "ressources": [{
             "id": str(r.id),
             "titre": r.titre,

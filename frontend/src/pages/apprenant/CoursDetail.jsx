@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -176,13 +177,16 @@ export default function CoursDetail() {
   const navigate  = useNavigate()
   const { mobile: isMobile, tablet: isTablet } = useBreakpoint()
 
+  const user = useSelector(s => s.auth.user)
+
   const [ua, setUA]               = useState(null)
   const [tab, setTab]             = useState('lecon')
   const [loading, setLoading]     = useState(true)
   const [ressourceIdx, setRessourceIdx] = useState(0)
 
   useEffect(() => {
-    api.get(`/api/cours/ua/${uaId}`)
+    const url = user?.id ? `/api/cours/ua/${uaId}?user_id=${user.id}` : `/api/cours/ua/${uaId}`
+    api.get(url)
       .then(({ data }) => setUA(data))
       .catch(() => toast.error('Erreur de chargement'))
       .finally(() => setLoading(false))
@@ -447,6 +451,73 @@ export default function CoursDetail() {
               )
 
               if (!hasGroups) {
+                // Auto-groupement par difficulté si plusieurs niveaux existent
+                const diffLevels = [...new Set(allEx.map(e => e.difficulte).filter(d => d != null))].sort((a,b) => a-b)
+                const DIFF_LABELS = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile' }
+                const DIFF_COLORS = { 1: C.emerald, 2: '#D97706', 3: C.red }
+                const DIFF_ICONS  = { 1: '▲', 2: '▲▲', 3: '▲▲▲' }
+                const totalPts    = (list) => list.reduce((s,e) => s + (e.points||0), 0)
+                // Recommandation basée sur BKT (null = premier accès)
+                const bkt = ua.bkt_score
+                const recommDiff = bkt == null ? 1 : bkt < 0.4 ? 1 : bkt < 0.7 ? 2 : 3
+
+                if (diffLevels.length > 1) {
+                  return (
+                    <div style={{ animation: 'fadeUp .3s ease' }}>
+                      <div style={{ background: C.brownPale, borderRadius: 10, padding: '9px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Target size={13} color={C.brown}/>
+                        <p style={{ fontSize: 12, color: C.brown, fontWeight: 700, margin: 0 }}>
+                          {diffLevels.length} niveaux disponibles — choisis ton niveau de départ.
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                        {diffLevels.map(d => {
+                          const dEx = allEx.filter(e => e.difficulte === d)
+                          const tp  = totalPts(dEx)
+                          return (
+                            <div key={d} style={{ backgroundColor: C.surface, borderRadius: 16, border: `1.5px solid ${DIFF_COLORS[d]}30`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.08)' }}>
+                              <div style={{ padding: isMobile ? '14px 16px' : '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${DIFF_COLORS[d]}, ${DIFF_COLORS[d]}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 4px 12px ${DIFF_COLORS[d]}30` }}>
+                                  <span style={{ fontSize: 13, fontWeight: 900, color: 'white' }}>{DIFF_ICONS[d]}</span>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.text }}>{DIFF_LABELS[d]}</p>
+                                    {d === recommDiff && (
+                                      <span style={{ fontSize: 9, fontWeight: 800, color: 'white', background: C.emerald, borderRadius: 20, padding: '2px 7px', letterSpacing: .3 }}>
+                                        ✦ Recommandé
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 10 }}>
+                                    <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{dEx.length} question{dEx.length > 1 ? 's' : ''}</span>
+                                    <span style={{ fontSize: 11, color: C.brownLight, fontWeight: 600 }}>★ {tp} pts</span>
+                                  </div>
+                                </div>
+                                <button onClick={() => navigate(`/session/${uaId}?difficulte=${d}&skip=1`)} style={{ padding: isMobile ? '10px 14px' : '11px 20px', background: `linear-gradient(135deg, ${DIFF_COLORS[d]}, ${DIFF_COLORS[d]}cc)`, color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 12px ${DIFF_COLORS[d]}30`, whiteSpace: 'nowrap' }}>
+                                  <Play size={13} fill="white"/> Démarrer
+                                </button>
+                              </div>
+                              <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {dEx.map((ex, i) => (
+                                  <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ width: 18, height: 18, borderRadius: 5, background: C.brownPale, color: C.textSec, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, flexShrink: 0 }}>{i+1}</span>
+                                    <span style={{ fontSize: 12, color: C.text, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <button onClick={() => navigate(`/session/${uaId}?skip=1`)} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        Tout faire en une session · {allEx.length} questions
+                      </button>
+                    </div>
+                  )
+                }
+
+                // Un seul niveau ou pas de difficulté → liste individuelle
                 return (
                   <div style={{ animation: 'fadeUp .3s ease' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>

@@ -531,9 +531,11 @@ export default function Session() {
   const { uaId }   = useParams()
   const navigate   = useNavigate()
   const [searchParams] = useSearchParams()
-  const groupeParam    = searchParams.get('groupe')     ? parseInt(searchParams.get('groupe')) : null
+  const groupeParam     = searchParams.get('groupe')     ? parseInt(searchParams.get('groupe')) : null
+  const difficulteParam = searchParams.get('difficulte') ? parseInt(searchParams.get('difficulte')) : null
   const exerciceIdParam = searchParams.get('exercice_id') || null
-  const skipLecon      = searchParams.get('skip') === '1'
+  const rateesParam     = searchParams.get('ratees')     || null   // IDs séparés par virgule
+  const skipLecon       = searchParams.get('skip') === '1'
   const { user }   = useSelector(s => s.auth)
   const { mobile: isMobile, tablet } = useBreakpoint()
   const sessionIdRef = useRef(null)
@@ -640,8 +642,10 @@ export default function Session() {
         setUA(uaData)
         const allEx = uaData.exercices || []
         let filtered = allEx
-        if (exerciceIdParam)       filtered = allEx.filter(e => e.id === exerciceIdParam)
-        else if (groupeParam != null) filtered = allEx.filter(e => e.groupe === groupeParam)
+        if (rateesParam)                  filtered = allEx.filter(e => rateesParam.split(',').includes(e.id))
+        else if (exerciceIdParam)         filtered = allEx.filter(e => e.id === exerciceIdParam)
+        else if (groupeParam != null)     filtered = allEx.filter(e => e.groupe === groupeParam)
+        else if (difficulteParam != null) filtered = allEx.filter(e => e.difficulte === difficulteParam)
         setExercices(filtered)
         const resos = uaData.ressources || []
         setRessources(resos)
@@ -1093,6 +1097,7 @@ export default function Session() {
   if (termine) {
     const total = scores.length, reussis = scores.filter(s => s > 0).length
     const pct = total > 0 ? Math.round(reussis / total * 100) : 0
+    const rateesIds = exercices.filter((_, i) => scores[i] === 0).map(e => e.id)
     const totalPtsGagnes = scores.reduce((a, b) => a + b, 0)
     const grade = pct >= 90 ? { emoji: '🏆', label: 'Excellent !',       bg: 'linear-gradient(135deg,#F59E0B,#D97706)', anim: 'goldGlow 2s ease infinite' }
                 : pct >= 70 ? { emoji: '🌟', label: 'Très bien !',        bg: `linear-gradient(135deg,${C.emerald},#059669)`, anim: undefined }
@@ -1175,6 +1180,21 @@ export default function Session() {
 
             {/* Boutons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* Revoir les ratées — visible seulement si ≥1 question ratée et pas déjà en mode ratées */}
+              {rateesIds.length > 0 && !rateesParam && (
+                <button onClick={() => navigate(`/session/${uaId}?ratees=${rateesIds.join(',')}&skip=1`)} style={{
+                  width: '100%', padding: '14px',
+                  background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+                  color: 'white', border: 'none', borderRadius: 14,
+                  fontSize: isMobile ? 13 : 14, fontWeight: 800, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
+                  boxShadow: '0 4px 16px rgba(239,68,68,0.35)'
+                }}>
+                  🔁 Revoir les {rateesIds.length} question{rateesIds.length > 1 ? 's' : ''} ratée{rateesIds.length > 1 ? 's' : ''}
+                </button>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <button onClick={() => navigate(`/cours/${uaId}`)} style={{
                   padding: '13px', background: C.brownPale,
@@ -1429,6 +1449,9 @@ export default function Session() {
                 ? ` · ${exercices[0]?.titre || 'Question'}`
                 : groupeParam != null
                   ? ` · Exercice ${groupeParam}${exercices[0]?.groupe_titre ? ` : ${exercices[0].groupe_titre}` : ''}`
+                  : difficulteParam === 1 ? ' · Niveau Facile'
+                  : difficulteParam === 2 ? ' · Niveau Moyen'
+                  : difficulteParam === 3 ? ' · Niveau Difficile'
                   : ''}
             </p>
           )}
