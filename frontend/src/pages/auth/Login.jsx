@@ -23,7 +23,7 @@ const C = {
 }
 
 const COMPTES_TEST = [
-  { label:'Admin',      icon:'🛡️', email:'admin@sti.cm', pw:'admin1234', color:C.red,     pale:C.redPale },
+  
   { label:'Enseignant', icon:'👨‍🏫', email:'prof@sti.cm',  pw:'prof1234',  color:C.info,    pale:C.infoPale },
   { label:'Apprenant',  icon:'🎓', email:'alice@sti.cm', pw:'alice1234', color:C.emerald, pale:C.successPale },
 ]
