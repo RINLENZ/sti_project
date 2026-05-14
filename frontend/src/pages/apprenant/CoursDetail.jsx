@@ -7,7 +7,7 @@ import {
   Clock, BookOpen, ChevronRight, CheckCircle,
   Target, ArrowLeft, Play, Lock, Star
 } from 'lucide-react'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import ContentRenderer from '../../components/ContentRenderer'

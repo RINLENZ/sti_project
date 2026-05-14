@@ -6,6 +6,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import SensiaLogo from '../../components/SensiaLogo'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const C = {
   brown:       '#6B3A2A', brownDark:   '#3D1F13',
@@ -55,6 +56,7 @@ function ECGWave({ width = 34, height = 22, color = 'white' }) {
 export default function Login() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const { xs, mobile } = useBreakpoint()
   const [form,    setForm]    = useState({ email:'', password:'' })
   const [loading, setLoading] = useState(false)
   const [showPw,  setShowPw]  = useState(false)
@@ -141,6 +143,10 @@ dispatch(loginSuccess({
         *,*::before,*::after { box-sizing:border-box; }
         input::placeholder { color:#C8B8B0; font-weight:400; }
         button { font-family:inherit; cursor:pointer }
+        @keyframes spin      { to { transform:rotate(360deg); } }
+        @keyframes floatY    { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
+        @keyframes glowPulse { 0%,100% { opacity:.8; } 50% { opacity:1; } }
+        @keyframes fadeUp    { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
       `}</style>
 
       {/* Motif adinkra */}
@@ -164,8 +170,9 @@ dispatch(loginSuccess({
 
       {/* ── Carte ── */}
       <div style={{
-        backgroundColor:C.surface, borderRadius:22,
-        padding:'32px 36px 28px', width:'100%', maxWidth:440,
+        backgroundColor:C.surface, borderRadius: xs ? 18 : 22,
+        padding: xs ? '22px 16px 20px' : mobile ? '26px 24px 22px' : '32px 36px 28px',
+        width:'100%', maxWidth:440,
         boxShadow:C.shadowCard,
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(24px)',
@@ -304,8 +311,8 @@ dispatch(loginSuccess({
         
       </div>
 
-      <p style={{ textAlign:'center', marginTop:600, fontSize:12, color:C.textMuted, position:'absolute' }}>
-        © 2026 SENSIA Studs · STI ADAPTATIF ·{' '}
+      <p style={{ textAlign:'center', marginTop:610, fontSize:12, position:'absolute', color:C.textMuted }}>
+        © 2026 SenSia · STI ADAPTATIF ·{' '}
         <span style={{ color:C.brownLight, cursor:'pointer', fontWeight:600 }}>Mentions légales</span>
       </p>
     </div>

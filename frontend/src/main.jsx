@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App.jsx'
 import { store } from './store/store.js'
 import { ThemeProvider } from './styles/theme.jsx'
+import OfflineBanner from './components/OfflineBanner.jsx'
 import './styles/index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -15,6 +16,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ThemeProvider>
           <App />
           <Toaster position="top-right" />
+          <OfflineBanner />
         </ThemeProvider>
       </BrowserRouter>
     </Provider>

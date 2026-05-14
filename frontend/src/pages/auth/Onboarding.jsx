@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, GraduationCap, Brain, ChevronRight } from 'lucide-react'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { Copy, CheckCircle, GraduationCap, ChevronRight } from 'lucide-react'
+import { useTheme } from '../../styles/theme.jsx'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import SensiaLogo from '../../components/SensiaLogo'
 
 const PAYS = [
   { code: 'CM', name: 'Cameroun',      flag: '🇨🇲' },
@@ -28,6 +30,7 @@ const ORDRE_ICONS = {
 
 export default function Onboarding() {
   const { C } = useTheme()
+  const { xs, mobile } = useBreakpoint()
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
   const navigate        = useNavigate()
@@ -186,9 +189,17 @@ export default function Onboarding() {
     <div style={{
       minHeight: '100vh',
       background: `linear-gradient(135deg, ${C.brown} 0%, #3D1F13 50%, #1A0A05 100%)`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24, position: 'relative', overflow: 'hidden'
+      display: 'flex', alignItems: xs ? 'flex-start' : 'center', justifyContent: 'center',
+      padding: xs ? '16px 10px' : mobile ? 16 : 24,
+      position: 'relative', overflow: 'hidden'
     }}>
+      <style>{`
+        @keyframes spin      { to { transform: rotate(360deg); } }
+        @keyframes float     { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes glow      { 0%,100% { box-shadow: 0 8px 24px rgba(107,58,42,.6); } 50% { box-shadow: 0 12px 36px rgba(107,58,42,.9); } }
+        @keyframes slideDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeUp    { from { opacity:0; transform:translateY(16px);  } to { opacity:1; transform:translateY(0); } }
+      `}</style>
 
       {/* Motif adinkra */}
       <svg style={{ position:'absolute',inset:0,width:'100%',height:'100%',opacity:.07,pointerEvents:'none' }}>
@@ -215,8 +226,11 @@ export default function Onboarding() {
 
       {/* ── Carte principale ── */}
       <div style={{
-        backgroundColor: C.surface, borderRadius: 28,
-        padding: '36px 40px', maxWidth: 520, width: '100%',
+        backgroundColor: C.surface,
+        borderRadius: xs ? 20 : 28,
+        padding: xs ? '22px 16px' : mobile ? '28px 22px' : '36px 40px',
+        maxWidth: 520, width: '100%',
+        marginTop: xs ? 0 : undefined,
         boxShadow: '0 32px 80px rgba(0,0,0,.5)',
         border: '1px solid rgba(255,255,255,.08)',
         animation: 'fadeUp .5s ease', position: 'relative'
@@ -224,16 +238,9 @@ export default function Onboarding() {
 
         {/* Logo */}
         <div style={{ textAlign:'center', marginBottom: 24 }}>
-          <div style={{
-            width:64, height:64, borderRadius:20, margin:'0 auto 14px',
-            background:`linear-gradient(135deg, ${C.brown}, ${C.gold})`,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            animation:'glow 3s infinite, float 4s ease-in-out infinite',
-            boxShadow:`0 8px 24px ${C.brown}60`
-          }}>
-            <Brain size={30} color="white"/>
+          <div style={{ display:'flex', justifyContent:'center', marginBottom:12, animation:'float 4s ease-in-out infinite' }}>
+            <SensiaLogo size={40}/>
           </div>
-          <h1 style={{ fontSize:22, fontWeight:900, color:C.brown, marginBottom:4 }}>EduSmart AI</h1>
           <p style={{ fontSize:13, color:C.textSec, fontWeight:600 }}>
             Bienvenue, <span style={{ color:C.brown, fontWeight:800 }}>{user?.prenom}</span> ! 👋
           </p>
@@ -257,10 +264,11 @@ export default function Onboarding() {
               </div>
               {i < totalSteps - 1 && (
                 <div style={{
-                  width: Math.max(20, Math.floor(280 / totalSteps)),
-                  height:2,
+                  flex: 1,
+                  minWidth: xs ? 12 : 16,
+                  height: 2,
                   backgroundColor: getVisualStep() > s ? C.brown : '#E5E7EB',
-                  transition:'background .3s'
+                  transition: 'background .3s'
                 }}/>
               )}
             </div>
@@ -286,6 +294,10 @@ export default function Onboarding() {
                     setSelectedOrdre(null)
                     setSelectedFiliere(null)
                     setSelectedNiveau(null)
+                    setTimeout(() => {
+                      if (cycle.ordres.length > 0) setStep(2)
+                      else setStep(4)
+                    }, 220)
                   }}
                   style={{
                     padding:'16px 20px', borderRadius:14,
@@ -309,7 +321,6 @@ export default function Onboarding() {
                 </div>
               ))}
             </div>
-            <BtnNext disabled={!canNext} onClick={nextStep}/>
           </div>
         )}
 
@@ -330,6 +341,10 @@ export default function Onboarding() {
                   onClick={() => {
                     setSelectedOrdre(ordre)
                     setSelectedFiliere(null)
+                    setTimeout(() => {
+                      if (ordre.filieres.length > 0) setStep(3)
+                      else setStep(4)
+                    }, 220)
                   }}
                   style={{
                     padding:'14px 18px', borderRadius:14,
@@ -353,10 +368,7 @@ export default function Onboarding() {
                 </div>
               ))}
             </div>
-            <div style={{ display:'flex', gap:10 }}>
-              <BtnBack onClick={prevStep}/>
-              <BtnNext disabled={!canNext} onClick={nextStep}/>
-            </div>
+            <BtnBack onClick={prevStep}/>
           </div>
         )}
 
@@ -378,7 +390,7 @@ export default function Onboarding() {
             }}>
               {filieresDisponibles.map(filiere => (
                 <div key={filiere.id}
-                  onClick={() => setSelectedFiliere(filiere)}
+                  onClick={() => { setSelectedFiliere(filiere); setTimeout(() => setStep(4), 220) }}
                   style={{
                     padding:'12px 14px', borderRadius:12,
                     border:`2px solid ${selectedFiliere?.id === filiere.id ? C.brown : C.brownPale}`,
@@ -407,10 +419,7 @@ export default function Onboarding() {
                 </div>
               ))}
             </div>
-            <div style={{ display:'flex', gap:10 }}>
-              <BtnBack onClick={prevStep}/>
-              <BtnNext disabled={!canNext} onClick={nextStep}/>
-            </div>
+            <BtnBack onClick={prevStep}/>
           </div>
         )}
 
@@ -433,7 +442,7 @@ export default function Onboarding() {
             }}>
               {niveauxDisponibles.map(niveau => (
                 <div key={niveau.id}
-                  onClick={() => setSelectedNiveau(niveau)}
+                  onClick={() => { setSelectedNiveau(niveau); setTimeout(() => setStep(5), 220) }}
                   style={{
                     padding:'14px 16px', borderRadius:12,
                     border:`2px solid ${selectedNiveau?.id === niveau.id ? C.brown : C.brownPale}`,
@@ -461,10 +470,7 @@ export default function Onboarding() {
                 </div>
               ))}
             </div>
-            <div style={{ display:'flex', gap:10 }}>
-              <BtnBack onClick={prevStep}/>
-              <BtnNext disabled={!canNext} onClick={nextStep}/>
-            </div>
+            <BtnBack onClick={prevStep}/>
           </div>
         )}
 
@@ -479,10 +485,10 @@ export default function Onboarding() {
             <p style={{ color:C.textSec, fontSize:13, marginBottom:20 }}>
               Pour adapter le contenu à ton contexte local
             </p>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:8, marginBottom:24 }}>
+            <div style={{ display:'grid', gridTemplateColumns: mobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap:8, marginBottom:24 }}>
               {PAYS.map(p => (
                 <div key={p.code}
-                  onClick={() => setSelectedPays(p)}
+                  onClick={() => { setSelectedPays(p); setTimeout(() => setStep(6), 220) }}
                   style={{
                     padding:'12px 8px', borderRadius:12, textAlign:'center',
                     border:`2px solid ${selectedPays?.code === p.code ? C.brown : C.brownPale}`,
@@ -498,10 +504,7 @@ export default function Onboarding() {
                 </div>
               ))}
             </div>
-            <div style={{ display:'flex', gap:10 }}>
-              <BtnBack onClick={prevStep}/>
-              <BtnNext disabled={!canNext} onClick={nextStep} label="Voir le récapitulatif"/>
-            </div>
+            <BtnBack onClick={prevStep}/>
           </div>
         )}
 
@@ -617,18 +620,18 @@ function BtnNext({ onClick, disabled, label = 'Continuer →' }) {
   const { C } = useTheme()
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      flex:2, padding:'13px',
+      flex:2, padding:'12px',
       background: disabled
         ? '#E5E7EB'
         : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
       color: disabled ? C.textSec : 'white',
-      border:'none', borderRadius:12, fontSize:14, fontWeight:800,
+      border:'none', borderRadius:12, fontSize:13, fontWeight:800,
       cursor: disabled ? 'not-allowed' : 'pointer',
       boxShadow: disabled ? 'none' : `0 4px 18px ${C.brown}35`,
       transition:'all .2s ease',
       display:'flex', alignItems:'center', justifyContent:'center', gap:6
     }}>
-      {label} {!disabled && <ChevronRight size={16}/>}
+      {label} {!disabled && <ChevronRight size={15}/>}
     </button>
   )
 }
@@ -637,9 +640,10 @@ function BtnBack({ onClick }) {
   const { C } = useTheme()
   return (
     <button onClick={onClick} style={{
-      flex:1, padding:'13px',
+      padding:'12px 18px',
       background: C.brownPale, color: C.brown,
-      border:'none', borderRadius:12, fontSize:14, fontWeight:700, cursor:'pointer'
+      border:'none', borderRadius:12, fontSize:13, fontWeight:700, cursor:'pointer',
+      whiteSpace: 'nowrap',
     }}>
       ← Retour
     </button>

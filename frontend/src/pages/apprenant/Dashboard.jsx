@@ -32,6 +32,92 @@ const UAStatus = pct => {
 
 /* ─── Sub-components ────────────────────────────────────────────── */
 
+/* ── XP Ring SVG (hero) ── */
+const XPRing = ({ pct, size = 72, stroke = 7 }) => {
+  const r      = (size - stroke) / 2
+  const circ   = 2 * Math.PI * r
+  const offset = circ - (Math.min(100, Math.max(0, pct)) / 100) * circ
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="white" strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: size > 65 ? 16 : 13, fontWeight: 900, color: 'white', lineHeight: 1 }}>{Math.round(pct)}</span>
+        <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>%</span>
+      </div>
+    </div>
+  )
+}
+
+/* ── Parcours visuel — strip compact ── */
+const PathVisual = ({ modulesFamilles, progression }) => {
+  const { C } = useTheme()
+  if (!modulesFamilles.length) return null
+
+  const nodes = modulesFamilles.map(({ module, familles }) => {
+    const totalUA = familles.reduce((a, f) => a + (f.unites || []).length, 0)
+    const doneUA  = familles.reduce((a, f) => a + (f.unites || []).filter(ua => {
+      const ex = (progression?.details || []).filter(d => d.correct && String(d.ua_id) === String(ua.id)).length
+      return ua.nb_exercices > 0 && ex >= ua.nb_exercices
+    }).length, 0)
+    const started = familles.some(f => (f.unites || []).some(ua =>
+      (progression?.details || []).some(d => String(d.ua_id) === String(ua.id))
+    ))
+    const done = doneUA === totalUA && totalUA > 0
+    return { module, done, started }
+  })
+
+  const doneCount = nodes.filter(n => n.done).length
+
+  return (
+    <div style={{ marginBottom: 14, animation: 'fadeUp .48s ease' }}>
+      {/* Ligne titre + barre */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <TrendingUp size={12} color={C.brown} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec }}>Parcours</span>
+        <span style={{ fontSize: 10, color: C.textMuted }}>{doneCount}/{nodes.length}</span>
+        <div style={{ flex: 1, height: 2, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${nodes.length > 0 ? (doneCount / nodes.length) * 100 : 0}%`, background: C.brown, transition: 'width .9s ease' }} />
+        </div>
+      </div>
+      {/* Dots de modules */}
+      <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', minWidth: 'max-content' }}>
+          {nodes.map(({ module, done, started }, i) => (
+            <div key={module.id} style={{ display: 'flex', alignItems: 'center' }}>
+              <div
+                title={module.titre || `Module ${module.numero}`}
+                style={{
+                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                  background: done
+                    ? `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`
+                    : started ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
+                    : C.brownGhost,
+                  border: `2px solid ${done ? C.emeraldDark : started ? C.brown : C.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: done || started ? 'white' : C.textMuted,
+                  fontSize: done ? 13 : 11, fontWeight: 800,
+                  boxShadow: done ? `0 2px 8px ${C.emerald}40` : started ? `0 2px 8px ${C.brown}30` : 'none',
+                  cursor: 'default', flexShrink: 0,
+                }}
+              >
+                {done ? '✓' : i + 1}
+              </div>
+              {i < nodes.length - 1 && (
+                <div style={{ width: 16, height: 2, background: done ? C.emerald : C.border, flexShrink: 0 }} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const ProgressBar = ({ value, color, h = 5, bg }) => {
   const { C } = useTheme()
   const col = color ?? C.emerald
@@ -696,16 +782,34 @@ export default function Dashboard() {
 
       {progression && (
         <div style={{ marginTop: 14, position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, marginBottom: 5, opacity: .85 }}>
-            <span>Progression globale</span>
-            <span>{progression.pourcentage}%</span>
+          {/* XPRing + barre */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <XPRing pct={progression.pourcentage} size={xs ? 58 : 72} stroke={7} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, marginBottom: 5, opacity: .85 }}>
+                <span>Progression globale</span>
+                <span>{progression.pourcentage}%</span>
+              </div>
+              <div style={{ height: 6, background: 'rgba(255,255,255,.2)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 4, background: 'white', width: `${progression.pourcentage}%`, transition: 'width .9s cubic-bezier(.4,0,.2,1)' }} />
+              </div>
+            </div>
           </div>
-          <div style={{ height: 6, background: 'rgba(255,255,255,.2)', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 4, background: 'white', width: `${progression.pourcentage}%`, transition: 'width .9s cubic-bezier(.4,0,.2,1)' }} />
+          {/* Chips de stats — style Duolingo */}
+          <div style={{ display: 'flex', gap: 7, marginTop: 11, flexWrap: 'wrap' }}>
+            {[
+              { Icon: Award,    val: progression.score_total,                    unit: 'pts'       },
+              { Icon: Target,   val: progression.exercices_reussis,              unit: 'réussis'   },
+              { Icon: Brain,    val: bktData?.nb_competences_maitrisees ?? 0,    unit: 'maîtrisés' },
+              { Icon: BookOpen, val: totalUA,                                    unit: 'cours'     },
+            ].map(({ Icon, val, unit }) => (
+              <div key={unit} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.13)', borderRadius: 20, padding: '4px 11px' }}>
+                <Icon size={11} color="rgba(255,255,255,0.7)" />
+                <span style={{ fontSize: 12, fontWeight: 800, color: 'white', lineHeight: 1 }}>{val}</span>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{unit}</span>
+              </div>
+            ))}
           </div>
-          <p style={{ fontSize: 10, opacity: .55, marginTop: 4 }}>
-            {progression.exercices_reussis} / {progression.total_exercices} exercices · {progression.score_total} pts
-          </p>
         </div>
       )}
     </div>
@@ -807,52 +911,56 @@ export default function Dashboard() {
       `}</style>
 
       {Hero}
-      {StatCards}
 
+      {/* ── Activité recommandée — action immédiate ── */}
+      {RecoCard}
+
+      {/* ── Parcours — strip compact ── */}
+      <PathVisual modulesFamilles={modulesFamilles} progression={progression} />
+
+      {/* ── Titre + tabs matière — pleine largeur ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <BookOpen size={14} color={C.brown} />
+        <h2 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Mes cours</h2>
+        <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
+          {modulesFamilles.length} module{modulesFamilles.length > 1 ? 's' : ''}
+        </span>
+      </div>
+      {matieres.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
+          {matieres.map(mat => {
+            const active = matActive?.id === mat.id
+            return (
+              <button key={mat.id} onClick={() => selectMatiere(mat)} style={{
+                padding: '6px 14px', borderRadius: 20,
+                border: `2px solid ${active ? C.brown : C.border}`,
+                background: active ? C.brown : C.surface,
+                color: active ? 'white' : C.textSec,
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                whiteSpace: 'nowrap', transition: 'all .2s',
+                boxShadow: active ? `0 3px 10px ${C.brown}30` : 'none',
+              }}>
+                {mat.icone || '📚'} {mat.nom}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Two-column : démarre au niveau du radar BKT ── */}
       <div style={{ display: 'flex', gap: mobile ? 0 : 18, flexDirection: mobile ? 'column' : 'row', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
-          {RecoCard}
-
-          
-
-          {/* Titre section */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <BookOpen size={14} color={C.brown} />
-            <h2 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Mes cours</h2>
-            <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
-              {modulesFamilles.length} module{modulesFamilles.length > 1 ? 's' : ''}
-            </span>
-          </div>
-
-          {/* Sélecteur matière si plusieurs — avant le radar pour filtrer */}
-          {matieres.length > 1 && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
-              {matieres.map(mat => {
-                const active = matActive?.id === mat.id
-                return (
-                  <button key={mat.id} onClick={() => selectMatiere(mat)} style={{
-                    padding: '6px 14px', borderRadius: 20,
-                    border: `2px solid ${active ? C.brown : C.border}`,
-                    background: active ? C.brown : C.surface,
-                    color: active ? 'white' : C.textSec,
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                    whiteSpace: 'nowrap', transition: 'all .2s',
-                    boxShadow: active ? `0 3px 10px ${C.brown}30` : 'none',
-                  }}>
-                    {mat.icone || '📚'} {mat.nom}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {/* BKT Radar */}
+          {/* BKT Radar — maîtrise par compétence */}
           {bktData && Object.keys(bktData.competences).length > 0 && (
-            <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '16px 18px', marginBottom: 14, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: `1px solid ${C.border}`, boxShadow: '0 2px 10px rgba(107,58,42,0.07)', animation: 'fadeUp .5s ease' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
                 <Brain size={14} color={C.brown} />
                 <h3 style={{ fontSize: 13, fontWeight: 800, color: C.brown, margin: 0 }}>Maîtrise par compétence</h3>
-                <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>BKT</span>
+                {bktData.nb_competences_maitrisees > 0 && (
+                  <span style={{ fontSize: 10, color: C.emerald, fontWeight: 700, marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircle2 size={11} /> {bktData.nb_competences_maitrisees} maîtrisée(s)
+                  </span>
+                )}
               </div>
               <ResponsiveContainer width="100%" height={mobile ? 180 : 220}>
                 <RadarChart data={Object.entries(bktData.competences).map(([comp, val]) => ({

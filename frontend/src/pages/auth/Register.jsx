@@ -6,6 +6,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react'
 import SensiaLogo from '../../components/SensiaLogo'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const C = {
   brown:       '#6B3A2A', brownDark:   '#3D1F13',
@@ -85,6 +86,7 @@ function getPwStrength(pw) {
 export default function Register() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const { xs, mobile } = useBreakpoint()
 
   const [form,    setForm]    = useState({ prenom:'', nom:'', email:'', password:'', confirm:'' })
   const [loading, setLoading] = useState(false)
@@ -126,7 +128,7 @@ dispatch(loginSuccess({
   }
 }))
       toast.success('Compte créé ! Bienvenue 🎉')
-      navigate('/onboarding-enseignant')
+      navigate('/onboarding')
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Erreur lors de la création du compte')
     } finally {
@@ -162,6 +164,10 @@ dispatch(loginSuccess({
         *,*::before,*::after { box-sizing:border-box; }
         input::placeholder { color:#C8B8B0; font-weight:400; }
         button { font-family:inherit; cursor:pointer }
+        @keyframes spin      { to { transform:rotate(360deg); } }
+        @keyframes floatY    { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
+        @keyframes glowPulse { 0%,100% { opacity:.8; } 50% { opacity:1; } }
+        @keyframes fadeUp    { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
       `}</style>
 
       {/* Motif adinkra */}
@@ -185,8 +191,9 @@ dispatch(loginSuccess({
 
       {/* ── Carte ── */}
       <div style={{
-        backgroundColor:C.surface, borderRadius:22,
-        padding:'32px 36px 28px', width:'100%', maxWidth:440,
+        backgroundColor:C.surface, borderRadius: xs ? 18 : 22,
+        padding: xs ? '22px 16px 20px' : mobile ? '26px 24px 22px' : '32px 36px 28px',
+        width:'100%', maxWidth:440,
         boxShadow:'0 28px 72px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07)',
         animation:'fadeUp .45s cubic-bezier(.22,1,.36,1) both',
         position:'relative',
@@ -218,8 +225,8 @@ dispatch(loginSuccess({
         {/* ── Formulaire ── */}
         <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:13 }}>
 
-          {/* Prénom + Nom côte à côte */}
-          <div style={{ display:'flex', gap:12 }}>
+          {/* Prénom + Nom — côte à côte sur desktop, empilés sur xs */}
+          <div style={{ display:'flex', gap:12, flexDirection: xs ? 'column' : 'row' }}>
             <div style={{ flex:'1 1 0', minWidth:0 }}>
               <Field id="prenom" label="Prénom" placeholder="Alice" icon={User}
                 value={form.prenom} onChange={set('prenom')} focused={focused} setFocused={setFocused}/>
@@ -321,8 +328,8 @@ dispatch(loginSuccess({
         </button>
       </div>
 
-       <p style={{ textAlign:'center', marginTop:630, fontSize:12, color:C.textMuted, position:'absolute' }}>
-        © 2026 SENSIA Studs · STI ADAPTATIF ·{' '}
+      <p style={{ textAlign:'center', marginTop:20, fontSize:12, color:C.textMuted }}>
+        © 2026 SenSia · STI ADAPTATIF ·{' '}
         <span style={{ color:C.brownLight, cursor:'pointer', fontWeight:600 }}>Mentions légales</span>
       </p>
     </div>

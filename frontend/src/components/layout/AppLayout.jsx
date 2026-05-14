@@ -1,28 +1,26 @@
 import { useState } from 'react'
-import Sidebar from './Sidebar'
+import NavRail   from './NavRail'
+import MobileNav from './MobileNav'
 import ParcoursPage from './ParcoursPage'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { useTheme } from '../../styles/theme.jsx'
 
 export default function AppLayout({ children }) {
-  const [collapsed,  setCollapsed]  = useState(false)
   const [activeView, setActiveView] = useState('main') // 'main' | 'parcours'
   const { mobile } = useBreakpoint()
   const { C } = useTheme()
 
   return (
     <div style={{
-      display: 'flex',
-      minHeight: '100vh',
-      flexDirection: mobile ? 'column' : 'row',
-      background: C.bg,
+      display:       'flex',
+      minHeight:     '100vh',
+      flexDirection: 'row',
+      background:     C.bg,
     }}>
 
-      {/* ── Sidebar desktop uniquement ── */}
+      {/* ── NavRail desktop ── */}
       {!mobile && (
-        <Sidebar
-          collapsed={collapsed}
-          setCollapsed={setCollapsed}
+        <NavRail
           activeView={activeView}
           onViewChange={setActiveView}
         />
@@ -30,10 +28,11 @@ export default function AppLayout({ children }) {
 
       {/* ── Zone principale ── */}
       <main style={{
-        flex: 1,
-        overflowX: 'hidden',
-        minWidth: 0,
-        paddingBottom: mobile ? 72 : 0,
+        flex:          1,
+        overflowX:     'hidden',
+        minWidth:       0,
+        // Espace pour la barre mobile en bas
+        paddingBottom:  mobile ? 68 : 0,
       }}>
         {activeView === 'parcours'
           ? <ParcoursPage onBack={() => setActiveView('main')} />
@@ -41,10 +40,9 @@ export default function AppLayout({ children }) {
         }
       </main>
 
-      {/* ── Bottom nav mobile uniquement ── */}
+      {/* ── MobileNav bottom ── */}
       {mobile && (
-        <Sidebar
-          mobile
+        <MobileNav
           activeView={activeView}
           onViewChange={setActiveView}
         />

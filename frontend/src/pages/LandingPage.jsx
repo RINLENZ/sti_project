@@ -204,6 +204,129 @@ function Navbar({ onLogin }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   APP PREVIEW MOCKUP
+═══════════════════════════════════════════════════════════════ */
+function AppPreview() {
+  const chips = [
+    { icon:'⚡', val:'1 240', unit:'pts' },
+    { icon:'✓',  val:'48',   unit:'réussis' },
+    { icon:'🧠', val:'3',    unit:'maîtrisés' },
+    { icon:'📚', val:'12',   unit:'cours' },
+  ]
+  const bars = [
+    { label:'Algorithmique', pct:82, color:'#F0B429' },
+    { label:'Réseaux',       pct:61, color:'#00C9A7' },
+    { label:'SQL',           pct:45, color:'#38BDF8' },
+  ]
+  const modules = [
+    { done:true }, { done:true }, { active:true }, { done:false }, { done:false },
+  ]
+
+  return (
+    <div style={{
+      width: '100%', maxWidth: 420,
+      background: 'linear-gradient(145deg, #2a1a0e, #1d0f05)',
+      borderRadius: 20, overflow: 'hidden',
+      border: '1px solid rgba(255,255,255,0.1)',
+      boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
+      animation: 'floatPreview 6s ease-in-out infinite',
+      transform: 'rotate(-1.5deg)',
+      flexShrink: 0,
+    }}>
+      {/* Fausse barre de navigateur */}
+      <div style={{ background:'rgba(0,0,0,0.3)', padding:'8px 14px', display:'flex', alignItems:'center', gap:6, borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+        {['#FF5F57','#FFBD2E','#28C840'].map(c => (
+          <div key={c} style={{ width:9, height:9, borderRadius:'50%', background:c, opacity:.8 }}/>
+        ))}
+        <div style={{ flex:1, height:14, background:'rgba(255,255,255,0.06)', borderRadius:4, marginLeft:8 }}/>
+      </div>
+
+      <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:12 }}>
+        {/* Hero card */}
+        <div style={{ background:'linear-gradient(135deg, #6B3A2A, #8B4E35)', borderRadius:14, padding:'14px', position:'relative', overflow:'hidden' }}>
+          <div style={{ position:'absolute', inset:0, opacity:.04, backgroundImage:'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize:'16px 16px' }}/>
+          <div style={{ fontSize:11, fontWeight:800, color:'rgba(255,255,255,0.7)', marginBottom:4 }}>Bon retour, Sarah 👋</div>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+            {/* Mini XPRing */}
+            <svg width={44} height={44} style={{ transform:'rotate(-90deg)', flexShrink:0 }}>
+              <circle cx={22} cy={22} r={17} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={5}/>
+              <circle cx={22} cy={22} r={17} fill="none" stroke="white" strokeWidth={5}
+                strokeDasharray={2*Math.PI*17} strokeDashoffset={2*Math.PI*17*(1-.68)}
+                strokeLinecap="round"/>
+            </svg>
+            <div style={{ flex:1 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.85)', marginBottom:4 }}>
+                <span>Progression</span><span>68%</span>
+              </div>
+              <div style={{ height:4, background:'rgba(255,255,255,0.2)', borderRadius:2, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:'68%', background:'white', borderRadius:2 }}/>
+              </div>
+            </div>
+          </div>
+          {/* Chips */}
+          <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+            {chips.map(({ icon, val, unit }) => (
+              <div key={unit} style={{ display:'flex', alignItems:'center', gap:4, background:'rgba(255,255,255,0.13)', borderRadius:20, padding:'3px 8px' }}>
+                <span style={{ fontSize:9 }}>{icon}</span>
+                <span style={{ fontSize:10, fontWeight:800, color:'white' }}>{val}</span>
+                <span style={{ fontSize:8, color:'rgba(255,255,255,0.55)' }}>{unit}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Parcours strip */}
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,0.5)' }}>Parcours</span>
+          <div style={{ flex:1, height:2, background:'rgba(255,255,255,0.08)', borderRadius:1 }}>
+            <div style={{ height:'100%', width:'40%', background:'#F0B429', borderRadius:1 }}/>
+          </div>
+          {modules.map((m, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center' }}>
+              <div style={{
+                width:18, height:18, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                background: m.done ? '#00C9A7' : m.active ? '#F0B429' : 'rgba(255,255,255,0.1)',
+                fontSize:8, fontWeight:800, color:'white', flexShrink:0,
+              }}>
+                {m.done ? '✓' : i+1}
+              </div>
+              {i < modules.length-1 && <div style={{ width:8, height:1.5, background: m.done ? '#00C9A7' : 'rgba(255,255,255,0.1)' }}/>}
+            </div>
+          ))}
+        </div>
+
+        {/* BKT bars */}
+        <div style={{ background:'rgba(255,255,255,0.04)', borderRadius:12, padding:'10px 12px', border:'1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ fontSize:10, fontWeight:800, color:'rgba(255,255,255,0.6)', marginBottom:9 }}>🧠 Maîtrise BKT</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+            {bars.map(({ label, pct, color }) => (
+              <div key={label}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'rgba(255,255,255,0.6)', marginBottom:3 }}>
+                  <span>{label}</span><span style={{ color, fontWeight:700 }}>{pct}%</span>
+                </div>
+                <div style={{ height:3, background:'rgba(255,255,255,0.08)', borderRadius:2, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${pct}%`, background:color, borderRadius:2 }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Cours card */}
+        <div style={{ background:'rgba(0,201,167,0.1)', borderRadius:12, padding:'10px 12px', border:'1px solid rgba(0,201,167,0.2)', display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ width:32, height:32, borderRadius:9, background:'linear-gradient(135deg, #00C9A7, #00A896)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>⚡</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:10, fontWeight:800, color:'white', marginBottom:2 }}>Structures de données</div>
+            <div style={{ fontSize:8, color:'rgba(255,255,255,0.5)' }}>Maîtrise BKT : 61%</div>
+          </div>
+          <div style={{ fontSize:9, fontWeight:800, color:'#00C9A7', flexShrink:0 }}>Continuer →</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════
    HERO
 ═══════════════════════════════════════════════════════════════ */
 function HeroSection({ onLogin }) {
@@ -820,6 +943,36 @@ export default function LandingPage() {
         @media (max-width: 768px) {
           .nav-links, .nav-ctas { display: none !important; }
           .burger { display: flex !important; }
+        }
+        @keyframes orbFloat1 {
+          0%,100% { transform: translate(0,0) scale(1); }
+          33%      { transform: translate(40px,-60px) scale(1.05); }
+          66%      { transform: translate(-30px,40px) scale(.97); }
+        }
+        @keyframes orbFloat2 {
+          0%,100% { transform: translate(0,0) scale(1); }
+          40%      { transform: translate(-50px,70px) scale(1.04); }
+          70%      { transform: translate(30px,-40px) scale(.96); }
+        }
+        @keyframes orbFloat3 {
+          0%,100% { transform: translate(0,0) scale(1); }
+          50%      { transform: translate(60px,-50px) scale(1.06); }
+        }
+        @keyframes pulse {
+          0%,100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: .5; transform: scale(1.4); }
+        }
+        @keyframes blink {
+          0%,100% { opacity: 1; }
+          50%      { opacity: 0; }
+        }
+        @keyframes scrollPulse {
+          0%,100% { opacity: .4; transform: scaleY(1); }
+          50%      { opacity: .8; transform: scaleY(1.15); }
+        }
+        @keyframes floatPreview {
+          0%,100% { transform: translateY(0px) rotate(-1.5deg); }
+          50%      { transform: translateY(-12px) rotate(-1.5deg); }
         }
       `}</style>
 
