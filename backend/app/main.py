@@ -1,5 +1,8 @@
+import asyncio
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 import redis as redis_lib
 import sqlalchemy as sa
@@ -11,6 +14,7 @@ from .routers import interactions
 from .models import cours
 from .models import examen as _examen_models         # noqa: F401 — registers tables
 from .models import notification as _notif_models    # noqa: F401 — registers tables
+from .models import chat as _chat_models             # noqa: F401 — registers tables
 from .routers import cours
 from .routers import bkt
 from .routers import admin
@@ -18,6 +22,8 @@ from .routers import tuteur
 from .routers import annotation
 from .routers import examen
 from .routers import notifications
+from .routers import ws as ws_router
+from .routers import chat as chat_router
 
 app = FastAPI(
     title="STI Adaptatif — API",
@@ -25,6 +31,12 @@ app = FastAPI(
     version="0.1.0"
 )
 
+
+@app.on_event("startup")
+async def init_ws_loop():
+    """Initialise la boucle asyncio pour les push WebSocket depuis les services sync."""
+    from .ws_manager import init_loop
+    init_loop(asyncio.get_event_loop())
 
 @app.on_event("startup")
 def create_missing_tables():
@@ -40,6 +52,25 @@ def create_missing_tables():
         conn.execute(sa.text(
             "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS commentaire_enseignant TEXT"
         ))
+        # Convertit JSON → JSONB pour les colonnes de chat (si table déjà existante)
+        conn.execute(sa.text("""
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.columns
+                           WHERE table_name='chat_rooms' AND column_name='membres'
+                           AND data_type='json') THEN
+                    ALTER TABLE chat_rooms ALTER COLUMN membres TYPE JSONB USING membres::text::jsonb;
+                END IF;
+            END $$;
+        """))
+        conn.execute(sa.text("""
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.columns
+                           WHERE table_name='chat_messages' AND column_name='lu_par'
+                           AND data_type='json') THEN
+                    ALTER TABLE chat_messages ALTER COLUMN lu_par TYPE JSONB USING lu_par::text::jsonb;
+                END IF;
+            END $$;
+        """))
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────
 try:
@@ -75,11 +106,12 @@ async def rate_limit_middleware(request: Request, call_next):
             )
     return await call_next(request)
 
+app.add_middleware(GZipMiddleware, minimum_size=512)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -92,6 +124,8 @@ app.include_router(admin.router)
 app.include_router(annotation.router)
 app.include_router(examen.router)
 app.include_router(notifications.router)
+app.include_router(ws_router.router)
+app.include_router(chat_router.router)
 
 @app.get("/health")
 def health_check():

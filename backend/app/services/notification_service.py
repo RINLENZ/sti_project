@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
 from ..models.notification import Notification
+from ..ws_manager import push_to_user
 
 
 def create_notification(
@@ -20,6 +21,19 @@ def create_notification(
     )
     db.add(notif)
     db.commit()
+    db.refresh(notif)
+
+    # Pousse la notification en temps réel via WebSocket
+    push_to_user(str(user_id), {
+        "type":       "notification",
+        "id":         str(notif.id),
+        "notif_type": notif.type,
+        "titre":      notif.titre,
+        "message":    notif.message,
+        "meta":       notif.meta or {},
+        "created_at": notif.created_at.isoformat() if notif.created_at else None,
+    })
+
     return notif
 
 

@@ -1,18 +1,19 @@
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import api from '../../services/api'
 import {
   LayoutDashboard, BookOpen, LogOut, GraduationCap,
   BarChart2, Bell, Shield, UserCircle, Map,
   Sun, Moon, FileText, ClipboardList,
-  Camera, Mic, FlaskConical, PenLine, ChevronRight,
+  Camera, Mic, FlaskConical, PenLine, ChevronRight, MessageCircle,
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
 import SensiaLogo from '../SensiaLogo'
+import { useWebSocket } from '../../hooks/useWebSocket'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const RAIL_W = 64
@@ -409,7 +410,7 @@ export default function NavRail({ activeView, onViewChange }) {
       .catch(() => {})
   }, [user?.role])
 
-  // Charge notifications (polling 60s)
+  // Chargement initial des notifications + polling de secours (120s)
   useEffect(() => {
     if (!user) return
     function load() {
@@ -419,9 +420,31 @@ export default function NavRail({ activeView, onViewChange }) {
       }).catch(() => {})
     }
     load()
-    const id = setInterval(load, 60000)
+    const id = setInterval(load, 120000)
     return () => clearInterval(id)
   }, [user?.id])
+
+  // Notifications temps réel via WebSocket
+  const handleWsNotif = useCallback((data) => {
+    if (data.type === 'notification') {
+      const newNotif = {
+        id:         data.id,
+        type:       data.notif_type,
+        titre:      data.titre,
+        message:    data.message,
+        meta:       data.meta || {},
+        lu:         false,
+        created_at: data.created_at,
+      }
+      setNotifications(prev => [newNotif, ...prev.slice(0, 19)])
+      setNbNonLues(prev => prev + 1)
+    }
+  }, [])
+
+  useWebSocket('/ws/notifications', {
+    onMessage: handleWsNotif,
+    enabled: !!user,
+  })
 
   function openNotif() {
     if (!notifOpen && bellRef.current) {
@@ -465,17 +488,19 @@ export default function NavRail({ activeView, onViewChange }) {
     },
     enseignant: {
       main: [
-        { path: '/prof',         label: 'Suivi des apprenants', icon: BarChart2    },
-        { path: '/corrections',  label: 'Corrections',          icon: PenLine      },
-        { path: '/prof/examens', label: 'Épreuves IA',          icon: FileText     },
-        { path: '/profil',       label: 'Mon profil',            icon: UserCircle   },
-        { path: '/contribuer',   label: "Contribuer à l'IA",    icon: FlaskConical },
+        { path: '/prof',         label: 'Suivi des apprenants', icon: BarChart2      },
+        { path: '/corrections',  label: 'Corrections',          icon: PenLine        },
+        { path: '/prof/examens', label: 'Épreuves IA',          icon: FileText       },
+        { path: '/chat',         label: 'Messages',             icon: MessageCircle  },
+        { path: '/profil',       label: 'Mon profil',            icon: UserCircle     },
+        { path: '/contribuer',   label: "Contribuer à l'IA",    icon: FlaskConical   },
       ],
     },
     apprenant: {
       main: [
         { path: '/dashboard',  label: 'Tableau de bord',  icon: LayoutDashboard },
         { path: '/epreuves',   label: 'Mes épreuves',      icon: ClipboardList   },
+        { path: '/chat',       label: 'Messages',          icon: MessageCircle   },
         { path: '/profil',     label: 'Mon profil',         icon: UserCircle      },
         { path: '/contribuer', label: "Contribuer à l'IA", icon: FlaskConical    },
       ],

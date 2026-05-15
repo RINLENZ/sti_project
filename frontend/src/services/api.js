@@ -4,9 +4,11 @@ const BASE_URL = import.meta.env.VITE_API_URL
   || import.meta.env.VITE_BACKEND_URL
   || 'https://sti-backend-a2d1.onrender.com'
 
+export { BASE_URL }
+
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 30000,  // 30s — connexions mobiles lentes
 })
 
 api.interceptors.request.use(config => {
@@ -30,10 +32,32 @@ function forceLogout() {
   window.location.href = '/login'
 }
 
+// Retry automatique sur erreur réseau (pas sur les 4xx/5xx)
+async function retryRequest(config, retries = 2) {
+  for (let i = 0; i < retries; i++) {
+    await new Promise(r => setTimeout(r, 1000 * (i + 1)))
+    try {
+      return await api(config)
+    } catch { /* continue */ }
+  }
+  return Promise.reject(new Error('Connexion impossible après plusieurs tentatives'))
+}
+
 api.interceptors.response.use(
   res => res,
   async err => {
     const original = err.config
+
+    // Retry silencieux sur timeout ou erreur réseau (code ERR_NETWORK / ECONNABORTED)
+    if (
+      !original._retried &&
+      !err.response &&
+      (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK' || err.message === 'Network Error')
+    ) {
+      original._retried = true
+      return retryRequest({ ...original, timeout: 45000 })
+    }
+
     if (err.response?.status !== 401 || original._retry) {
       return Promise.reject(err)
     }
@@ -58,7 +82,7 @@ api.interceptors.response.use(
     try {
       const { data } = await axios.post(`${BASE_URL}/auth/refresh`, {
         refresh_token: refreshToken,
-      })
+      }, { timeout: 30000 })
       localStorage.setItem('sti_token',         data.access_token)
       localStorage.setItem('sti_refresh_token', data.refresh_token)
 

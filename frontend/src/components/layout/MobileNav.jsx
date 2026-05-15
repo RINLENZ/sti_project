@@ -1,17 +1,18 @@
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../services/api'
 import {
   Home, Map, ClipboardList, UserCircle, MoreHorizontal,
   BarChart2, FileText, PenLine, Shield, BookOpen,
   Camera, Mic, FlaskConical, LogOut, Sun, Moon,
-  Bell, X, ChevronRight,
+  Bell, X, ChevronRight, MessageCircle,
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
 import SensiaLogo from '../SensiaLogo'
+import { useWebSocket } from '../../hooks/useWebSocket'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const BAR_H   = 60   // hauteur de la barre bottom
@@ -188,6 +189,7 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
     { path: '/prof',              label: 'Suivi des apprenants', icon: BarChart2,     show: ['enseignant','super_admin'].includes(user?.role) },
     { path: '/corrections',       label: 'Corrections',          icon: PenLine,       show: ['enseignant','super_admin'].includes(user?.role) },
     { path: '/prof/examens',      label: 'Épreuves IA',          icon: FileText,      show: user?.role === 'enseignant' },
+    { path: '/chat',              label: 'Messages',             icon: MessageCircle, show: ['apprenant','enseignant'].includes(user?.role) },
     { path: '/admin',             label: 'Gestion des cours',    icon: Shield,        show: user?.role === 'super_admin' },
     { path: '/admin/referentiel', label: 'Référentiel',          icon: BookOpen,      show: user?.role === 'super_admin' },
     { path: '/contribuer',        label: "Contribuer à l'IA",    icon: FlaskConical,  show: ['apprenant','enseignant'].includes(user?.role) },
@@ -430,7 +432,7 @@ export default function MobileNav({ activeView, onViewChange }) {
       .catch(() => {})
   }, [user?.role])
 
-  // Notifications
+  // Notifications — chargement initial + polling de secours 120s
   useEffect(() => {
     if (!user) return
     function load() {
@@ -440,9 +442,31 @@ export default function MobileNav({ activeView, onViewChange }) {
       }).catch(() => {})
     }
     load()
-    const id = setInterval(load, 60000)
+    const id = setInterval(load, 120000)
     return () => clearInterval(id)
   }, [user?.id])
+
+  // Notifications temps réel via WebSocket
+  const handleWsNotif = useCallback((data) => {
+    if (data.type === 'notification') {
+      const newNotif = {
+        id:         data.id,
+        type:       data.notif_type,
+        titre:      data.titre,
+        message:    data.message,
+        meta:       data.meta || {},
+        lu:         false,
+        created_at: data.created_at,
+      }
+      setNotifications(prev => [newNotif, ...prev.slice(0, 19)])
+      setNbNonLues(prev => prev + 1)
+    }
+  }, [])
+
+  useWebSocket('/ws/notifications', {
+    onMessage: handleWsNotif,
+    enabled: !!user,
+  })
 
   function markRead(notifId) {
     api.put(`/api/notifications/${notifId}/lire`).then(() => {

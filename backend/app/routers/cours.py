@@ -708,12 +708,12 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
     - Statistiques globales de la classe
     - Exercices les plus difficiles
     """
-    from ..models.interaction import Interaction
     from ..models.session import LearningSession
-    import json
+    from ..models.user import TuteurSuivi
+    import redis as redis_lib
+    import json as json_lib
 
     # Récupère tous les apprenants
-    from ..models.user import TuteurSuivi
     liens = db.query(TuteurSuivi).filter(
         TuteurSuivi.tuteur_id == enseignant_id,
         TuteurSuivi.actif     == True
@@ -730,54 +730,78 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
         User.role == "apprenant"
     ).all()
 
+    # Une seule connexion Redis pour tous les apprenants
+    redis_client = None
+    try:
+        redis_client = redis_lib.from_url(settings.redis_url, decode_responses=True)
+    except Exception:
+        pass
+
+    # Total exercices une seule fois (pas par apprenant)
+    total_exercices = db.query(Exercice).count()
+
+    # Toutes les progressions d'un coup pour tous les apprenants
+    all_progressions = db.query(ProgressionApprenant).filter(
+        ProgressionApprenant.user_id.in_(apprenant_ids)
+    ).all()
+    prog_by_user: dict = {}
+    for p in all_progressions:
+        prog_by_user.setdefault(str(p.user_id), []).append(p)
+
+    # Dernières sessions pour tous les apprenants d'un coup
+    from sqlalchemy import func as sa_func
+    subq = (
+        db.query(
+            LearningSession.user_id,
+            sa_func.max(LearningSession.started_at).label("last_at")
+        )
+        .filter(LearningSession.user_id.in_(apprenant_ids))
+        .group_by(LearningSession.user_id)
+        .subquery()
+    )
+    last_sessions_rows = (
+        db.query(LearningSession)
+        .join(subq, (LearningSession.user_id == subq.c.user_id) &
+                    (LearningSession.started_at == subq.c.last_at))
+        .all()
+    )
+    last_session_by_user = {str(s.user_id): s for s in last_sessions_rows}
+
     result = []
     for apprenant in apprenants:
-        # Dernière session de cet apprenant
-        derniere_session = db.query(LearningSession).filter(
-            LearningSession.user_id == apprenant.id
-        ).order_by(LearningSession.started_at.desc()).first()
+        uid_str = str(apprenant.id)
+        derniere_session = last_session_by_user.get(uid_str)
 
-        # Score d'engagement actuel depuis Redis
+        # Score d'engagement depuis Redis
         score_actuel = 0.5
         niveau = "modere"
         nb_events = 0
-
-        if derniere_session:
-            import redis as redis_lib
-            import json as json_lib
+        if derniere_session and redis_client:
             try:
-                r = redis_lib.from_url(settings.redis_url, decode_responses=True)
-                cache_key = f"session_events:{derniere_session.id}"
-                cached = r.get(cache_key)
+                cached = redis_client.get(f"session_events:{derniere_session.id}")
                 if cached:
                     events = json_lib.loads(cached)
                     nb_events = len(events)
-                    # Calcule le score depuis les événements
-                    from ..models.session import LearningSession
                     res = compute_behavioral_score(events)
                     score_actuel = res["score"]
                     niveau = res["level"]
             except Exception:
                 pass
 
-        # Progression de cet apprenant
-        progressions = db.query(ProgressionApprenant).filter(
-            ProgressionApprenant.user_id == apprenant.id
-        ).all()
-        exercices_reussis = len([p for p in progressions if p.correct])
-        total_exercices   = db.query(Exercice).count()
-        score_total       = sum(p.score for p in progressions if p.correct)
+        progressions = prog_by_user.get(uid_str, [])
+        exercices_reussis = sum(1 for p in progressions if p.correct)
+        score_total = sum((p.score or 0) for p in progressions if p.correct)
 
         result.append({
-            "user_id":      str(apprenant.id),
-            "nom":          apprenant.nom,
-            "prenom":       apprenant.prenom,
-            "email":        apprenant.email,
-            "niveau":       apprenant.niveau_label,
+            "user_id":       uid_str,
+            "nom":           apprenant.nom,
+            "prenom":        apprenant.prenom,
+            "email":         apprenant.email,
+            "niveau":        apprenant.niveau_label,
             "filiere_label": apprenant.filiere_label,
             "engagement": {
-                "score":    score_actuel,
-                "niveau":   niveau,
+                "score":     score_actuel,
+                "niveau":    niveau,
                 "nb_events": nb_events,
             },
             "progression": {
@@ -796,30 +820,34 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
     score_moyen = round(sum(tous_scores) / len(tous_scores), 2) if tous_scores else 0
     decrocheurs = [r for r in result if r["engagement"]["score"] < 0.4]
 
-    # Exercices les plus difficiles (plus d'échecs)
-    exercices_difficiles = db.query(
-        Exercice.titre,
-        Exercice.id
-    ).all()
+    # Exercices les plus difficiles — agrégation en Python sur les progressions déjà chargées
+    ex_stats: dict = {}
+    for p in all_progressions:
+        eid = str(p.exercice_id)
+        if eid not in ex_stats:
+            ex_stats[eid] = {"total": 0, "echecs": 0}
+        ex_stats[eid]["total"] += 1
+        if p.correct is False:
+            ex_stats[eid]["echecs"] += 1
+
+    # Récupère les titres pour les exercices concernés
+    ex_ids_with_data = [p.exercice_id for p in all_progressions if p.exercice_id]
+    exercices_map: dict = {}
+    if ex_ids_with_data:
+        for ex in db.query(Exercice.id, Exercice.titre).filter(Exercice.id.in_(set(ex_ids_with_data))).all():
+            exercices_map[str(ex.id)] = ex.titre
 
     stats_exercices = []
-    for ex in exercices_difficiles:
-        total_tentatives = db.query(ProgressionApprenant).filter(
-            ProgressionApprenant.exercice_id == ex.id
-        ).count()
-        echecs = db.query(ProgressionApprenant).filter(
-            ProgressionApprenant.exercice_id == ex.id,
-            ProgressionApprenant.correct == False
-        ).count()
-        if total_tentatives > 0:
+    for eid, s in ex_stats.items():
+        if s["total"] > 0:
             stats_exercices.append({
-                "titre":            ex.titre,
-                "total_tentatives": total_tentatives,
-                "echecs":           echecs,
-                "taux_echec":       round(echecs / total_tentatives * 100)
+                "titre":            exercices_map.get(eid, eid),
+                "total_tentatives": s["total"],
+                "echecs":           s["echecs"],
+                "taux_echec":       round(s["echecs"] / s["total"] * 100),
             })
-
     stats_exercices.sort(key=lambda x: x["taux_echec"], reverse=True)
+    stats_exercices = stats_exercices[:3]
 
     return {
         "apprenants":    result,
@@ -831,7 +859,7 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
                               else "modere" if score_moyen >= 0.4
                               else "faible"
         },
-        "exercices_difficiles": stats_exercices[:3]
+        "exercices_difficiles": stats_exercices
     }
 
 @router.get("/ua/recommandee/{user_id}")

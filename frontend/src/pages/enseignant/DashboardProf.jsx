@@ -91,8 +91,8 @@ function EpreuvesWidget({ navigate, C }) {
       {/* Nav rapide */}
       <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12, display: 'flex', gap: 6 }}>
         {[
-          { label: 'Cours',       path: '/admin',             icon: '📚' },
-          { label: 'Corrections', path: '/prof/corrections',  icon: '✏️' },
+          { label: 'Cours',       path: '/admin',       icon: '📚' },
+          { label: 'Corrections', path: '/corrections', icon: '✏️' },
         ].map(item => (
           <button key={item.path} onClick={() => navigate(item.path)} style={{
             flex: 1, background: C.brownPale, border: 'none', borderRadius: 9,
@@ -348,7 +348,7 @@ export default function DashboardProf() {
   const { C }        = useTheme()
   const { user }     = useSelector(s => s.auth)
   const navigate     = useNavigate()
-  const [data, setData]           = useState(null)
+  const [data, setData]           = useState({ apprenants: [], stats_classe: { nb_apprenants: 0, score_moyen: 0, nb_decrocheurs: 0, niveau_global: 'aucun' }, exercices_difficiles: [] })
   const [loading, setLoading]     = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [autoRefresh, setAutoRefresh] = useState(true)

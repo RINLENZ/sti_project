@@ -32,6 +32,7 @@ const Corrections      = lazy(() => import('./pages/enseignant/Corrections'))
 const DataCollection   = lazy(() => import('./pages/DataCollection'))
 const AudioCollection  = lazy(() => import('./pages/AudioCollection'))
 const Contribuer       = lazy(() => import('./pages/Contribuer'))
+const Chat             = lazy(() => import('./pages/Chat'))
 
 const AppLayout = lazy(() => import('./components/layout/AppLayout'))
 
@@ -166,6 +167,9 @@ export default function App() {
         {/* ── Autres ── */}
         <Route path="/corrections" element={
           <EnseignantRoute><AppLayout><Corrections/></AppLayout></EnseignantRoute>
+        }/>
+        <Route path="/chat" element={
+          <PrivateRoute><AppLayout><Chat/></AppLayout></PrivateRoute>
         }/>
         <Route path="/contribuer" element={
           <PrivateRoute><AppLayout><Contribuer/></AppLayout></PrivateRoute>

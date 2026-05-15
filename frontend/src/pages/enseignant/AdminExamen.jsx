@@ -537,7 +537,7 @@ export default function AdminExamen() {
   const allUAs = programme.flatMap(mat =>
     mat.modules.flatMap(mod =>
       mod.familles.flatMap(fam =>
-        (fam.uas || []).map(ua => ({ ...ua, fam_titre: fam.titre, mod_titre: mod.titre }))
+        (fam.unites || []).map(ua => ({ ...ua, fam_titre: fam.titre, mod_titre: mod.titre }))
       )
     )
   )
@@ -707,7 +707,7 @@ export default function AdminExamen() {
                 {/* Sélectionner tout */}
                 <button
                   onClick={() => {
-                    const matUA = allUAs.filter(ua => !form.matiere_id || programme.some(mat => mat.id === form.matiere_id && mat.modules.some(mod => mod.familles.some(fam => fam.uas?.some(u => u.id === ua.id)))))
+                    const matUA = allUAs.filter(ua => !form.matiere_id || programme.some(mat => mat.id === form.matiere_id && mat.modules.some(mod => mod.familles.some(fam => fam.unites?.some(u => u.id === ua.id)))))
                     const uaIds = allUAs.map(u => u.id)
                     toggleAllUAs(uaIds)
                   }}
@@ -722,7 +722,7 @@ export default function AdminExamen() {
                   .flatMap(mat => mat.modules || [])
                   .flatMap(mod => (mod.familles || []).map(fam => ({ fam, mod_titre: mod.titre })))
                   .map(({ fam, mod_titre }, fi) => {
-                    const uas = fam.uas || []
+                    const uas = fam.unites || []
                     if (!uas.length) return null
                     const famUAIds = uas.map(u => u.id)
                     const allFamSel = famUAIds.every(id => selectedUAs.has(id))
