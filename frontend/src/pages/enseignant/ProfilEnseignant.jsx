@@ -9,7 +9,7 @@ import {
   Building2, BookOpen, Users, Hash, Camera, ChevronRight,
   LayoutDashboard, GraduationCap, RefreshCw,
 } from 'lucide-react'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 // ── Parsing JSON stocké en DB ─────────────────────────────────────
@@ -225,7 +225,7 @@ export default function ProfilEnseignant() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
   const navigate        = useNavigate()
-  const { mobile }      = useBreakpoint()
+  const { xs, mobile }  = useBreakpoint()
 
   const [editing,        setEditing]        = useState(false)
   const [loading,        setLoading]        = useState(false)
@@ -348,7 +348,7 @@ export default function ProfilEnseignant() {
     setTimeout(() => setCopied(false), 2500)
   }
 
-  const pad = mobile ? 14 : 28
+  const pad = xs ? 10 : mobile ? 14 : 28
 
   return (
     <div style={{ background:C.bg, minHeight:'100vh', padding:pad, boxSizing:'border-box' }}>
@@ -367,8 +367,8 @@ export default function ProfilEnseignant() {
         {/* ══ HERO ══ */}
         <div style={{
           background:`linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 55%, ${C.brownLight} 100%)`,
-          borderRadius: mobile ? 18 : 24, padding: mobile ? '24px 20px' : '36px 36px 32px',
-          marginBottom: mobile ? 16 : 22, position:'relative', overflow:'hidden', color:'white',
+          borderRadius: xs ? 14 : mobile ? 18 : 24, padding: xs ? '16px 12px' : mobile ? '24px 20px' : '36px 36px 32px',
+          marginBottom: xs ? 12 : mobile ? 16 : 22, position:'relative', overflow:'hidden', color:'white',
           animation:'fadeUp .4s ease both',
         }}>
           <svg width="100%" height="100%" style={{ position:'absolute',inset:0,opacity:.06,pointerEvents:'none' }}>
@@ -385,7 +385,7 @@ export default function ProfilEnseignant() {
 
           <div style={{ position:'relative', display:'flex', alignItems: mobile ? 'flex-start' : 'center', gap: mobile ? 16 : 24, flexWrap:'wrap' }}>
             <div style={{ position:'relative', flexShrink:0 }}>
-              <AvatarDisplay avatarId={selectedAvatar} initiales={initiales} size={mobile ? 68 : 84} editable onClick={() => setShowPicker(true)}/>
+              <AvatarDisplay avatarId={selectedAvatar} initiales={initiales} size={xs ? 54 : mobile ? 68 : 84} editable onClick={() => setShowPicker(true)}/>
               <button onClick={() => setShowPicker(true)} style={{ position:'absolute', bottom:-5, right:-5, width:26, height:26, borderRadius:'50%', background:`linear-gradient(135deg,${C.gold},#F59E0B)`, border:'2px solid white', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>
                 <Camera size={11} color="white"/>
               </button>
@@ -393,7 +393,7 @@ export default function ProfilEnseignant() {
 
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:11, opacity:.65, fontWeight:600, margin:'0 0 3px' }}>Profil enseignant</p>
-              <h1 style={{ fontSize: mobile ? 20 : 26, fontWeight:900, margin:'0 0 4px', lineHeight:1.1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              <h1 style={{ fontSize: xs ? 17 : mobile ? 20 : 26, fontWeight:900, margin:'0 0 4px', lineHeight:1.1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 {user?.prenom} {user?.nom}
               </h1>
               <p style={{ fontSize:12, opacity:.7, margin:'0 0 10px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user?.email}</p>

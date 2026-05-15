@@ -202,55 +202,110 @@ const Confetti = () => (
   </div>
 )
 
-/* ── Toast caméra mobile ─────────────────────────────────────── */
-const CameraBanner = ({ onActivate, onDismiss }) => {
+/* ── Bottom sheet caméra/micro mobile ────────────────────────── */
+const CameraBanner = ({ onActivateBoth, onActivateCamera, onActivateAudio, onDismiss }) => {
   const { C } = useTheme()
   return (
-  <div style={{
-    position: 'fixed', bottom: 90, left: 12, right: 12, zIndex: 300,
-    backgroundColor: C.surface, borderRadius: 16,
-    boxShadow: '0 8px 32px rgba(107,58,42,0.18)',
-    border: `1.5px solid ${C.brown}30`,
-    padding: '14px 16px',
-    display: 'flex', alignItems: 'center', gap: 12,
-    animation: 'slideUp .35s cubic-bezier(.22,1,.36,1)'
-  }}>
-    {/* Icône animée */}
-    <div style={{
-      width: 42, height: 42, borderRadius: 12, flexShrink: 0,
-      background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: `0 4px 14px ${C.brown}40`
-    }}>
-      <Camera size={18} color="white"/>
-    </div>
+    <>
+      {/* Overlay */}
+      <div onClick={onDismiss} style={{
+        position: 'fixed', inset: 0, zIndex: 299,
+        background: 'rgba(0,0,0,0.35)', animation: 'fadeIn .25s ease'
+      }}/>
 
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: '0 0 2px' }}>
-        Activer l'analyse IA
-      </p>
-      <p style={{ fontSize: 11, color: C.textSec, margin: 0, lineHeight: 1.4 }}>
-        Caméra + micro pour un suivi personnalisé
-      </p>
-    </div>
+      {/* Sheet */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 300,
+        backgroundColor: C.surface,
+        borderRadius: '22px 22px 0 0',
+        boxShadow: '0 -8px 40px rgba(107,58,42,0.20)',
+        padding: '12px 20px 28px',
+        animation: 'slideUp .38s cubic-bezier(.22,1,.36,1)'
+      }}>
+        {/* Handle */}
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: C.brownPale, margin: '0 auto 18px' }}/>
 
-    <div style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
-      <button onClick={onActivate} style={{
-        padding: '8px 14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-        color: 'white', border: 'none', borderRadius: 10,
-        fontSize: 12, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 36
-      }}>
-        Activer
-      </button>
-      <button onClick={onDismiss} style={{
-        width: 36, height: 36, background: C.brownPale, border: 'none',
-        borderRadius: 10, cursor: 'pointer', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', flexShrink: 0
-      }}>
-        <X size={14} color={C.textSec}/>
-      </button>
-    </div>
-  </div>
+        {/* En-tête */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+          <div style={{
+            width: 50, height: 50, borderRadius: 14, flexShrink: 0,
+            background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 4px 16px ${C.brown}40`
+          }}>
+            <Camera size={22} color="white"/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 15, fontWeight: 900, color: C.text, margin: '0 0 5px' }}>
+              Analyse IA en temps réel
+            </p>
+            <p style={{ fontSize: 12, color: C.textSec, margin: 0, lineHeight: 1.55 }}>
+              SenSia adapte les exercices à ton niveau d'attention grâce à la caméra et au micro.
+            </p>
+          </div>
+          <button onClick={onDismiss} style={{
+            width: 32, height: 32, borderRadius: 10, background: C.brownPale,
+            border: 'none', cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <X size={14} color={C.textSec}/>
+          </button>
+        </div>
+
+        {/* Badge confidentialité */}
+        <div style={{
+          background: C.emeraldPale, borderRadius: 10, padding: '9px 13px',
+          marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8,
+          border: `1px solid ${C.emerald}20`
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>🔒</span>
+          <p style={{ fontSize: 11, color: C.emerald, fontWeight: 700, margin: 0, lineHeight: 1.4 }}>
+            Analyse locale — aucune image ni voix envoyée sur internet
+          </p>
+        </div>
+
+        {/* CTA principal */}
+        <button onClick={onActivateBoth} style={{
+          width: '100%', padding: '14px',
+          background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+          color: 'white', border: 'none', borderRadius: 14,
+          fontSize: 14, fontWeight: 800, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          marginBottom: 10, boxShadow: `0 4px 18px ${C.brown}35`, minHeight: 52
+        }}>
+          <Camera size={15}/><Mic size={15}/> Caméra + micro — recommandé
+        </button>
+
+        {/* Options secondaires */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <button onClick={onActivateCamera} style={{
+            padding: '11px 8px', background: C.brownPale,
+            color: C.brown, border: `1.5px solid ${C.brownLight}40`,
+            borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44
+          }}>
+            <Camera size={13}/> Caméra seule
+          </button>
+          <button onClick={onActivateAudio} style={{
+            padding: '11px 8px', background: C.brownPale,
+            color: C.brown, border: `1.5px solid ${C.brownLight}40`,
+            borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44
+          }}>
+            <Mic size={13}/> Micro seul
+          </button>
+        </div>
+
+        {/* Lien skip */}
+        <button onClick={onDismiss} style={{
+          width: '100%', padding: '8px', background: 'none',
+          border: 'none', cursor: 'pointer', fontSize: 12,
+          color: C.textSec, fontWeight: 600
+        }}>
+          Continuer sans analyse IA
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -387,79 +442,6 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
   )
 }
 
-// ── Rendu Markdown simplifié ─────────────────────────────────────
-function MarkdownRenderer({ content }) {
-  const { C } = useTheme()
-  if (!content) return <p style={{ color: C.textSec, fontStyle: 'italic' }}>Aucun contenu.</p>
-
-  const lines = content.split('\n')
-  const elements = []
-  let codeBlock = []
-  let inCode = false
-
-  lines.forEach((line, i) => {
-    if (line.startsWith('```')) {
-      if (inCode) {
-        elements.push(
-          <pre key={i} style={{ background: '#1A1207', color: '#E2D8C8', padding: '16px', borderRadius: 10, overflowX: 'auto', fontSize: 13, lineHeight: 1.6, margin: '12px 0', fontFamily: 'monospace' }}>
-            <code>{codeBlock.join('\n')}</code>
-          </pre>
-        )
-        codeBlock = []; inCode = false
-      } else { inCode = true }
-      return
-    }
-    if (inCode) { codeBlock.push(line); return }
-
-    if (line.startsWith('### ')) {
-      elements.push(<h3 key={i} style={{ fontSize: 15, fontWeight: 800, color: C.brown, margin: '20px 0 8px', borderLeft: `3px solid ${C.brownLight}`, paddingLeft: 10 }}>{line.slice(4)}</h3>)
-    } else if (line.startsWith('## ')) {
-      elements.push(<h2 key={i} style={{ fontSize: 17, fontWeight: 800, color: C.text, margin: '24px 0 10px', paddingBottom: 6, borderBottom: `2px solid ${C.border}` }}>{line.slice(3)}</h2>)
-    } else if (line.startsWith('# ')) {
-      elements.push(<h1 key={i} style={{ fontSize: 20, fontWeight: 900, color: C.text, margin: '0 0 16px' }}>{line.slice(2)}</h1>)
-    } else if (line.startsWith('- ') || line.startsWith('* ')) {
-      elements.push(
-        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-          <span style={{ color: C.brownLight, fontWeight: 900, flexShrink: 0 }}>•</span>
-          <p style={{ fontSize: 14, color: C.text, margin: 0, lineHeight: 1.7 }}>{renderInline(line.slice(2), C)}</p>
-        </div>
-      )
-    } else if (/^\d+\. /.test(line)) {
-      const num = line.match(/^(\d+)\. /)[1]
-      elements.push(
-        <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
-          <span style={{ background: C.brown, color: 'white', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0, marginTop: 2 }}>{num}</span>
-          <p style={{ fontSize: 14, color: C.text, margin: 0, lineHeight: 1.7 }}>{renderInline(line.replace(/^\d+\. /, ''), C)}</p>
-        </div>
-      )
-    } else if (line.startsWith('> ')) {
-      elements.push(
-        <blockquote key={i} style={{ borderLeft: `4px solid ${C.gold}`, paddingLeft: 14, margin: '10px 0', background: `${C.gold}12`, borderRadius: '0 8px 8px 0', padding: '10px 14px' }}>
-          <p style={{ fontSize: 13, color: C.text, margin: 0, fontStyle: 'italic', lineHeight: 1.6 }}>{line.slice(2)}</p>
-        </blockquote>
-      )
-    } else if (line.trim() === '') {
-      elements.push(<div key={i} style={{ height: 8 }} />)
-    } else {
-      elements.push(<p key={i} style={{ fontSize: 14, color: C.text, lineHeight: 1.8, margin: '0 0 6px' }}>{renderInline(line, C)}</p>)
-    }
-  })
-
-  return <div>{elements}</div>
-}
-
-function renderInline(text, C) {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} style={{ fontWeight: 800, color: C?.text || '#3D1F13' }}>{part.slice(2, -2)}</strong>
-    }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={i} style={{ background: C?.brownPale || '#F5EDE5', color: C?.brown || '#6B3A2A', padding: '1px 6px', borderRadius: 5, fontSize: 13, fontFamily: 'monospace', fontWeight: 700 }}>{part.slice(1, -1)}</code>
-    }
-    return part
-  })
-}
 
 
 /* ── Sons de feedback ─────────────────────────────────────────────
@@ -537,7 +519,7 @@ export default function Session() {
   const rateesParam     = searchParams.get('ratees')     || null   // IDs séparés par virgule
   const skipLecon       = searchParams.get('skip') === '1'
   const { user }   = useSelector(s => s.auth)
-  const { mobile: isMobile, tablet } = useBreakpoint()
+  const { xs, mobile: isMobile, tablet } = useBreakpoint()
   const sessionIdRef = useRef(null)
 
   const [ua, setUA]               = useState(null)
@@ -1517,13 +1499,15 @@ export default function Session() {
       {/* ── Bannière caméra mobile ── */}
       {isMobile && showCameraBanner && !cameraActive && (
         <CameraBanner
-          onActivate={startBoth}
+          onActivateBoth={startBoth}
+          onActivateCamera={startCamera}
+          onActivateAudio={async () => { setShowCameraBanner(false); await startAudio() }}
           onDismiss={() => setShowCameraBanner(false)}
         />
       )}
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 1060, margin: '0 auto', padding: `16px ${isMobile ? 12 : 20}px`, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      <div style={{ maxWidth: 1060, margin: '0 auto', padding: `${xs ? 10 : 16}px ${xs ? 8 : isMobile ? 12 : 20}px`, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
 
           {/* Bannière bruit adaptatif */}
@@ -1571,8 +1555,8 @@ export default function Session() {
           {/* ── Carte question principale ── */}
           <div key={current} style={{ animation: 'slideInRight .28s ease' }}>
           <div style={{
-            backgroundColor: C.surface, borderRadius: isMobile ? 18 : 22,
-            padding: isMobile ? '18px 16px' : '30px 32px',
+            backgroundColor: C.surface, borderRadius: xs ? 14 : isMobile ? 18 : 22,
+            padding: xs ? '14px 12px' : isMobile ? '18px 16px' : '30px 32px',
             boxShadow: answerFlash === 'correct' ? `0 0 0 4px ${C.emerald}45,0 0 28px ${C.emerald}25`
                      : answerFlash === 'wrong'   ? `0 0 0 4px ${C.red}45`
                      : '0 3px 20px rgba(107,58,42,0.09)',
@@ -2046,7 +2030,7 @@ export default function Session() {
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                               <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: `linear-gradient(135deg, ${C.brown}, ${C.gold})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>🧠</div>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: C.brown }}>Tuteur EduSmart AI</span>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: C.brown }}>Tuteur SenSia</span>
                             </div>
                             <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: 0 }}>{explicationIA}</p>
                             <button onClick={() => setExplicationIA(null)} style={{ marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.textSec, textDecoration: 'underline', padding: 0 }}>

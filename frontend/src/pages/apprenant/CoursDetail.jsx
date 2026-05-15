@@ -22,83 +22,6 @@ const ProgressBar = ({ value, color, h = 6 }) => {
   )
 }
 
-/* ── Rendu Markdown simplifié ─────────────────────────────────── */
-function MarkdownRenderer({ content }) {
-  const { C } = useTheme()
-  if (!content) return null
-  const lines = content.split('\n')
-  const elements = []
-  let inCode = false, codeLines = [], key = 0
-
-  for (const line of lines) {
-    if (line.startsWith('```')) {
-      if (inCode) {
-        elements.push(
-          <div key={key++} style={{
-            background: '#1A1207', borderRadius: 10, padding: '14px 16px',
-            marginBottom: 16, overflowX: 'auto', border: `1px solid ${C.brownPale}`
-          }}>
-            <pre style={{ margin: 0, fontSize: 12, color: '#E5E7EB', lineHeight: 1.7, fontFamily: 'monospace' }}>
-              {codeLines.join('\n')}
-            </pre>
-          </div>
-        )
-        codeLines = []; inCode = false
-      } else { inCode = true }
-      continue
-    }
-    if (inCode) { codeLines.push(line); continue }
-
-    if (line.startsWith('## ')) {
-      elements.push(
-        <h2 key={key++} style={{ fontSize: 16, fontWeight: 800, color: C.brown, margin: '20px 0 8px', paddingBottom: 8, borderBottom: `2px solid ${C.brownPale}` }}>
-          {line.replace('## ', '')}
-        </h2>
-      )
-    } else if (line.startsWith('### ')) {
-      elements.push(
-        <h3 key={key++} style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '14px 0 6px' }}>
-          {line.replace('### ', '')}
-        </h3>
-      )
-    } else if (line.startsWith('- ')) {
-      elements.push(
-        <div key={key++} style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
-          <span style={{ color: C.brownLight, fontWeight: 900, flexShrink: 0, marginTop: 2 }}>•</span>
-          <p style={{ fontSize: 14, lineHeight: 1.7, color: C.text, margin: 0 }}>{line.replace('- ', '')}</p>
-        </div>
-      )
-    } else if (line.trim() === '') {
-      elements.push(<div key={key++} style={{ height: 8 }}/>)
-    } else if (line.startsWith('| ')) {
-      const cells = line.split('|').filter(c => c.trim() && !c.match(/^[-\s]+$/))
-      if (cells.length > 0 && !line.match(/^\|[-\s|]+\|$/)) {
-        elements.push(
-          <div key={key++} style={{ display: 'flex', gap: 0, marginBottom: 2 }}>
-            {cells.map((cell, i) => (
-              <div key={i} style={{
-                flex: 1, padding: '7px 10px', fontSize: 12,
-                backgroundColor: i === 0 ? C.brownPale : C.surface,
-                border: `1px solid ${C.brownPale}`,
-                fontWeight: i === 0 ? 700 : 400, color: C.text
-              }}>
-                {cell.trim()}
-              </div>
-            ))}
-          </div>
-        )
-      }
-    } else {
-      elements.push(
-        <p key={key++} style={{ fontSize: 14, lineHeight: 1.8, color: C.text, marginBottom: 8 }}>
-          {line}
-        </p>
-      )
-    }
-  }
-  return <div>{elements}</div>
-}
-
 /* ── Sidebar ────────────────────────────────────────────────────── */
 function Sidebar({ ua, uaId, navigate }) {
   const { C } = useTheme()
@@ -175,7 +98,7 @@ export default function CoursDetail() {
   const { C }     = useTheme()
   const { uaId }  = useParams()
   const navigate  = useNavigate()
-  const { mobile: isMobile, tablet: isTablet } = useBreakpoint()
+  const { xs, mobile: isMobile, tablet: isTablet } = useBreakpoint()
 
   const user = useSelector(s => s.auth.user)
 
@@ -213,12 +136,18 @@ export default function CoursDetail() {
   const diffBg    = { 1: C.emeraldPale, 2: '#FEF3C7', 3: '#FEE2E2' }
 
   /* ── Hero padding selon breakpoint ── */
-  const heroPad = isMobile ? '20px 16px' : '28px 32px'
-  const contentPad = isMobile ? '16px' : isTablet ? '20px' : '28px 24px'
+  const heroPad = xs ? '14px 12px' : isMobile ? '20px 16px' : '28px 32px'
+  const contentPad = xs ? '12px' : isMobile ? '16px' : isTablet ? '20px' : '28px 24px'
   const sidebarWidth = isTablet ? 220 : 260
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh' }}>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
       {/* ── Hero ── */}
       <div style={{
@@ -261,7 +190,7 @@ export default function CoursDetail() {
               <span style={{ background: 'rgba(255,255,255,.2)', padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, display: 'inline-block', marginBottom: 10 }}>
                 {ua.reference_ue}
               </span>
-              <h1 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 900, marginBottom: 10, lineHeight: 1.25, margin: '0 0 10px' }}>
+              <h1 style={{ fontSize: xs ? 15 : isMobile ? 18 : 22, fontWeight: 900, lineHeight: 1.25, margin: '0 0 10px' }}>
                 {ua.titre}
               </h1>
               <div style={{ display: 'flex', gap: isMobile ? 10 : 16, flexWrap: 'wrap', marginTop: 8 }}>
@@ -275,6 +204,19 @@ export default function CoursDetail() {
                   <Target size={12}/> {ua.competences?.length} compétences
                 </span>
               </div>
+
+              {/* BKT mastery progress */}
+              {ua.bkt_score != null && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                    <span style={{ fontSize: 11, opacity: .75, fontWeight: 600 }}>Maîtrise</span>
+                    <span style={{ fontSize: 12, fontWeight: 900, opacity: .95 }}>{Math.round(ua.bkt_score * 100)}%</span>
+                  </div>
+                  <div style={{ height: 5, background: 'rgba(255,255,255,.25)', borderRadius: 5, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.round(ua.bkt_score * 100)}%`, background: 'rgba(255,255,255,.9)', borderRadius: 5, transition: 'width .8s ease' }}/>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* CTA hero */}

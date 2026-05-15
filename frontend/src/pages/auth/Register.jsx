@@ -328,7 +328,7 @@ dispatch(loginSuccess({
         </button>
       </div>
 
-      <p style={{ textAlign:'center', marginTop:20, fontSize:12, color:C.textMuted }}>
+      <p style={{ textAlign:'center', marginTop:620, fontSize:12, position:'absolute', color:C.textMuted }}>
         © 2026 SenSia · STI ADAPTATIF ·{' '}
         <span style={{ color:C.brownLight, cursor:'pointer', fontWeight:600 }}>Mentions légales</span>
       </p>

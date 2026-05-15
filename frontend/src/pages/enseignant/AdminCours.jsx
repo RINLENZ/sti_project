@@ -2049,7 +2049,7 @@ export default function AdminCours() {
     <div style={{ background: C.bg, minHeight: '100vh', padding: `${pad}px`, boxSizing: 'border-box', overflowX: 'hidden' }}>
 
       {/* Hero */}
-      <div style={{ background: `linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 60%, ${C.brownLight} 100%)`, borderRadius: xs ? 16 : 20, padding: xs ? '18px 16px' : '24px 28px', marginBottom: 20, position: 'relative', overflow: 'hidden', color: 'white' }}>
+      <div style={{ background: `linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 60%, ${C.brownLight} 100%)`, borderRadius: xs ? 16 : 20, padding: xs ? '18px 16px' : '24px 28px', marginBottom: 20, position: 'relative', overflow: 'hidden', color: 'white', animation: 'fadeUp .35s ease both' }}>
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none' }}>
           <defs><pattern id="adk" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
             <circle cx="30" cy="30" r="12" fill="none" stroke="white" strokeWidth="1.5" />

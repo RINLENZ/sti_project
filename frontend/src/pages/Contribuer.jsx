@@ -9,6 +9,7 @@ import { useSelector } from 'react-redux'
 import api from '../services/api'
 import { Camera, Mic, ArrowRight, Shield, TrendingUp, Users, CheckCircle } from 'lucide-react'
 import { C, useTheme } from '../styles/theme.jsx'
+import { useBreakpoint } from '../hooks/useBreakpoint'
 
 const ETATS_LABELS = {
   engagement_eleve:  'Engagé',
@@ -34,6 +35,7 @@ export default function Contribuer() {
   useTheme()
   const navigate = useNavigate()
   const user = useSelector(s => s.auth.user)
+  const { xs, mobile } = useBreakpoint()
   const [stats, setStats]       = useState(null)
   const [consent, setConsent]   = useState(() => localStorage.getItem(CONSENT_KEY) === 'oui')
   const [loading, setLoading]   = useState(true)
@@ -62,13 +64,13 @@ export default function Contribuer() {
       minHeight: '100vh',
       background: C.bg,
       fontFamily: "'DM Sans', system-ui, sans-serif",
-      padding: '32px 16px 64px',
+      padding: xs ? '14px 12px 48px' : mobile ? '20px 16px 56px' : '32px 20px 64px',
     }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
         {/* ── Header ── */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 900, color: C.brown, margin: '0 0 6px' }}>
+        <div style={{ marginBottom: xs ? 20 : 32, animation: 'fadeUp .35s ease both' }}>
+          <h1 style={{ fontSize: xs ? 20 : 26, fontWeight: 900, color: C.brown, margin: '0 0 6px' }}>
             Contribuer à l'IA
           </h1>
           <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>

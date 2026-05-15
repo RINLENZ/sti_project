@@ -5,8 +5,8 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   Users, TrendingUp, AlertTriangle, Activity,
-  RefreshCw, CheckCircle, Plus, ChevronRight, Edit2, Check, X,
-  FileText, Award, ShieldAlert, ClipboardList
+  RefreshCw, CheckCircle, Plus, Edit2, Check, X,
+  FileText, ShieldAlert, ClipboardList
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -40,32 +40,6 @@ const Dot = ({ score }) => (
   }}/>
 )
 
-const StatCard = ({ label, value, subtitle, color, Icon, trend }) => {
-  const { C } = useTheme()
-  return (
-    <div style={{
-      backgroundColor: C.surface, borderRadius: 16, padding: '20px 22px',
-      boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`,
-      display: 'flex', flexDirection: 'column', gap: 8,
-      position: 'relative', overflow: 'hidden', transition: 'all .2s ease',
-    }}>
-      <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: '50%', backgroundColor: `${color}12` }}/>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: C.textSec, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5 }}>{label}</span>
-        {Icon && (
-          <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon size={18} color={color}/>
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-        <span style={{ fontSize: 30, fontWeight: 900, color: C.text, lineHeight: 1 }}>{value}</span>
-        {trend && <TrendingUp size={16} color={C.emerald} style={{ marginBottom: 3 }}/>}
-      </div>
-      {subtitle && <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{subtitle}</span>}
-    </div>
-  )
-}
 
 function EpreuvesWidget({ navigate, C }) {
   const { user }    = useSelector(s => s.auth)
@@ -113,6 +87,26 @@ function EpreuvesWidget({ navigate, C }) {
       {eps.length === 0 && (
         <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>Aucune épreuve créée</p>
       )}
+
+      {/* Nav rapide */}
+      <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12, display: 'flex', gap: 6 }}>
+        {[
+          { label: 'Cours',       path: '/admin',             icon: '📚' },
+          { label: 'Corrections', path: '/prof/corrections',  icon: '✏️' },
+        ].map(item => (
+          <button key={item.path} onClick={() => navigate(item.path)} style={{
+            flex: 1, background: C.brownPale, border: 'none', borderRadius: 9,
+            padding: '8px 6px', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 3, cursor: 'pointer', transition: 'background .15s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = C.bg}
+            onMouseLeave={e => e.currentTarget.style.background = C.brownPale}
+          >
+            <span style={{ fontSize: 16 }}>{item.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: C.brown }}>{item.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -495,8 +489,9 @@ export default function DashboardProf() {
       {/* ── En-tête ── */}
       <div style={{
         background: `linear-gradient(135deg, ${C.brown} 0%, ${C.brownLight} 100%)`,
-        borderRadius: 20, padding: '24px 32px', marginBottom: 28,
-        position: 'relative', overflow: 'hidden', color: 'white'
+        borderRadius: xs ? 16 : 20, padding: xs ? '16px 14px' : mobile ? '20px 20px' : '24px 32px', marginBottom: xs ? 18 : 28,
+        position: 'relative', overflow: 'hidden', color: 'white',
+        animation: 'fadeUp .35s ease both',
       }}>
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.06, pointerEvents: 'none' }}>
           <defs>
@@ -515,10 +510,10 @@ export default function DashboardProf() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, position: 'relative' }}>
           <div>
             <p style={{ opacity: .75, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Tableau de bord</p>
-            <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>
+            <h1 style={{ fontSize: xs ? 18 : 24, fontWeight: 900, marginBottom: 6 }}>
               {user?.prenom} {user?.nom} 👨‍🏫
             </h1>
-            <p style={{ opacity: .75, fontSize: 14 }}>
+            <p style={{ opacity: .75, fontSize: xs ? 12 : 14 }}>
               {apprenants.length} apprenant(s) suivi(s) · Engagement moyen {Math.round(stats_classe.score_moyen * 100)}%
             </p>
           </div>
@@ -542,12 +537,30 @@ export default function DashboardProf() {
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 28 }}>
-        <StatCard label="Apprenants suivis"  value={apprenants.length}                            subtitle="total actifs"                           color={C.brown}   Icon={Users}/>
-        <StatCard label="Engagement moyen"   value={`${Math.round(stats_classe.score_moyen*100)}%`} subtitle="sur les sessions actives"            color={C.emerald} Icon={TrendingUp} trend/>
-        <StatCard label="En décrochage"      value={alertCount}                                   subtitle={alertCount>0?'⚠ Attention requise':'Tout va bien'} color={alertCount>0?C.red:C.emerald} Icon={AlertTriangle}/>
-        <StatCard label="Sessions actives"   value={apprenants.filter(a=>a.derniere_session).length} subtitle="ont une session récente"            color={C.orange}  Icon={Activity}/>
+      {/* ── Stats compactes ── */}
+      <div style={{ display: 'flex', gap: xs ? 8 : 10, marginBottom: xs ? 16 : 24, flexWrap: 'wrap', animation: 'fadeUp .35s .06s ease both' }}>
+        {[
+          { label: 'Apprenants', value: apprenants.length,                                        subtitle: 'suivis',    color: C.brown,                              Icon: Users        },
+          { label: 'Engagement', value: `${Math.round(stats_classe.score_moyen*100)}%`,           subtitle: 'moyen',     color: C.emerald,                            Icon: TrendingUp   },
+          { label: 'Décrochage', value: alertCount,                                               subtitle: alertCount > 0 ? '⚠ attention' : 'aucun', color: alertCount > 0 ? C.red : C.emerald, Icon: AlertTriangle },
+          { label: 'Sessions',   value: apprenants.filter(a => a.derniere_session).length,        subtitle: 'récentes',  color: C.orange,                             Icon: Activity     },
+        ].map(s => (
+          <div key={s.label} style={{
+            flex: '1 1 130px',
+            backgroundColor: C.surface, borderRadius: 12,
+            padding: xs ? '10px 12px' : '12px 16px',
+            border: `1px solid ${C.brownPale}`,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: `${s.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <s.Icon size={16} color={s.color}/>
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: xs ? 16 : 19, fontWeight: 900, color: C.text, lineHeight: 1.1 }}>{s.value}</p>
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: '.04em' }}>{s.label}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -865,47 +878,8 @@ export default function DashboardProf() {
             </div>
           )}
 
-          {/* Légende */}
-          <div style={{ backgroundColor: C.brownPale, borderRadius: 16, padding: 18 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 800, color: C.brown, marginBottom: 12 }}>Légende engagement</h3>
-            {[
-              { color: C.emerald, label: 'Engagé',  desc: 'Score ≥ 70%' },
-              { color: C.orange,  label: 'Modéré',  desc: 'Score 40–70%' },
-              { color: C.red,     label: 'Décroché', desc: 'Score < 40%' },
-            ].map(l => (
-              <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: l.color, flexShrink: 0, boxShadow: `0 0 0 3px ${l.color}30` }}/>
-                <div>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: 0 }}>{l.label}</p>
-                  <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>{l.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Widget épreuves */}
+          {/* Widget épreuves + nav intégrée */}
           <EpreuvesWidget navigate={navigate} C={C} />
-
-          {/* Navigation rapide */}
-          <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.brownPale}` }}>
-            <h3 style={{ fontSize: 13, fontWeight: 800, color: C.brown, marginBottom: 12 }}>Navigation rapide</h3>
-            {[
-              { label: 'Épreuves IA',       path: '/prof/examens', icon: '📋' },
-              { label: 'Gestion des cours',  path: '/admin',        icon: '📚' },
-            ].map(item => (
-              <button key={item.path} onClick={() => navigate(item.path)} style={{
-                width: '100%', backgroundColor: C.brownPale,
-                border: `1px solid ${C.brownPale}`,
-                borderRadius: 10, padding: '10px 14px', marginBottom: 8,
-                display: 'flex', alignItems: 'center', gap: 10,
-                cursor: 'pointer', textAlign: 'left', transition: 'all .2s ease'
-              }}>
-                <span style={{ fontSize: 18 }}>{item.icon}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{item.label}</span>
-                <ChevronRight size={14} color={C.textSec} style={{ marginLeft: 'auto' }}/>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 

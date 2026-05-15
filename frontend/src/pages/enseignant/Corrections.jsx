@@ -2,17 +2,21 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { CheckCircle, XCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { Spinner } from '../../components/Skeleton'
 
 export default function Corrections() {
-  const { C } = useTheme()
+  const { C }    = useTheme()
   const { user } = useSelector(s => s.auth)
+  const { xs, mobile } = useBreakpoint()
+  const pad = xs ? 10 : mobile ? 16 : 24
 
   const [items,    setItems]    = useState([])
   const [loading,  setLoading]  = useState(true)
   const [expanded, setExpanded] = useState(null)
-  const [form,     setForm]     = useState({}) // { [prog_id]: { correct, points, commentaire } }
+  const [form,     setForm]     = useState({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -53,68 +57,107 @@ export default function Corrections() {
     }
   }
 
-  if (loading) return (
-    <div style={{ padding: 32, textAlign: 'center', color: C.textSec }}>Chargement…</div>
-  )
-
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 16px' }}>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 900, color: C.brown, margin: 0 }}>
-          ✍️ Corrections des réponses libres
-        </h1>
-        <p style={{ fontSize: 13, color: C.textSec, margin: '4px 0 0' }}>
-          {items.length} réponse{items.length !== 1 ? 's' : ''} en attente d'évaluation
-        </p>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: pad, boxSizing: 'border-box' }}>
+
+      {/* ── Header ── */}
+      <div style={{
+        background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+        borderRadius: xs ? 14 : 18, padding: xs ? '16px 14px' : '20px 24px',
+        marginBottom: 20, color: 'white',
+        position: 'relative', overflow: 'hidden',
+        animation: 'fadeUp .35s ease both',
+      }}>
+        <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: .06, pointerEvents: 'none' }}>
+          <defs><pattern id="corr-bg" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+            <rect x="8" y="8" width="16" height="16" fill="none" stroke="white" strokeWidth="1.2" rx="3"/>
+            <line x1="8" y1="16" x2="24" y2="16" stroke="white" strokeWidth=".8"/>
+          </pattern></defs>
+          <rect width="100%" height="100%" fill="url(#corr-bg)"/>
+        </svg>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ClipboardList size={18} color="white"/>
+          </div>
+          <div>
+            <p style={{ fontSize: 11, opacity: .7, fontWeight: 600, margin: '0 0 2px' }}>Espace enseignant</p>
+            <h1 style={{ fontSize: xs ? 16 : 19, fontWeight: 900, margin: 0 }}>Corrections des réponses libres</h1>
+          </div>
+          {!loading && (
+            <span style={{ marginLeft: 'auto', background: items.length > 0 ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.12)', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+              {items.length} en attente
+            </span>
+          )}
+        </div>
       </div>
 
-      {items.length === 0 ? (
-        <div style={{ background: C.emeraldPale, borderRadius: 14, padding: '32px 24px', textAlign: 'center', border: `1px solid ${C.emerald}30` }}>
-          <CheckCircle size={32} color={C.emerald} style={{ marginBottom: 10 }}/>
-          <p style={{ fontSize: 15, fontWeight: 800, color: C.emerald, margin: 0 }}>
-            Aucune réponse en attente — tout est corrigé !
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 64 }}><Spinner/></div>
+      ) : items.length === 0 ? (
+        /* ── Empty state ── */
+        <div style={{
+          background: C.surface, borderRadius: 18, padding: xs ? '32px 20px' : '48px 36px',
+          textAlign: 'center', border: `1.5px solid ${C.emerald}30`,
+          animation: 'fadeUp .35s ease both',
+        }}>
+          <div style={{ width: 60, height: 60, borderRadius: '50%', background: C.emeraldPale, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+            <CheckCircle size={28} color={C.emerald}/>
+          </div>
+          <p style={{ fontSize: 16, fontWeight: 900, color: C.emerald, margin: '0 0 6px' }}>
+            Tout est corrigé !
           </p>
+          <p style={{ fontSize: 13, color: C.textSec, margin: 0 }}>Aucune réponse libre en attente d'évaluation.</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {items.map(item => {
+        /* ── Liste ── */
+        <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: xs ? 8 : 12 }}>
+          {items.map((item, i) => {
             const isOpen = expanded === item.progression_id
             const f      = getForm(item.progression_id, {})
 
             return (
               <div key={item.progression_id} style={{
-                background: '#fff', borderRadius: 14,
-                border: `1.5px solid ${C.brownPale}`,
-                boxShadow: '0 2px 8px rgba(107,58,42,.06)',
+                background: C.surface, borderRadius: xs ? 12 : 16,
+                border: `1.5px solid ${C.border}`,
+                boxShadow: '0 2px 10px rgba(107,58,42,.06)',
                 overflow: 'hidden',
+                animation: `fadeUp .35s ${i * 0.04}s ease both`,
               }}>
-                {/* Header */}
+                {/* ── Header cliquable ── */}
                 <button
                   onClick={() => setExpanded(isOpen ? null : item.progression_id)}
                   style={{
-                    width: '100%', padding: '14px 18px', background: 'none', border: 'none',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                    width: '100%', padding: xs ? '12px 14px' : '14px 20px',
+                    background: 'none', border: 'none',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    gap: 12, textAlign: 'left',
+                    borderBottom: isOpen ? `1px solid ${C.border}` : 'none',
                   }}
                 >
-                  <Clock size={16} color="#F59E0B" style={{ flexShrink: 0 }}/>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Clock size={15} color="#D97706"/>
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <p style={{ margin: 0, fontSize: xs ? 12 : 13, fontWeight: 800, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {item.apprenant_nom} — {item.exercice_titre}
                     </p>
                     <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>
-                      {item.date_soumission ? new Date(item.date_soumission).toLocaleString('fr-FR') : ''} · {item.points_max} pts
+                      {item.date_soumission
+                        ? new Date(item.date_soumission).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : ''}
+                      {' · '}{item.points_max} pt{item.points_max > 1 ? 's' : ''}
                     </p>
                   </div>
-                  {isOpen ? <ChevronUp size={16} color={C.textSec}/> : <ChevronDown size={16} color={C.textSec}/>}
+                  <ChevronDown size={16} color={C.textSec} style={{ flexShrink: 0, transition: 'transform .2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }}/>
                 </button>
 
-                {/* Corps dépliable */}
+                {/* ── Corps ── */}
                 {isOpen && (
-                  <div style={{ padding: '0 18px 18px', borderTop: `1px solid ${C.brownPale}` }}>
+                  <div style={{ padding: xs ? '12px 14px' : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, animation: 'slideDown .2s ease' }}>
 
                     {/* Consigne */}
-                    <div style={{ marginTop: 14, background: C.brownPale, borderRadius: 10, padding: '10px 14px', borderLeft: `4px solid ${C.brown}` }}>
-                      <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 800, color: C.brown, textTransform: 'uppercase', letterSpacing: .5 }}>Consigne</p>
+                    <div style={{ background: C.brownGhost, borderRadius: 10, padding: '10px 14px', borderLeft: `4px solid ${C.brown}` }}>
+                      <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 800, color: C.brown, textTransform: 'uppercase', letterSpacing: .5 }}>Consigne</p>
                       <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
                         {item.exercice_enonce.startsWith('__APC__')
                           ? (() => { try { return JSON.parse(item.exercice_enonce.slice(7)).consigne } catch { return item.exercice_enonce } })()
@@ -123,20 +166,21 @@ export default function Corrections() {
                     </div>
 
                     {/* Réponse apprenant */}
-                    <div style={{ marginTop: 10, background: '#EFF6FF', borderRadius: 10, padding: '10px 14px', border: '1px solid #BFDBFE' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: .5 }}>Réponse de {item.apprenant_nom.split(' ')[0]}</p>
+                    <div style={{ background: '#EFF6FF', borderRadius: 10, padding: '10px 14px', border: '1px solid #BFDBFE' }}>
+                      <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: .5 }}>
+                        Réponse de {item.apprenant_nom.split(' ')[0]}
+                      </p>
                       <p style={{ margin: 0, fontSize: 13, color: '#1E3A5F', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{item.reponse_apprenant}</p>
                     </div>
 
                     {/* Réponse modèle */}
-                    <div style={{ marginTop: 10, background: '#F0FDF4', borderRadius: 10, padding: '10px 14px', border: '1px solid #BBF7D0' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: .5 }}>Réponse modèle</p>
+                    <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 14px', border: '1px solid #BBF7D0' }}>
+                      <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: .5 }}>Réponse modèle</p>
                       <p style={{ margin: 0, fontSize: 13, color: '#14532D', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{item.reponse_modele}</p>
                     </div>
 
-                    {/* Formulaire évaluation */}
-                    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {/* Correct / Incorrect */}
+                    {/* ── Formulaire évaluation ── */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <div style={{ display: 'flex', gap: 10 }}>
                         {[
                           { val: true,  label: '✓ Correct',   bg: C.emeraldPale, color: C.emerald, border: C.emerald },
@@ -145,8 +189,8 @@ export default function Corrections() {
                           <button key={String(val)} onClick={() => setField(item.progression_id, 'correct', val)}
                             style={{
                               flex: 1, padding: '10px', borderRadius: 10, cursor: 'pointer',
-                              border: `2px solid ${f.correct === val ? border : C.brownPale}`,
-                              background: f.correct === val ? bg : '#fff',
+                              border: `2px solid ${f.correct === val ? border : C.border}`,
+                              background: f.correct === val ? bg : C.bg,
                               color: f.correct === val ? color : C.textSec,
                               fontSize: 13, fontWeight: 800, transition: 'all .15s',
                             }}>
@@ -155,34 +199,33 @@ export default function Corrections() {
                         ))}
                       </div>
 
-                      {/* Points */}
                       {f.correct === true && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <label style={{ fontSize: 12, fontWeight: 700, color: C.textSec, flexShrink: 0 }}>Points :</label>
                           <input type="number" min={0} max={item.points_max}
                             value={f.points ?? item.points_max}
                             onChange={e => setField(item.progression_id, 'points', parseInt(e.target.value))}
-                            style={{ width: 70, padding: '6px 10px', border: `1.5px solid ${C.brownPale}`, borderRadius: 8, fontSize: 13, fontWeight: 800, textAlign: 'center' }}/>
+                            style={{ width: 70, padding: '6px 10px', border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 800, textAlign: 'center', background: C.surface, color: C.text, outline: 'none' }}/>
                           <span style={{ fontSize: 12, color: C.textSec }}>/ {item.points_max}</span>
                         </div>
                       )}
 
-                      {/* Commentaire */}
                       <textarea rows={2}
                         placeholder="Commentaire à l'apprenant (optionnel)…"
                         value={f.commentaire || ''}
                         onChange={e => setField(item.progression_id, 'commentaire', e.target.value)}
-                        style={{ padding: '10px 12px', border: `1.5px solid ${C.brownPale}`, borderRadius: 10, fontSize: 13, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
+                        style={{ padding: '10px 12px', border: `1.5px solid ${C.border}`, borderRadius: 10, fontSize: 13, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, background: C.bg, color: C.text, outline: 'none' }}
                       />
 
-                      {/* Soumettre */}
                       <button onClick={() => soumettre(item)}
                         disabled={f.correct === undefined}
                         style={{
-                          padding: '11px', borderRadius: 10, border: 'none', cursor: f.correct === undefined ? 'not-allowed' : 'pointer',
-                          background: f.correct === undefined ? '#E5E7EB' : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+                          padding: '12px', borderRadius: 10, border: 'none',
+                          cursor: f.correct === undefined ? 'not-allowed' : 'pointer',
+                          background: f.correct === undefined ? C.border : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
                           color: f.correct === undefined ? C.textSec : 'white',
-                          fontSize: 14, fontWeight: 800,
+                          fontSize: 14, fontWeight: 800, transition: 'all .15s',
+                          boxShadow: f.correct !== undefined ? `0 3px 14px ${C.brown}35` : 'none',
                         }}>
                         Enregistrer l'évaluation
                       </button>

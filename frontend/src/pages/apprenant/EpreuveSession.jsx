@@ -426,14 +426,14 @@ export default function EpreuveSession() {
           <ChevronLeft size={15}/> Mes épreuves
         </button>
 
-        <div style={{ background: C.surface, borderRadius: 24, padding: '36px 32px', boxShadow: `0 8px 40px ${C.brown}18`, border: `1.5px solid ${C.brownPale}` }}>
+        <div style={{ background: C.surface, borderRadius: xs ? 18 : 24, padding: xs ? '22px 16px' : '36px 32px', boxShadow: `0 8px 40px ${C.brown}18`, border: `1.5px solid ${C.brownPale}`, animation: 'fadeUp .35s ease both' }}>
 
           {/* Badge type */}
           <span style={{ fontSize: 11, fontWeight: 800, color: C.brown, background: `${C.brown}15`, padding: '4px 12px', borderRadius: 20 }}>
             {TYPE_LABELS[epreuve.type_epreuve] || epreuve.type_epreuve}
           </span>
 
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: C.text, margin: '14px 0 6px', lineHeight: 1.3 }}>
+          <h1 style={{ fontSize: xs ? 18 : 22, fontWeight: 900, color: C.text, margin: '14px 0 6px', lineHeight: 1.3 }}>
             {epreuve.titre}
           </h1>
 
@@ -444,7 +444,7 @@ export default function EpreuveSession() {
           )}
 
           {/* Infos */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: xs ? '1fr 1fr' : 'repeat(3,1fr)', gap: 10, marginBottom: 28 }}>
             {[
               { icon: Clock, label: 'Durée', value: `${epreuve.duree_minutes} min` },
               { icon: Award, label: 'Coefficient', value: epreuve.coefficient },
@@ -512,7 +512,7 @@ export default function EpreuveSession() {
         </button>
 
         {/* Score card */}
-        <div style={{ background: C.surface, borderRadius: 24, padding: '32px', textAlign: 'center', border: `2px solid ${mention.color}40`, marginBottom: 24, boxShadow: `0 4px 24px ${mention.color}18` }}>
+        <div style={{ background: C.surface, borderRadius: xs ? 18 : 24, padding: xs ? '22px 16px' : '32px', textAlign: 'center', border: `2px solid ${mention.color}40`, marginBottom: 24, boxShadow: `0 4px 24px ${mention.color}18`, animation: 'fadeUp .35s ease both' }}>
           <p style={{ fontSize: 11, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>{epreuve.titre}</p>
           <div style={{ width: 110, height: 110, borderRadius: '50%', background: `conic-gradient(${mention.color} ${pct * 3.6}deg, ${C.brownPale} 0)`, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
             <div style={{ width: 82, height: 82, borderRadius: '50%', background: C.surface, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -550,7 +550,7 @@ export default function EpreuveSession() {
 
         {/* Détail par question */}
         {questions.length > 0 && Object.keys(corrections).length > 0 && (
-          <div style={{ background: C.surface, borderRadius: 18, padding: '22px', border: `1.5px solid ${C.brownPale}` }}>
+          <div style={{ background: C.surface, borderRadius: 18, padding: xs ? '16px 14px' : '22px', border: `1.5px solid ${C.brownPale}`, animation: 'fadeUp .35s .1s ease both' }}>
             <h2 style={{ fontSize: 15, fontWeight: 800, color: C.brown, marginBottom: 16 }}>Corrections détaillées</h2>
             {['partie1','partie2'].map(partieKey => {
               const partie = contenu?.[partieKey]

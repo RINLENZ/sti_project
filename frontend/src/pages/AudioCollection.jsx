@@ -13,6 +13,7 @@ import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Mic, MicOff, Play, RotateCcw, Send, CheckCircle } from 'lucide-react'
 import { C, useTheme } from '../styles/theme.jsx'
+import { useBreakpoint } from '../hooks/useBreakpoint'
 
 /* ── Commandes à collecter ──────────────────────────────────── */
 const COMMANDES = [
@@ -170,6 +171,7 @@ function VUMeter({ analyser, active }) {
 export default function AudioCollection() {
   const { C } = useTheme()
   const { user } = useSelector(s => s.auth)
+  const { xs, mobile } = useBreakpoint()
 
   const [stats,        setStats]        = useState(null)
   const [selectedCmd,  setSelectedCmd]  = useState(COMMANDES[0])
@@ -290,7 +292,7 @@ export default function AudioCollection() {
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: 'system-ui, sans-serif' }}>
 
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, #1A0F08, #3D1F13)`, padding: '20px 24px', color: 'white' }}>
+      <div style={{ background: `linear-gradient(135deg, #1A0F08, #3D1F13)`, padding: xs ? '14px 14px' : '20px 24px', color: 'white' }}>
         <p style={{ fontSize: 11, opacity: .6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>
           Collecte audio · KWS
         </p>
@@ -315,7 +317,7 @@ export default function AudioCollection() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: xs ? '12px 10px' : '20px 16px', display: 'flex', flexDirection: 'column', gap: xs ? 10 : 16 }}>
 
         {/* Grille commandes */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>

@@ -10,7 +10,7 @@ import {
   X, Search, GraduationCap, RefreshCw, ArrowLeft
 } from 'lucide-react'
 import SensiaLogo from '../../components/SensiaLogo'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 // ── Onde ECG ──────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ export default function OnboardingEnseignant() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
   const navigate        = useNavigate()
-  const { mobile }      = useBreakpoint()
+  const { xs, mobile }  = useBreakpoint()
 
   const TOTAL_STEPS = 5
   const [step, setStep] = useState(1)
@@ -303,7 +303,7 @@ dispatch(loginSuccess({
       minHeight:'100vh',
       background:`linear-gradient(135deg,${C.brown} 0%,${C.brownDark} 50%,#1A0A05 100%)`,
       display:'flex', alignItems:'center', justifyContent:'center',
-      padding: mobile ? '16px 12px' : '24px 16px',
+      padding: xs ? '10px 10px' : mobile ? '16px 12px' : '24px 16px',
       position:'relative', overflow:'hidden',
       fontFamily:"'Sora','Segoe UI',sans-serif",
     }}>

@@ -419,6 +419,7 @@ export default function AdminReferentiel() {
         background: `linear-gradient(135deg, #2D1208 0%, ${C.brown} 100%)`,
         borderRadius: xs ? 16 : 20, padding: xs ? '18px 16px' : mobile ? '20px 18px' : '26px 30px',
         marginBottom: xs ? 16 : 22, position: 'relative', overflow: 'hidden', color: 'white',
+        animation: 'fadeUp .35s ease both',
       }}>
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none' }}>
           <defs>

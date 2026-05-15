@@ -13,6 +13,7 @@ import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Camera, ArrowLeft, CheckCircle, RefreshCw, User } from 'lucide-react'
 import { useTheme } from '../styles/theme.jsx'
+import { useBreakpoint } from '../hooks/useBreakpoint'
 
 /* ── Config états affectifs ──────────────────────────────────── */
 const ETATS = [
@@ -75,6 +76,7 @@ export default function DataCollection() {
   const { C } = useTheme()
   const navigate = useNavigate()
   const { user } = useSelector(s => s.auth)
+  const { xs, mobile } = useBreakpoint()
 
   const videoRef        = useRef(null)
   const canvasRef       = useRef(null)
@@ -308,7 +310,7 @@ export default function DataCollection() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: xs ? '14px 10px' : '24px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
 
         {/* ── Colonne gauche : sélection état ── */}
         <div style={{ flex: '1 1 360px', minWidth: 0 }}>

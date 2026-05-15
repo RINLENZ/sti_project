@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users } from 'lucide-react'
+import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users, ChevronDown } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
@@ -194,7 +194,7 @@ export default function Profil() {
   const { user, token } = useSelector(s => s.auth)
   const dispatch        = useDispatch()
   const navigate        = useNavigate()
-  const { mobile }      = useBreakpoint()
+  const { xs, mobile }  = useBreakpoint()
   const { C }           = useTheme()
 
   const [editing,        setEditing]        = useState(false)
@@ -207,6 +207,8 @@ export default function Profil() {
   const [codeClasse,     setCodeClasse]     = useState('')
   const [savingLink,     setSavingLink]     = useState(false)
   const [linkedTeacher,  setLinkedTeacher]  = useState(null)
+  const [showCompletion, setShowCompletion] = useState(false)
+  const [showProgression, setShowProgression] = useState(false)
   const [form, setForm] = useState({
     prenom:        user?.prenom        || '',
     nom:           user?.nom           || '',
@@ -310,12 +312,15 @@ export default function Profil() {
     return m > 0 ? `${h}h ${m}min` : `${h}h`
   }
 
-  const pad = mobile ? 14 : 28
+  const pad = xs ? 10 : mobile ? 14 : 28
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: pad, boxSizing: 'border-box' }}>
       <style>{`
         ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:${C.brownPale};border-radius:5px}
+        .inp-prof{width:100%;padding:12px 16px;border:2px solid ${C.brownLight};border-radius:10px;outline:none;background:${C.surface};color:${C.text};box-sizing:border-box;font-family:inherit;transition:border-color .2s}
+        .inp-prof:focus{border-color:${C.brown}}
+        .inp-prof::placeholder{color:${C.textSec};letter-spacing:1px}
       `}</style>
 
       {showPicker && <AvatarPicker current={selectedAvatar} onSelect={handleAvatarSelect} onClose={() => setShowPicker(false)} />}
@@ -325,7 +330,7 @@ export default function Profil() {
         {/* ══ HERO ══ */}
         <div style={{
           background: `linear-gradient(135deg, ${C.brownDark} 0%, ${C.brown} 55%, ${C.brownLight} 100%)`,
-          borderRadius: mobile ? 18 : 24, padding: mobile ? '24px 20px' : '36px 36px 32px',
+          borderRadius: xs ? 14 : mobile ? 18 : 24, padding: xs ? '18px 14px' : mobile ? '24px 20px' : '36px 36px 32px',
           marginBottom: mobile ? 16 : 22, position: 'relative', overflow: 'hidden', color: 'white',
           animation: 'fadeUp .4s ease both',
         }}>
@@ -344,7 +349,7 @@ export default function Profil() {
           <div style={{ position: 'relative', display: 'flex', alignItems: mobile ? 'flex-start' : 'center', gap: mobile ? 16 : 24, flexWrap: 'wrap' }}>
             {/* Avatar hero */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
-              <AvatarDisplay avatarId={selectedAvatar} initiales={initiales} size={mobile ? 68 : 84} editable onClick={() => setShowPicker(true)} />
+              <AvatarDisplay avatarId={selectedAvatar} initiales={initiales} size={xs ? 56 : mobile ? 68 : 84} editable onClick={() => setShowPicker(true)} />
               <button
                 onClick={() => setShowPicker(true)}
                 style={{ position: 'absolute', bottom: -5, right: -5, width: 26, height: 26, borderRadius: '50%', background: `linear-gradient(135deg, ${C.gold}, #F59E0B)`, border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.2)', transition: 'transform .15s' }}
@@ -357,7 +362,7 @@ export default function Profil() {
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 11, opacity: .65, fontWeight: 600, margin: '0 0 3px' }}>Mon profil</p>
-              <h1 style={{ fontSize: mobile ? 20 : 26, fontWeight: 900, margin: '0 0 5px', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <h1 style={{ fontSize: xs ? 17 : mobile ? 20 : 26, fontWeight: 900, margin: '0 0 5px', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.prenom} {user?.nom}
               </h1>
               <p style={{ fontSize: 13, opacity: .7, margin: '0 0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</p>
@@ -562,60 +567,74 @@ export default function Profil() {
             </div>
             {/* ── Carte complétion du profil ── */}
             <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', overflow: 'hidden', animation: 'fadeUp .4s .16s ease both' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: mobile ? '14px 16px' : '16px 22px', borderBottom: `1px solid ${C.border}` }}>
+              <button
+                onClick={() => setShowCompletion(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: mobile ? '14px 16px' : '16px 22px', width: '100%', background: 'none', border: 'none', borderBottom: showCompletion ? `1px solid ${C.border}` : 'none', cursor: 'pointer', textAlign: 'left' }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 9, background: completionPct === 100 ? C.emeraldPale : C.brownPale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Zap size={14} color={completionPct === 100 ? C.emerald : C.brown} />
                   </div>
                   <span style={{ fontSize: 14, fontWeight: 800, color: C.brown }}>Complétion du profil</span>
                 </div>
-                <span style={{ fontSize: 20, fontWeight: 900, color: completionPct === 100 ? C.emerald : C.brown }}>{completionPct}%</span>
-              </div>
-              <div style={{ padding: mobile ? '14px 16px' : '16px 22px' }}>
-                {/* Barre de progression */}
-                <div style={{ height: 8, background: C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
-                  <div style={{
-                    height: '100%', borderRadius: 8, transition: 'width .6s ease',
-                    width: `${completionPct}%`,
-                    background: completionPct === 100
-                      ? `linear-gradient(90deg, ${C.emerald}, #0A7A5E)`
-                      : `linear-gradient(90deg, ${C.brown}, ${C.brownLight})`,
-                  }}/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: completionPct === 100 ? C.emerald : C.brown }}>{completionPct}%</span>
+                  <ChevronDown size={16} color={C.textSec} style={{ transition: 'transform .25s', transform: showCompletion ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                 </div>
-                {/* Checklist */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {completionItems.map(item => (
-                    <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                        background: item.done ? C.emeraldPale : C.brownGhost,
-                        border: `1.5px solid ${item.done ? C.emerald + '60' : C.border}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {item.done
-                          ? <CheckCircle size={12} color={C.emerald}/>
-                          : <item.icon size={11} color={C.textMuted}/>}
+              </button>
+              {showCompletion && (
+                <div style={{ padding: mobile ? '14px 16px' : '16px 22px', animation: 'slideDown .22s ease' }}>
+                  {/* Barre de progression */}
+                  <div style={{ height: 8, background: C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+                    <div style={{
+                      height: '100%', borderRadius: 8, transition: 'width .6s ease',
+                      width: `${completionPct}%`,
+                      background: completionPct === 100
+                        ? `linear-gradient(90deg, ${C.emerald}, #0A7A5E)`
+                        : `linear-gradient(90deg, ${C.brown}, ${C.brownLight})`,
+                    }}/>
+                  </div>
+                  {/* Checklist */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {completionItems.map(item => (
+                      <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                          background: item.done ? C.emeraldPale : C.brownGhost,
+                          border: `1.5px solid ${item.done ? C.emerald + '60' : C.border}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {item.done
+                            ? <CheckCircle size={12} color={C.emerald}/>
+                            : <item.icon size={11} color={C.textMuted}/>}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: item.done ? C.text : C.textSec }}>{item.label}</span>
+                          {!item.done && <p style={{ fontSize: 10, color: C.textMuted, margin: '1px 0 0' }}>{item.hint}</p>}
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: item.done ? C.emerald : C.textMuted, flexShrink: 0 }}>+{item.points}%</span>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: item.done ? C.text : C.textSec }}>{item.label}</span>
-                        {!item.done && <p style={{ fontSize: 10, color: C.textMuted, margin: '1px 0 0' }}>{item.hint}</p>}
-                      </div>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: item.done ? C.emerald : C.textMuted, flexShrink: 0 }}>+{item.points}%</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* ── Carte statistiques de progression ── */}
             <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', overflow: 'hidden', animation: 'fadeUp .4s .20s ease both' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: mobile ? '14px 16px' : '16px 22px', borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <TrendingUp size={14} color="#7C3AED" />
+              <button
+                onClick={() => setShowProgression(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: mobile ? '14px 16px' : '16px 22px', width: '100%', background: 'none', border: 'none', borderBottom: showProgression ? `1px solid ${C.border}` : 'none', cursor: 'pointer', textAlign: 'left' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={14} color="#7C3AED" />
+                  </div>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.brown }}>Ma progression</span>
                 </div>
-                <span style={{ fontSize: 14, fontWeight: 800, color: C.brown }}>Ma progression</span>
-              </div>
-              <div style={{ padding: mobile ? '14px 16px' : '16px 22px' }}>
+                <ChevronDown size={16} color={C.textSec} style={{ transition: 'transform .25s', transform: showProgression ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+              </button>
+              {showProgression && <div style={{ padding: mobile ? '14px 16px' : '16px 22px', animation: 'slideDown .22s ease' }}>
                 {!stats ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     {[0,1,2,3].map(i => (
@@ -657,7 +676,7 @@ export default function Profil() {
                     )}
                   </>
                 )}
-              </div>
+              </div>}
             </div>
 
           </div>

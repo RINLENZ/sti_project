@@ -550,7 +550,7 @@ export default function AdminExamen() {
     <div style={{ background: C.bg, minHeight: '100vh', padding: pad, boxSizing: 'border-box', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
       {/* ── En-tête ── */}
-      <div style={{ background: `linear-gradient(135deg, ${C.brown} 0%, ${C.brownLight} 100%)`, borderRadius: 20, padding: '22px 28px', marginBottom: 24, position: 'relative', overflow: 'hidden', color: 'white' }}>
+      <div style={{ background: `linear-gradient(135deg, ${C.brown} 0%, ${C.brownLight} 100%)`, borderRadius: xs ? 14 : 20, padding: xs ? '14px 14px' : '22px 28px', marginBottom: xs ? 16 : 24, position: 'relative', overflow: 'hidden', color: 'white', animation: 'fadeUp .35s ease both' }}>
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.06, pointerEvents: 'none' }}>
           <defs>
             <pattern id="adinkra-ex" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
@@ -562,10 +562,10 @@ export default function AdminExamen() {
         </svg>
         <div style={{ position: 'relative' }}>
           <p style={{ opacity: .7, fontSize: 12, fontWeight: 600, marginBottom: 3 }}>Génération d'épreuves</p>
-          <h1 style={{ fontSize: mobile ? 20 : 24, fontWeight: 900, marginBottom: 4 }}>
+          <h1 style={{ fontSize: xs ? 17 : mobile ? 20 : 24, fontWeight: 900, marginBottom: 4 }}>
             Épreuves IA — Format camerounais APC
           </h1>
-          <p style={{ opacity: .75, fontSize: 13 }}>
+          <p style={{ opacity: .75, fontSize: xs ? 11 : 13 }}>
             Génère automatiquement des épreuves conformes au programme MINESEC · {epreuves.length} épreuve{epreuves.length !== 1 ? 's' : ''} créée{epreuves.length !== 1 ? 's' : ''}
           </p>
         </div>
