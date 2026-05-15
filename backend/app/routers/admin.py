@@ -240,6 +240,71 @@ def update_apprenant(user_id: UUID, body: UserUpdate,
     return {"message": "Profil mis à jour"}
 
 
+# ── Gestion globale des utilisateurs (super_admin) ───────────────
+
+class UserManageUpdate(BaseModel):
+    actif: Optional[bool] = None
+    role:  Optional[str]  = None
+
+
+@router.get("/utilisateurs")
+def get_utilisateurs(
+    role:   Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin),
+):
+    """Liste tous les utilisateurs avec filtres optionnels."""
+    q = db.query(User)
+    if role:
+        q = q.filter(User.role == role)
+    if search:
+        term = f"%{search.lower()}%"
+        q = q.filter(
+            sa.or_(
+                sa.func.lower(User.nom).like(term),
+                sa.func.lower(User.prenom).like(term),
+                sa.func.lower(User.email).like(term),
+            )
+        )
+    users = q.order_by(User.created_at.desc()).all()
+    return [
+        {
+            "id":         str(u.id),
+            "nom":        u.nom,
+            "prenom":     u.prenom,
+            "email":      u.email,
+            "role":       u.role,
+            "niveau":     u.niveau_label,
+            "pays":       u.pays,
+            "actif":      u.actif,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]
+
+
+@router.put("/utilisateurs/{user_id}")
+def update_utilisateur(
+    user_id: UUID,
+    body: UserManageUpdate,
+    db: Session = Depends(get_db),
+    _: UserModel = Depends(require_super_admin),
+):
+    """Met à jour le statut ou le rôle d'un utilisateur."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if body.actif is not None:
+        user.actif = body.actif
+    if body.role is not None:
+        if body.role not in ("apprenant", "enseignant", "super_admin"):
+            raise HTTPException(400, "Rôle invalide")
+        user.role = body.role
+    db.commit()
+    return {"message": "Utilisateur mis à jour"}
+
+
 # ── Structure pédagogique complète ────────────────────────────────
 
 @router.get("/structure")
@@ -995,18 +1060,14 @@ async def generer_exercices_ia(
     _: UserModel = Depends(require_super_admin)
 ):
     """
-    Génère N exercices pour une UA via Claude (Anthropic).
-    Contexte complet : leçon, niveau, compétences, filière, difficuté.
+    Génère N exercices pour une UA via Groq / Ollama / Claude (premier disponible).
     body: { "nb": 3, "type": "qcm", "difficulte": 1 }
     """
-    import anthropic, json as _json, os, re as _re
+    from ..services.llm_service import call_llm
+    import json as _json, os, re as _re
 
     ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
     if not ua: raise HTTPException(404, "UA introuvable")
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(500, "ANTHROPIC_API_KEY non configurée dans le .env")
 
     nb         = max(1, min(int(body.get("nb", 3)), 10))
     type_ex    = body.get("type", "qcm")
@@ -1171,20 +1232,12 @@ Instructions pour le type "{type_ex}" :
   ]
 }}"""
 
-    client = anthropic.Anthropic(api_key=api_key)
-    try:
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APIError as e:
-        raise HTTPException(500, f"Erreur API Claude : {str(e)}")
+    raw_text, backend_used = call_llm(prompt, max_tokens=8000)
 
     try:
-        data = _repair_and_parse_json(message.content[0].text)
+        data = _repair_and_parse_json(raw_text)
     except Exception as e:
-        raise HTTPException(500, f"Erreur d'extraction PDF : {e} — extrait: {message.content[0].text[:120]}…")
+        raise HTTPException(500, f"Erreur parsing JSON [{backend_used}] : {e} — extrait: {raw_text[:120]}…")
 
     # Sauvegarde les exercices générés en base
     created = []
@@ -1217,9 +1270,10 @@ Instructions pour le type "{type_ex}" :
 
     db.commit()
     return {
-        "message": f"{len(created)} exercice(s) générés et sauvegardés",
+        "message": f"{len(created)} exercice(s) générés et sauvegardés (via {backend_used})",
         "exercices_crees": created,
         "ua_id": str(ua_id),
+        "backend": backend_used,
         "contexte_utilise": {
             "niveau": niveau.nom if niveau else None,
             "module": module.titre if module else None,

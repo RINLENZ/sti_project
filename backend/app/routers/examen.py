@@ -2,7 +2,11 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
+import csv
+import io
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -42,7 +46,22 @@ class PublierRequest(BaseModel):
     statut: str  # "publie" | "brouillon" | "archive"
 
 
+class PlanifierRequest(BaseModel):
+    date_ouverture: Optional[datetime] = None
+    date_cloture:   Optional[datetime] = None
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _effective_statut(e: "Epreuve", now: datetime) -> str:
+    """Statut effectif tenant compte du planning automatique."""
+    if e.date_ouverture:
+        if now < e.date_ouverture:
+            return "planifie"
+        if e.date_cloture and now > e.date_cloture:
+            return "cloture"
+        return "publie"
+    return e.statut
 
 def _build_ua_contents(ua_ids: list[UUID], db: Session) -> list[dict]:
     """Charge les UA avec leurs ressources pour construire le contexte LLM."""
@@ -204,9 +223,19 @@ def epreuves_disponibles(
 ):
     """
     Liste les épreuves publiées accessibles à l'apprenant connecté.
-    Filtre par niveau si l'apprenant en a un. Inclut le statut de soumission.
+    Inclut les épreuves dans leur fenêtre de planning. Filtre par niveau.
     """
-    query = db.query(Epreuve).filter(Epreuve.statut == "publie")
+    now = datetime.now(timezone.utc)
+    query = db.query(Epreuve).filter(
+        sa.or_(
+            Epreuve.statut == "publie",
+            sa.and_(
+                Epreuve.date_ouverture != None,
+                Epreuve.date_ouverture <= now,
+                sa.or_(Epreuve.date_cloture == None, Epreuve.date_cloture >= now),
+            ),
+        )
+    )
 
     if current_user.niveau_id:
         query = query.filter(
@@ -270,17 +299,21 @@ def lister_epreuves(
         )
         nb_rep_map = {str(eid): cnt for eid, cnt in counts}
 
+    now = datetime.now(timezone.utc)
     return [
         {
             "id": str(e.id),
             "titre": e.titre,
             "type_epreuve": e.type_epreuve,
             "statut": e.statut,
+            "statut_effectif": _effective_statut(e, now),
             "duree_minutes": e.duree_minutes,
             "coefficient": e.coefficient,
             "classe_label": e.classe_label,
             "annee_scolaire": e.annee_scolaire,
             "created_at": e.created_at.isoformat() if e.created_at else None,
+            "date_ouverture": e.date_ouverture.isoformat() if e.date_ouverture else None,
+            "date_cloture":   e.date_cloture.isoformat()   if e.date_cloture   else None,
             "nb_reponses": nb_rep_map.get(str(e.id), 0),
         }
         for e in epreuves
@@ -348,6 +381,43 @@ def changer_statut(
     return {"id": str(ep.id), "statut": ep.statut}
 
 
+@router.put("/{epreuve_id}/planifier")
+def planifier_epreuve(
+    epreuve_id: UUID,
+    body: PlanifierRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_enseignant),
+):
+    """Définit la fenêtre d'ouverture automatique d'une épreuve."""
+    ep = db.query(Epreuve).filter(Epreuve.id == epreuve_id).first()
+    if not ep:
+        raise HTTPException(status_code=404, detail="Épreuve introuvable")
+    if str(ep.enseignant_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Action non autorisée")
+
+    ep.date_ouverture = body.date_ouverture
+    ep.date_cloture   = body.date_cloture
+
+    # Si on enlève le planning, revenir au statut manuel
+    if body.date_ouverture is None and body.date_cloture is None:
+        ep.statut = ep.statut  # inchangé
+    else:
+        # Si la fenêtre est déjà ouverte, publier immédiatement
+        now = datetime.now(timezone.utc)
+        if body.date_ouverture and body.date_ouverture <= now:
+            ep.statut = "publie"
+        else:
+            ep.statut = "brouillon"
+
+    db.commit()
+    return {
+        "id":             str(ep.id),
+        "statut":         ep.statut,
+        "date_ouverture": ep.date_ouverture.isoformat() if ep.date_ouverture else None,
+        "date_cloture":   ep.date_cloture.isoformat()   if ep.date_cloture   else None,
+    }
+
+
 @router.post("/{epreuve_id}/soumettre", status_code=201)
 def soumettre_reponses(
     epreuve_id: UUID,
@@ -359,8 +429,9 @@ def soumettre_reponses(
     ep = db.query(Epreuve).filter(Epreuve.id == epreuve_id).first()
     if not ep:
         raise HTTPException(status_code=404, detail="Épreuve introuvable")
-    if ep.statut != "publie":
-        raise HTTPException(status_code=403, detail="Épreuve non publiée")
+    now = datetime.now(timezone.utc)
+    if _effective_statut(ep, now) != "publie":
+        raise HTTPException(status_code=403, detail="Épreuve non accessible")
 
     # Vérifie que l'apprenant n'a pas déjà soumis
     existing = (
@@ -497,6 +568,60 @@ def resultats(
         }
         for r in reponses
     ]
+
+
+@router.get("/{epreuve_id}/export")
+def export_resultats_csv(
+    epreuve_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_enseignant),
+):
+    """Export CSV des résultats d'une épreuve (enseignant propriétaire uniquement)."""
+    ep = db.query(Epreuve).filter(Epreuve.id == epreuve_id).first()
+    if not ep:
+        raise HTTPException(status_code=404, detail="Épreuve introuvable")
+    if str(ep.enseignant_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    reponses = (
+        db.query(EpreuveReponse)
+        .filter(EpreuveReponse.epreuve_id == epreuve_id)
+        .order_by(EpreuveReponse.submitted_at)
+        .all()
+    )
+
+    apprenant_ids = [r.apprenant_id for r in reponses]
+    apprenants = {
+        str(u.id): u
+        for u in db.query(User).filter(User.id.in_(apprenant_ids)).all()
+    }
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Rang", "Nom", "Prénom", "Email", "Score /20", "Partie I /10", "Partie II /10", "Statut", "Date soumission", "Incidents"])
+
+    for i, r in enumerate(reponses, 1):
+        u = apprenants.get(str(r.apprenant_id))
+        writer.writerow([
+            i,
+            u.nom    if u else "",
+            u.prenom if u else "",
+            u.email  if u else str(r.apprenant_id),
+            f"{r.score_total:.2f}" if r.score_total is not None else "",
+            f"{r.score_p1:.2f}"    if r.score_p1    is not None else "",
+            f"{r.score_p2:.2f}"    if r.score_p2    is not None else "",
+            r.statut or "",
+            r.submitted_at.strftime("%d/%m/%Y %H:%M") if r.submitted_at else "",
+            r.nb_incidents or 0,
+        ])
+
+    output.seek(0)
+    filename = f"{ep.titre.replace(' ', '_')}_resultats.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/apprenant/{apprenant_id}/resultats")

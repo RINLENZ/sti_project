@@ -15,6 +15,9 @@ import uuid as uuid_module
 from datetime import datetime
 import json
 import unicodedata
+import sqlalchemy as sa
+import redis as redis_lib
+from ..config import settings
 
 router = APIRouter(prefix="/api/cours", tags=["cours"])
 
@@ -203,6 +206,18 @@ def get_programme_par_niveau(
     Retourne Matières → Modules (filtrés par niveau) → Familles → UAs
     avec statuts de progression si user_id fourni.
     """
+    # Cache Redis pour le curriculum pur (sans progression utilisateur)
+    _cache_key = f"programme:{niveau_id}"
+    _r = None
+    if not user_id:
+        try:
+            _r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+            _cached = _r.get(_cache_key)
+            if _cached:
+                return json.loads(_cached)
+        except Exception:
+            _r = None
+
     # Modules de ce niveau (ou génériques)
     modules = db.query(Module).filter(
         Module.actif == True,
@@ -298,7 +313,13 @@ def get_programme_par_niveau(
             "nom":     mat_data["nom"],
             "modules": modules_result,
         })
- 
+
+    if _r is not None:
+        try:
+            _r.setex(_cache_key, 300, json.dumps(result))
+        except Exception:
+            pass
+
     return result
 
 
@@ -1217,3 +1238,56 @@ def evaluer_reponse_libre(
 
     return {"message": "Évaluation enregistrée", "correct": body.correct, "points": prog.score}
     return {"message": "Exercice supprimé"}
+
+
+# ── Recherche globale ─────────────────────────────────────────────
+
+@router.get("/recherche")
+def recherche_globale(q: str = "", db: Session = Depends(get_db)):
+    """Recherche full-text sur matières, UAs et exercices."""
+    q = q.strip()
+    if len(q) < 2:
+        return {"matieres": [], "uas": [], "exercices": []}
+
+    terme = f"%{q.lower()}%"
+
+    matieres = db.query(Matiere).filter(
+        Matiere.actif == True,
+        sa.func.lower(Matiere.nom).like(terme),
+    ).limit(4).all()
+
+    uas = db.query(UniteApprentissage).filter(
+        UniteApprentissage.actif == True,
+        sa.or_(
+            sa.func.lower(UniteApprentissage.titre).like(terme),
+            sa.func.lower(UniteApprentissage.reference_ue).like(terme),
+        ),
+    ).limit(8).all()
+
+    exercices = db.query(Exercice).filter(
+        sa.func.lower(Exercice.titre).like(terme),
+    ).limit(6).all()
+
+    return {
+        "matieres": [
+            {"id": str(m.id), "nom": m.nom}
+            for m in matieres
+        ],
+        "uas": [
+            {
+                "id":           str(u.id),
+                "titre":        u.titre,
+                "reference_ue": u.reference_ue,
+                "famille_id":   str(u.famille_id),
+            }
+            for u in uas
+        ],
+        "exercices": [
+            {
+                "id":     str(e.id),
+                "titre":  e.titre,
+                "ua_id":  str(e.ua_id),
+            }
+            for e in exercices
+        ],
+    }

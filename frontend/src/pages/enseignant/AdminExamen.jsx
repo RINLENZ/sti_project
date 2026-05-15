@@ -8,7 +8,8 @@ import { Spinner } from '../../components/Skeleton'
 import {
   FileText, Sparkles, ChevronDown, ChevronUp, Check,
   Eye, EyeOff, Archive, Globe, Plus, RefreshCw,
-  Users, Zap, ShieldAlert, BarChart2,
+  Users, Zap, ShieldAlert, BarChart2, Download,
+  Calendar, Clock, X as XIcon,
 } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -142,19 +143,39 @@ function EpreuvePreview({ contenu, C }) {
   )
 }
 
+// ── Helpers planning ──────────────────────────────────────────────────────────
+
+function toDatetimeLocal(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
+function planifBadge(ep) {
+  const se = ep.statut_effectif || ep.statut
+  if (se === 'planifie') return { color: '#7C3AED', bg: '#EDE9FE', label: 'Planifiée' }
+  if (se === 'publie')   return { color: '#059669', bg: '#D1FAE5', label: 'Ouverte' }
+  if (se === 'cloture')  return { color: '#6B7280', bg: '#F3F4F6', label: 'Clôturée' }
+  if (se === 'archive')  return { color: '#6B7280', bg: '#F3F4F6', label: 'Archivée' }
+  return { color: '#D97706', bg: '#FEF3C7', label: 'Brouillon' }
+}
+
 // ── Carte d'une épreuve existante ─────────────────────────────────────────────
 
 function EpreuveCard({ ep, onStatutChange, onView, C }) {
-  const [loading, setLoading] = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [planifOpen,  setPlanifOpen]  = useState(false)
+  const [planifOuv,   setPlanifOuv]   = useState(toDatetimeLocal(ep.date_ouverture))
+  const [planifClo,   setPlanifClo]   = useState(toDatetimeLocal(ep.date_cloture))
+  const [savingPlan,  setSavingPlan]  = useState(false)
 
-  const statutColor = ep.statut === 'publie' ? C.emerald : ep.statut === 'archive' ? C.textSec : C.orange
-  const statutLabel = ep.statut === 'publie' ? 'Publiée' : ep.statut === 'archive' ? 'Archivée' : 'Brouillon'
+  const badge = planifBadge(ep)
 
   async function toggle(statut) {
     setLoading(true)
     try {
       await api.patch(`/api/examens/${ep.id}/statut`, { statut })
-      onStatutChange(ep.id, statut)
+      onStatutChange(ep.id, { statut, statut_effectif: statut })
       toast.success(`Épreuve ${statut === 'publie' ? 'publiée' : statut === 'archive' ? 'archivée' : 'remise en brouillon'}`)
     } catch {
       toast.error('Impossible de changer le statut')
@@ -163,52 +184,147 @@ function EpreuveCard({ ep, onStatutChange, onView, C }) {
     }
   }
 
+  async function savePlanif() {
+    setSavingPlan(true)
+    try {
+      const { data } = await api.put(`/api/examens/${ep.id}/planifier`, {
+        date_ouverture: planifOuv ? new Date(planifOuv).toISOString() : null,
+        date_cloture:   planifClo ? new Date(planifClo).toISOString() : null,
+      })
+      onStatutChange(ep.id, {
+        statut: data.statut,
+        statut_effectif: data.statut,
+        date_ouverture: data.date_ouverture,
+        date_cloture:   data.date_cloture,
+      })
+      toast.success('Planning enregistré')
+      setPlanifOpen(false)
+    } catch {
+      toast.error('Impossible de planifier')
+    } finally {
+      setSavingPlan(false)
+    }
+  }
+
+  async function clearPlanif() {
+    setSavingPlan(true)
+    try {
+      const { data } = await api.put(`/api/examens/${ep.id}/planifier`, {
+        date_ouverture: null, date_cloture: null,
+      })
+      onStatutChange(ep.id, { statut: data.statut, statut_effectif: data.statut, date_ouverture: null, date_cloture: null })
+      setPlanifOuv(''); setPlanifClo('')
+      toast.success('Planning supprimé')
+    } catch {
+      toast.error('Erreur')
+    } finally {
+      setSavingPlan(false)
+    }
+  }
+
+  const isScheduled = ep.date_ouverture || ep.date_cloture
+  const se = ep.statut_effectif || ep.statut
+  const borderColor = se === 'publie' ? `${C.emerald}40` : isScheduled ? '#C4B5FD' : C.brownPale
+
+  const dtFmt = iso => iso ? new Date(iso).toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : ''
+
   return (
-    <div style={{
-      background: C.surface, borderRadius: 14, padding: '16px 18px',
-      border: `1.5px solid ${ep.statut === 'publie' ? `${C.emerald}40` : C.brownPale}`,
-      display: 'flex', flexDirection: 'column', gap: 10,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1 }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.text }}>{ep.titre}</p>
-          <p style={{ margin: '3px 0 0', fontSize: 11, color: C.textSec }}>
-            {TYPES_EPREUVE.find(t => t.value === ep.type_epreuve)?.label || ep.type_epreuve}
-            {ep.classe_label && ` · ${ep.classe_label}`}
-            {ep.duree_minutes && ` · ${ep.duree_minutes} min`}
-            {ep.coefficient > 1 && ` · Coeff. ${ep.coefficient}`}
-          </p>
+    <div style={{ background: C.surface, borderRadius: 14, border: `1.5px solid ${borderColor}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+        {/* En-tête */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.text }}>{ep.titre}</p>
+            <p style={{ margin: '3px 0 0', fontSize: 11, color: C.textSec }}>
+              {TYPES_EPREUVE.find(t => t.value === ep.type_epreuve)?.label || ep.type_epreuve}
+              {ep.classe_label && ` · ${ep.classe_label}`}
+              {ep.duree_minutes && ` · ${ep.duree_minutes} min`}
+              {ep.coefficient > 1 && ` · Coeff. ${ep.coefficient}`}
+            </p>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 800, color: badge.color, background: badge.bg, padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>
+            {badge.label}
+          </span>
         </div>
-        <span style={{ fontSize: 10, fontWeight: 800, color: statutColor, background: `${statutColor}18`, padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>
-          {statutLabel}
-        </span>
+
+        {/* Dates planifiées */}
+        {isScheduled && (
+          <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#7C3AED', background: '#EDE9FE', borderRadius: 8, padding: '6px 10px', flexWrap: 'wrap' }}>
+            {ep.date_ouverture && <span><Clock size={10} style={{ marginRight: 3 }}/>Ouverture : {dtFmt(ep.date_ouverture)}</span>}
+            {ep.date_cloture   && <span><Clock size={10} style={{ marginRight: 3 }}/>Clôture : {dtFmt(ep.date_cloture)}</span>}
+          </div>
+        )}
+
+        <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>
+          {ep.annee_scolaire && `Année ${ep.annee_scolaire} · `}
+          Créée le {ep.created_at ? new Date(ep.created_at).toLocaleDateString('fr-FR') : '—'}
+        </p>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => onView(ep)} style={{ flex: 1, padding: '7px 12px', background: C.brownPale, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.brown, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+            <Eye size={13}/> Voir
+          </button>
+          {se !== 'publie' && se !== 'cloture' && (
+            <button disabled={loading} onClick={() => toggle('publie')} style={{ flex: 1, padding: '7px 12px', background: `${C.emerald}18`, border: `1px solid ${C.emerald}40`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.emerald, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+              <Globe size={13}/> Publier
+            </button>
+          )}
+          {se === 'publie' && (
+            <button disabled={loading} onClick={() => toggle('brouillon')} style={{ flex: 1, padding: '7px 12px', background: '#FEF3C7', border: '1px solid #D97706', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+              <EyeOff size={13}/> Dépublier
+            </button>
+          )}
+          {/* Planning */}
+          <button onClick={() => setPlanifOpen(o => !o)}
+            style={{ padding: '7px 10px', background: planifOpen ? '#EDE9FE' : '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Planifier l'ouverture">
+            <Calendar size={13} color={planifOpen ? '#7C3AED' : C.textSec}/>
+          </button>
+          {ep.statut !== 'archive' && se !== 'publie' && (
+            <button disabled={loading} onClick={() => toggle('archive')} style={{ padding: '7px 10px', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Archive size={13} color={C.textSec}/>
+            </button>
+          )}
+        </div>
       </div>
 
-      <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>
-        {ep.annee_scolaire && `Année ${ep.annee_scolaire} · `}
-        Créée le {ep.created_at ? new Date(ep.created_at).toLocaleDateString('fr-FR') : '—'}
-      </p>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={() => onView(ep)} style={{ flex: 1, padding: '7px 12px', background: C.brownPale, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.brown, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-          <Eye size={13}/> Voir
-        </button>
-        {ep.statut !== 'publie' && (
-          <button disabled={loading} onClick={() => toggle('publie')} style={{ flex: 1, padding: '7px 12px', background: `${C.emerald}18`, border: `1px solid ${C.emerald}40`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.emerald, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-            <Globe size={13}/> Publier
+      {/* Panneau planning */}
+      {planifOpen && (
+        <div style={{ borderTop: `1.5px solid #EDE9FE`, background: '#FAF5FF', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: .5 }}>
+              <Calendar size={10} style={{ marginRight: 4 }}/>Planning automatique
+            </p>
+            {isScheduled && (
+              <button onClick={clearPlanif} disabled={savingPlan}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#EF4444', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <XIcon size={11}/> Supprimer
+              </button>
+            )}
+          </div>
+          <p style={{ margin: 0, fontSize: 11, color: '#7C3AED', opacity: .7 }}>
+            L'épreuve s'ouvrira et se fermera automatiquement aux dates choisies.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Ouverture</label>
+              <input type="datetime-local" value={planifOuv} onChange={e => setPlanifOuv(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #C4B5FD', fontSize: 12, color: C.text, background: 'white', boxSizing: 'border-box' }}/>
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Clôture</label>
+              <input type="datetime-local" value={planifClo} onChange={e => setPlanifClo(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #C4B5FD', fontSize: 12, color: C.text, background: 'white', boxSizing: 'border-box' }}/>
+            </div>
+          </div>
+          <button onClick={savePlanif} disabled={savingPlan || !planifOuv}
+            style={{ alignSelf: 'flex-end', padding: '7px 16px', background: '#7C3AED', border: 'none', borderRadius: 8, cursor: planifOuv ? 'pointer' : 'default', fontSize: 12, fontWeight: 700, color: 'white', opacity: planifOuv ? 1 : .5 }}>
+            {savingPlan ? 'Enregistrement…' : 'Enregistrer'}
           </button>
-        )}
-        {ep.statut === 'publie' && (
-          <button disabled={loading} onClick={() => toggle('brouillon')} style={{ flex: 1, padding: '7px 12px', background: '#FEF3C7', border: '1px solid #D97706', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-            <EyeOff size={13}/> Dépublier
-          </button>
-        )}
-        {ep.statut !== 'archive' && (
-          <button disabled={loading} onClick={() => toggle('archive')} style={{ padding: '7px 10px', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Archive size={13} color={C.textSec}/>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -232,6 +348,22 @@ function EpreuveModal({ ep, onClose, C }) {
       .catch(() => setCopies([]))
       .finally(() => setLoadingC(false))
   }, [tab, ep.id, copies])
+
+  async function exportCsv() {
+    try {
+      const { data } = await api.get(`/api/examens/${ep.id}/export`, { responseType: 'blob' })
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${ep.titre.replace(/\s+/g, '_')}_resultats.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Échec de l\'export CSV')
+    }
+  }
 
   async function autocorriger(reponseId) {
     setCorrecting(c => ({ ...c, [reponseId]: true }))
@@ -331,6 +463,13 @@ function EpreuveModal({ ep, onClose, C }) {
                       <p style={{ margin: 0, fontSize: 10, color: C.textSec, fontWeight: 700 }}>{label}</p>
                     </div>
                   ))}
+                </div>
+
+                {/* Export CSV */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <button onClick={exportCsv} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: C.brownPale, border: `1px solid ${C.brown}40`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.brown }}>
+                    <Download size={13}/> Exporter CSV
+                  </button>
                 </div>
 
                 {/* Liste copies */}
@@ -470,8 +609,8 @@ export default function AdminExamen() {
     }
   }
 
-  function handleStatutChange(id, statut) {
-    setEpreuves(prev => prev.map(e => e.id === id ? { ...e, statut } : e))
+  function handleStatutChange(id, patch) {
+    setEpreuves(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
   }
 
   function toggleUA(uaId) {

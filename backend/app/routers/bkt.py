@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from uuid import UUID
 from ..database import get_db
 from ..models.cours import BKTMastery, Exercice, UniteApprentissage
+from ..models.examen import EpreuveReponse, Epreuve
 from ..models.session import LearningSession
 from ..models.user import User
 from ..dependencies import get_current_user
 from ..services.bkt_service import update_knowledge, interpret_mastery, compute_class_bkt
+from ..services.bulletin_service import generate_bulletin
 
 router = APIRouter(prefix="/api/bkt", tags=["BKT"])
 
@@ -137,3 +140,93 @@ def get_mastery_classe(db: Session = Depends(get_db)):
         "nb_apprenants": len(apprenants),
         "competences":   stats
     }
+
+
+@router.get("/apprenant/{user_id}/bulletin.pdf")
+def telecharger_bulletin(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Génère et retourne le bulletin PDF de progression de l'apprenant."""
+    if str(current_user.id) != str(user_id) and current_user.role not in ("enseignant", "super_admin"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    # ── Stats BKT ─────────────────────────────────────────────────────────
+    raw_masteries = db.query(BKTMastery).filter(BKTMastery.user_id == user_id).all()
+    nb_comp  = len(raw_masteries)
+    nb_mais  = sum(1 for m in raw_masteries if m.p_mastery >= 0.8)
+    nb_tent  = sum(m.nb_tentatives for m in raw_masteries)
+    nb_corr  = sum(m.nb_correct for m in raw_masteries)
+    p_moyen  = round(sum(m.p_mastery for m in raw_masteries) / nb_comp * 100) if nb_comp else 0
+
+    sessions = db.query(LearningSession).filter(
+        LearningSession.user_id == user_id,
+        LearningSession.ended_at.isnot(None),
+    ).all()
+    nb_sess  = len(sessions)
+    duree    = sum(s.duree_secondes or 0 for s in sessions)
+    scores_v = [s.score_final for s in sessions if s.score_final is not None]
+    s_moyen  = round(sum(scores_v) / len(scores_v) * 100) if scores_v else 0
+
+    stats = {
+        "nb_competences":       nb_comp,
+        "nb_maitrisees":        nb_mais,
+        "nb_tentatives":        nb_tent,
+        "nb_correct":           nb_corr,
+        "taux_reussite":        round(nb_corr / nb_tent * 100) if nb_tent else 0,
+        "p_mastery_moyen":      p_moyen,
+        "nb_sessions":          nb_sess,
+        "duree_totale_minutes": round(duree / 60),
+        "score_moyen":          s_moyen,
+    }
+
+    # ── Détail compétences avec titre UA ─────────────────────────────────
+    ua_ids   = [m.ua_id for m in raw_masteries if m.ua_id]
+    ua_map   = {str(ua.id): ua.titre for ua in db.query(UniteApprentissage).filter(UniteApprentissage.id.in_(ua_ids)).all()}
+    masteries = [
+        {
+            "competence":    m.competence,
+            "p_mastery":     m.p_mastery,
+            "nb_tentatives": m.nb_tentatives,
+            "nb_correct":    m.nb_correct,
+            "ua_titre":      ua_map.get(str(m.ua_id), ''),
+        }
+        for m in raw_masteries
+    ]
+
+    # ── Épreuves soumises ─────────────────────────────────────────────────
+    reponses = (
+        db.query(EpreuveReponse, Epreuve)
+        .join(Epreuve, EpreuveReponse.epreuve_id == Epreuve.id)
+        .filter(
+            EpreuveReponse.apprenant_id == user_id,
+            EpreuveReponse.statut.in_(["soumis", "corrige"]),
+        )
+        .order_by(EpreuveReponse.submitted_at.desc())
+        .all()
+    )
+    epreuves = [
+        {
+            "titre":        ep.titre,
+            "type_epreuve": ep.type_epreuve,
+            "score_total":  rep.score_total,
+            "submitted_at": rep.submitted_at.isoformat() if rep.submitted_at else None,
+            "statut":       rep.statut,
+        }
+        for rep, ep in reponses
+    ]
+
+    pdf_bytes = generate_bulletin(user, stats, masteries, epreuves)
+    nom_clean = f"{user.prenom}_{user.nom}".replace(" ", "_")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="bulletin_{nom_clean}.pdf"'},
+    )

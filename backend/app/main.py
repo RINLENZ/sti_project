@@ -71,6 +71,17 @@ def create_missing_tables():
                 END IF;
             END $$;
         """))
+        # Indexes pour les requêtes fréquentes
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_progressions_user ON progressions(user_id)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_progressions_ua ON progressions(ua_id)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_sessions_user_date ON learning_sessions(user_id, started_at DESC)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_chat_msgs_room ON chat_messages(room_id, created_at DESC)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_bkt_user ON bkt_mastery(user_id, competence)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_ep_rep_epreuve ON epreuve_reponses(epreuve_id, statut)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_ep_rep_apprenant ON epreuve_reponses(apprenant_id)"))
+        conn.execute(sa.text("ALTER TABLE epreuves ADD COLUMN IF NOT EXISTS date_ouverture TIMESTAMP WITH TIME ZONE"))
+        conn.execute(sa.text("ALTER TABLE epreuves ADD COLUMN IF NOT EXISTS date_cloture   TIMESTAMP WITH TIME ZONE"))
+        conn.execute(sa.text("COMMIT"))
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────
 try:

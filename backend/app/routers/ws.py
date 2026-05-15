@@ -101,6 +101,16 @@ async def ws_chat(
                 await websocket.send_text("pong")
                 continue
 
+            if data.get("type") == "typing":
+                other_members = [m for m in (room.membres or []) if m != user_id]
+                await manager.broadcast_to_users(other_members, {
+                    "type":    "typing",
+                    "room_id": room_id,
+                    "user_id": user_id,
+                    "nom":     f"{user.prenom} {user.nom}",
+                })
+                continue
+
             contenu = (data.get("contenu") or "").strip()
             if not contenu or len(contenu) > 4000:
                 continue

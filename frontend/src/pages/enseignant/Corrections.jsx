@@ -6,6 +6,7 @@ import { CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, ClipboardList } fr
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
+import RichText from '../../components/RichText'
 
 export default function Corrections() {
   const { C }    = useTheme()
@@ -158,11 +159,12 @@ export default function Corrections() {
                     {/* Consigne */}
                     <div style={{ background: C.brownGhost, borderRadius: 10, padding: '10px 14px', borderLeft: `4px solid ${C.brown}` }}>
                       <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 800, color: C.brown, textTransform: 'uppercase', letterSpacing: .5 }}>Consigne</p>
-                      <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                        {item.exercice_enonce.startsWith('__APC__')
+                      <RichText
+                        text={item.exercice_enonce.startsWith('__APC__')
                           ? (() => { try { return JSON.parse(item.exercice_enonce.slice(7)).consigne } catch { return item.exercice_enonce } })()
                           : item.exercice_enonce}
-                      </p>
+                        style={{ fontSize: 13, lineHeight: 1.7 }}
+                      />
                     </div>
 
                     {/* Réponse apprenant */}
@@ -176,7 +178,7 @@ export default function Corrections() {
                     {/* Réponse modèle */}
                     <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 14px', border: '1px solid #BBF7D0' }}>
                       <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: .5 }}>Réponse modèle</p>
-                      <p style={{ margin: 0, fontSize: 13, color: '#14532D', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{item.reponse_modele}</p>
+                      <RichText text={item.reponse_modele} style={{ fontSize: 13, lineHeight: 1.7, color: '#14532D' }}/>
                     </div>
 
                     {/* ── Formulaire évaluation ── */}

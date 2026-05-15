@@ -12,6 +12,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Wheels pré-téléchargés (pour build offline)
+COPY wheels/ /tmp/wheels/
+RUN pip install --no-cache-dir --no-index --find-links=/tmp/wheels reportlab pillow \
+    && rm -rf /tmp/wheels
+
 COPY . .
 
 EXPOSE 8000

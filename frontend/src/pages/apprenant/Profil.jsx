@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users, ChevronDown } from 'lucide-react'
+import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users, ChevronDown, FileDown } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
@@ -207,8 +207,9 @@ export default function Profil() {
   const [codeClasse,     setCodeClasse]     = useState('')
   const [savingLink,     setSavingLink]     = useState(false)
   const [linkedTeacher,  setLinkedTeacher]  = useState(null)
-  const [showCompletion, setShowCompletion] = useState(false)
-  const [showProgression, setShowProgression] = useState(false)
+  const [showCompletion,    setShowCompletion]    = useState(false)
+  const [showProgression,   setShowProgression]   = useState(false)
+  const [dlBulletin,        setDlBulletin]        = useState(false)
   const [form, setForm] = useState({
     prenom:        user?.prenom        || '',
     nom:           user?.nom           || '',
@@ -223,6 +224,23 @@ export default function Profil() {
     api.get('/api/tuteur/referentiel').then(({ data }) => setReferentiel(data)).catch(() => {})
     api.get(`/api/bkt/apprenant/${user?.id}/stats`).then(({ data }) => setStats(data)).catch(() => {})
   }, [user?.id])
+
+  async function downloadBulletin() {
+    setDlBulletin(true)
+    try {
+      const res = await api.get(`/api/bkt/apprenant/${user.id}/bulletin.pdf`, { responseType: 'blob' })
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `bulletin_${user.prenom}_${user.nom}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Impossible de générer le bulletin')
+    } finally {
+      setDlBulletin(false)
+    }
+  }
 
   // Niveaux de tous les cycles (liste plate)
   const allNiveaux = referentiel.flatMap(c => c.niveaux.map(n => ({ ...n, cycle_id: c.cycle_id })))
@@ -678,6 +696,25 @@ export default function Profil() {
                 )}
               </div>}
             </div>
+
+            {/* ── Bouton bulletin PDF ── */}
+            <button
+              onClick={downloadBulletin}
+              disabled={dlBulletin}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                width: '100%', padding: '14px 20px',
+                background: dlBulletin ? C.brownPale : `linear-gradient(135deg, ${C.brown}, ${C.brownDark || '#5C3D1E'})`,
+                border: 'none', borderRadius: 14, cursor: dlBulletin ? 'default' : 'pointer',
+                color: dlBulletin ? C.brown : 'white',
+                fontSize: 13, fontWeight: 800,
+                boxShadow: dlBulletin ? 'none' : '0 4px 14px rgba(124,92,58,.35)',
+                transition: 'all .2s', animation: 'fadeUp .4s .24s ease both',
+              }}
+            >
+              <FileDown size={16} style={{ flexShrink: 0 }}/>
+              {dlBulletin ? 'Génération en cours…' : 'Télécharger mon bulletin PDF'}
+            </button>
 
           </div>
 

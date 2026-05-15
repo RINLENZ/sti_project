@@ -37,6 +37,9 @@ class Epreuve(Base):
         Enum("brouillon", "publie", "archive", name="statut_epreuve_enum"),
         default="brouillon"
     )
+    date_ouverture = Column(DateTime(timezone=True), nullable=True)
+    date_cloture   = Column(DateTime(timezone=True), nullable=True)
+
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
 

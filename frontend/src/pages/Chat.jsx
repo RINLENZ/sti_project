@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { MessageCircle, Send, Plus, Users, ArrowLeft, Check, Trash2, AlertCircle, RefreshCw } from 'lucide-react'
 import { useTheme } from '../styles/theme.jsx'
@@ -22,9 +22,12 @@ export default function Chat() {
   const [msgError, setMsgError]       = useState(false)
   const [showNewRoom, setShowNewRoom] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null) // room à supprimer
+  const [typingUsers,  setTypingUsers]  = useState({}) // { userId: nom }
 
-  const bottomRef = useRef(null)
-  const inputRef  = useRef(null)
+  const bottomRef      = useRef(null)
+  const inputRef       = useRef(null)
+  const typingTimers   = useRef({})  // { userId: timerId }
+  const lastTypingSent = useRef(0)
 
   // ── Chargement des salles ──────────────────────────────────────
   const loadRooms = useCallback(() => {
@@ -64,14 +67,12 @@ export default function Chat() {
 
   const handleWsMessage = useCallback((data) => {
     if (data.type === 'chat_message') {
-      // Met à jour les messages si la salle est ouverte
       if (data.room_id === activeRoomIdRef.current) {
         setMessages(prev => {
           if (prev.some(m => m.id === data.message.id)) return prev
           return [...prev, data.message]
         })
       }
-      // Met à jour le dernier message dans la liste
       setRooms(prev => prev.map(r =>
         r.id === data.room_id
           ? { ...r, last_message: { contenu: data.message.contenu, sender_id: data.message.sender_id, created_at: data.message.created_at } }
@@ -81,12 +82,28 @@ export default function Chat() {
     if (data.type === 'new_room') {
       setRooms(prev => [data.room, ...prev.filter(r => r.id !== data.room.id)])
     }
+    if (data.type === 'typing' && data.room_id === activeRoomIdRef.current) {
+      const uid = data.user_id
+      clearTimeout(typingTimers.current[uid])
+      setTypingUsers(prev => ({ ...prev, [uid]: data.nom }))
+      typingTimers.current[uid] = setTimeout(() => {
+        setTypingUsers(prev => { const n = { ...prev }; delete n[uid]; return n })
+        delete typingTimers.current[uid]
+      }, 3000)
+    }
   }, [])
 
-  useWebSocket(
+  const { send: wsSend } = useWebSocket(
     activeRoom ? `/ws/chat/${activeRoom.id}` : null,
     { onMessage: handleWsMessage, enabled: !!activeRoom }
   )
+
+  // Vide les indicateurs de saisie quand on change de salle
+  useEffect(() => {
+    Object.values(typingTimers.current).forEach(clearTimeout)
+    typingTimers.current = {}
+    setTypingUsers({})
+  }, [activeRoom?.id])
 
   // ── Envoi via REST (fiable, pas d'UI optimiste) ───────────────
   const sendMessage = async () => {
@@ -292,12 +309,29 @@ export default function Chat() {
                 <div ref={bottomRef}/>
               </div>
 
+              {/* Indicateur de saisie */}
+              {Object.keys(typingUsers).length > 0 && (
+                <div style={{ padding: '4px 20px 0', minHeight: 20 }}>
+                  <p style={{ margin: 0, fontSize: 11, color: C.textSec, fontStyle: 'italic' }}>
+                    {Object.values(typingUsers).join(', ')} {Object.keys(typingUsers).length === 1 ? 'écrit' : 'écrivent'}…
+                  </p>
+                </div>
+              )}
+
               {/* Saisie */}
               <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'flex-end', background: C.surface }}>
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
+                  onChange={e => {
+                    setInput(e.target.value)
+                    // Envoie l'événement typing (max une fois toutes les 2s)
+                    const now = Date.now()
+                    if (now - lastTypingSent.current > 2000) {
+                      lastTypingSent.current = now
+                      wsSend({ type: 'typing' })
+                    }
+                  }}
                   onKeyDown={onKey}
                   placeholder="Écrire un message…"
                   rows={1}

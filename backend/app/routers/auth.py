@@ -1,4 +1,8 @@
 import json
+import secrets
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -12,6 +16,8 @@ from ..services.auth_service import (
     decode_refresh_token, hash_password, get_user_by_email
 )
 from ..dependencies import get_current_user
+from ..config import settings
+import redis as redis_lib
 
 router = APIRouter(prefix="/auth", tags=["authentification"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -334,6 +340,100 @@ def update_mon_profil(
         "matieres_enseignees": user.matieres_enseignees,
         "niveaux_enseignes":   user.niveaux_enseignes,
     }
+
+
+# ── Réinitialisation mot de passe ─────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token:        str
+    new_password: str
+
+
+def _send_reset_email(to_email: str, prenom: str, reset_url: str) -> None:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Réinitialisation de votre mot de passe SenSia"
+    msg["From"]    = settings.smtp_from or settings.smtp_user
+    msg["To"]      = to_email
+    html = f"""
+    <html><body style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1A1207">
+      <div style="background:linear-gradient(135deg,#6B3A2A,#C4865A);padding:20px 24px;border-radius:12px 12px 0 0">
+        <h1 style="margin:0;color:white;font-size:20px">SenSia — Réinitialisation</h1>
+      </div>
+      <div style="border:1px solid #E8DDD6;border-top:none;padding:24px;border-radius:0 0 12px 12px">
+        <p>Bonjour <strong>{prenom}</strong>,</p>
+        <p>Tu as demandé la réinitialisation de ton mot de passe. Clique sur le bouton ci-dessous. Ce lien est valable <strong>1 heure</strong>.</p>
+        <a href="{reset_url}" style="display:inline-block;padding:12px 28px;background:#6B3A2A;color:white;text-decoration:none;border-radius:8px;font-weight:700;margin:12px 0">
+          Réinitialiser mon mot de passe →
+        </a>
+        <p style="color:#7C6256;font-size:12px;margin-top:20px">
+          Si tu n'as pas demandé cette réinitialisation, ignore ce message. Ton mot de passe ne changera pas.
+        </p>
+      </div>
+    </body></html>
+    """
+    msg.attach(MIMEText(html, "html"))
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as srv:
+        srv.ehlo()
+        srv.starttls()
+        srv.login(settings.smtp_user, settings.smtp_password)
+        srv.sendmail(settings.smtp_from or settings.smtp_user, to_email, msg.as_string())
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Génère un token de réinitialisation et l'envoie par email (si SMTP configuré)."""
+    MSG_GENERIQUE = "Si cet email est enregistré, un lien de réinitialisation a été envoyé."
+    user = get_user_by_email(db, body.email.strip().lower())
+    if not user or not user.actif:
+        return {"message": MSG_GENERIQUE}
+
+    token = secrets.token_urlsafe(32)
+    try:
+        r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+        r.setex(f"pwd_reset:{token}", 3600, str(user.id))
+    except Exception:
+        raise HTTPException(500, "Service temporairement indisponible")
+
+    reset_url = f"{settings.frontend_url}/reset-password?token={token}"
+
+    if settings.smtp_host and settings.smtp_user:
+        try:
+            _send_reset_email(user.email, user.prenom, reset_url)
+        except Exception:
+            pass  # ne pas bloquer si l'email échoue
+
+    return {
+        "message": MSG_GENERIQUE,
+        # Retourné seulement si SMTP non configuré (dev / test)
+        "reset_url": reset_url if not (settings.smtp_host and settings.smtp_user) else None,
+    }
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Valide le token Redis et met à jour le mot de passe."""
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "Le mot de passe doit contenir au moins 6 caractères")
+    try:
+        r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+        user_id = r.get(f"pwd_reset:{body.token}")
+    except Exception:
+        raise HTTPException(500, "Service temporairement indisponible")
+
+    if not user_id:
+        raise HTTPException(400, "Lien invalide ou expiré")
+
+    user = db.query(User).filter(User.id == UUID(user_id)).first()
+    if not user:
+        raise HTTPException(404, "Utilisateur introuvable")
+
+    user.password = hash_password(body.new_password)
+    db.commit()
+    r.delete(f"pwd_reset:{body.token}")
+    return {"message": "Mot de passe réinitialisé avec succès"}
 
 
 @router.delete("/tuteur/delier/{apprenant_id}")

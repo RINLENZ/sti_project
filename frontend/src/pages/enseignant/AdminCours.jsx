@@ -9,13 +9,14 @@ import {
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
 import ContentRenderer from '../../components/ContentRenderer'
+import RichText, { RichTextInline } from '../../components/RichText'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkList, Spinner } from '../../components/Skeleton'
 
 // ── UI de base ──────────────────────────────────────────────────
-const getInputBase = C => ({
+const getInputBase = (C, mobile = false) => ({
   width: '100%', padding: '9px 12px', border: `1.5px solid ${C.brownPale}`,
-  borderRadius: 8, fontSize: 13, color: C.text, background: C.surface,
+  borderRadius: 8, fontSize: mobile ? 16 : 13, color: C.text, background: C.surface,
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
 })
 const FieldLabel = ({ children, required }) => {
@@ -28,7 +29,8 @@ const FieldLabel = ({ children, required }) => {
 }
 const FInput = ({ label, value, onChange, placeholder, type = 'text', required, hint }) => {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
@@ -43,7 +45,8 @@ const FInput = ({ label, value, onChange, placeholder, type = 'text', required, 
 }
 const FTextarea = ({ label, value, onChange, placeholder, rows = 3, required }) => {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
@@ -55,9 +58,157 @@ const FTextarea = ({ label, value, onChange, placeholder, rows = 3, required }) 
   </div>
   )
 }
+// ── RichTextarea — textarea enrichi avec toolbar LaTeX/image/aperçu ──
+const LATEX_BTNS = [
+  ['x²',  '$',          '$',          'x^{2}'],
+  ['√',   '$\\sqrt{',   '}$',         'x'],
+  ['a/b', '$\\frac{',   '}{b}$',      'a'],
+  ['Σ',   '$\\sum_{',   '}$',         'i=1'],
+  ['∫',   '$\\int_{a}^{b}$', '',       ''],
+  ['≤',   '$\\leq$',    '',           ''],
+  ['≥',   '$\\geq$',    '',           ''],
+  ['≠',   '$\\neq$',    '',           ''],
+  ['π',   '$\\pi$',     '',           ''],
+  ['∞',   '$\\infty$',  '',           ''],
+  ['$$',  '$$\n',       '\n$$',       'expression'],
+]
+
+const RichTextarea = ({ label, value, onChange, placeholder, rows = 3, required }) => {
+  const { C } = useTheme()
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
+  const taRef = useRef(null)
+  const [preview,   setPreview]   = useState(false)
+  const [focused,   setFocused]   = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  function insert(before, after = '', ph = '') {
+    const ta = taRef.current
+    if (!ta) return
+    const start = ta.selectionStart
+    const end   = ta.selectionEnd
+    const sel   = value.slice(start, end) || ph
+    const newVal = value.slice(0, start) + before + sel + after + value.slice(end)
+    onChange({ target: { value: newVal } })
+    if (after === '' && ph === '') return
+    setTimeout(() => {
+      ta.focus()
+      ta.setSelectionRange(start + before.length, start + before.length + sel.length)
+    }, 0)
+  }
+
+  async function pickImage() {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async () => {
+      const file = input.files[0]
+      if (!file) return
+      setUploading(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const { data } = await api.post('/api/admin/upload-media', fd)
+        const alt = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+        insert(`![${alt}](${data.url})`)
+      } catch {
+        toast.error('Échec du téléchargement image')
+      } finally {
+        setUploading(false)
+      }
+    }
+    input.click()
+  }
+
+  const borderColor = focused ? C.brown : C.brownPale
+  const tb = {
+    background: 'none', border: `1px solid ${C.brownPale}`, borderRadius: 5,
+    padding: mobile ? '2px 4px' : '2px 6px', cursor: 'pointer',
+    fontSize: mobile ? 10 : 11, fontWeight: 700,
+    color: C.textSec, fontFamily: 'monospace', lineHeight: 1.6,
+  }
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {label && <FieldLabel required={required}>{label}</FieldLabel>}
+
+      {/* ── Toolbar ── */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 3,
+        padding: '4px 8px', background: C.brownGhost,
+        border: `1.5px solid ${borderColor}`, borderBottom: 'none',
+        borderRadius: '8px 8px 0 0', transition: 'border-color .15s',
+      }}>
+        {/* LaTeX */}
+        {LATEX_BTNS.filter((_, i) => !mobile || i < 8).map(([lbl, before, after, ph]) => (
+          <button key={lbl} type="button"
+            onMouseDown={e => { e.preventDefault(); insert(before, after, ph) }}
+            style={tb} title={`Insérer ${lbl}`}>
+            {lbl}
+          </button>
+        ))}
+
+        {/* Séparateur */}
+        <span style={{ width: 1, height: 16, background: C.brownPale, margin: '0 3px' }}/>
+
+        {/* Format texte */}
+        <button type="button" onMouseDown={e => { e.preventDefault(); insert('**', '**', 'texte') }}
+          style={{ ...tb, fontWeight: 900, fontFamily: 'inherit' }} title="Gras">B</button>
+        <button type="button" onMouseDown={e => { e.preventDefault(); insert('*', '*', 'texte') }}
+          style={{ ...tb, fontStyle: 'italic', fontFamily: 'inherit' }} title="Italique">I</button>
+        <button type="button" onMouseDown={e => { e.preventDefault(); insert('`', '`', 'code') }}
+          style={tb} title="Code inline">`c`</button>
+        <button type="button" onMouseDown={e => { e.preventDefault(); insert('```\n', '\n```', 'code') }}
+          style={tb} title="Bloc de code">&lt;/&gt;</button>
+
+        {/* Séparateur */}
+        <span style={{ width: 1, height: 16, background: C.brownPale, margin: '0 3px' }}/>
+
+        {/* Image */}
+        <button type="button" onMouseDown={e => { e.preventDefault(); pickImage() }}
+          style={{ ...tb, display: 'flex', alignItems: 'center', gap: 3 }}
+          title="Insérer une image" disabled={uploading}>
+          {uploading ? <Loader size={10}/> : <Upload size={10}/>}
+          {uploading ? '…' : 'Image'}
+        </button>
+
+        {/* Aperçu — poussé à droite */}
+        <button type="button" onMouseDown={e => { e.preventDefault(); setPreview(p => !p) }}
+          style={{ ...tb, marginLeft: 'auto',
+            background: preview ? C.brownPale : 'none', color: preview ? C.brown : C.textSec,
+            border: `1px solid ${preview ? C.brown : C.brownPale}` }}
+          title={preview ? 'Retour en édition' : 'Prévisualiser le rendu'}>
+          {preview ? '✏ Éditer' : '👁 Aperçu'}
+        </button>
+      </div>
+
+      {/* ── Zone édition / aperçu ── */}
+      {preview ? (
+        <div
+          onClick={() => setPreview(false)}
+          style={{ ...inputBase, minHeight: rows * 26, padding: '10px 12px', cursor: 'text',
+            border: `1.5px solid ${borderColor}`, borderTop: 'none',
+            borderRadius: '0 0 8px 8px', transition: 'border-color .15s' }}>
+          <RichText text={value || ''} style={{ fontSize: 13 }}/>
+          {!value && <span style={{ color: C.textMuted, fontSize: 13 }}>Aucun contenu</span>}
+        </div>
+      ) : (
+        <textarea ref={taRef} value={value} onChange={onChange}
+          placeholder={placeholder} rows={rows}
+          style={{ ...inputBase, resize: 'vertical', borderTop: 'none',
+            borderRadius: '0 0 8px 8px', borderColor, transition: 'border-color .15s' }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 const FSelect = ({ label, value, onChange, options, required }) => {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
@@ -71,15 +222,17 @@ const FSelect = ({ label, value, onChange, options, required }) => {
 // ── Modal ───────────────────────────────────────────────────────
 function Modal({ title, onClose, children, size = 560 }) {
   const { C } = useTheme()
+  const { mobile } = useBreakpoint()
   useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = '' } }, [])
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()} style={{
       position: 'fixed', inset: 0, background: 'rgba(26,18,7,.6)',
       display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-      zIndex: 1000, padding: '24px 16px', overflowY: 'auto', backdropFilter: 'blur(3px)',
+      zIndex: 1000, padding: mobile ? '8px' : '24px 16px', overflowY: 'auto', backdropFilter: 'blur(3px)',
     }}>
       <div style={{
-        backgroundColor: C.surface, borderRadius: 20, padding: '24px 28px',
+        backgroundColor: C.surface, borderRadius: mobile ? 14 : 20,
+        padding: mobile ? '14px 12px' : '24px 28px',
         maxWidth: size, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.3)',
         animation: 'slideDown .2s ease', margin: 'auto',
       }}>
@@ -132,7 +285,8 @@ const CancelBtn = ({ onClose }) => {
 // ── TagList ─────────────────────────────────────────────────────
 function TagList({ label, items, onChange, placeholder }) {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   const [draft, setDraft] = useState('')
   function add() {
     const t = draft.trim()
@@ -168,12 +322,13 @@ function TagList({ label, items, onChange, placeholder }) {
 
 function FormMatiere({ initial = {}, onSubmit, onClose }) {
   const { C } = useTheme()
+  const { mobile } = useBreakpoint()
   const [form, setForm] = useState({ nom: initial.nom || '', code: initial.code || '', description: initial.description || '' })
   const [loading, setLoading] = useState(false)
   async function handle(e) { e.preventDefault(); setLoading(true); try { await onSubmit({ nom: form.nom, code: form.code, description: form.description }) } finally { setLoading(false) } }
   return (
     <form onSubmit={handle}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 120px', gap: 12 }}>
         <FInput label="Nom" value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} placeholder="ex: Mathématiques" required />
         <FInput label="Code" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} placeholder="MATH" required />
       </div>
@@ -185,6 +340,7 @@ function FormMatiere({ initial = {}, onSubmit, onClose }) {
 
 function FormModule({ initial = {}, matieres = [], niveaux = [], filieres = [], onSubmit, onClose }) {
   const { C } = useTheme()
+  const { mobile } = useBreakpoint()
   const [form, setForm] = useState({
     titre: initial.titre || '', numero: initial.numero || 1, description: initial.description || '',
     matiere_id: initial.matiere_id || matieres[0]?.id || '',
@@ -198,7 +354,7 @@ function FormModule({ initial = {}, matieres = [], niveaux = [], filieres = [], 
     <form onSubmit={handle}>
       <FSelect label="Matière" value={form.matiere_id} onChange={e => setForm(f => ({ ...f, matiere_id: e.target.value }))} required
         options={matieres.map(m => ({ value: m.id, label: m.nom }))} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <FSelect label="Niveau / Classe" value={form.niveau_id} onChange={e => setForm(f => ({ ...f, niveau_id: e.target.value }))}
           options={[{ value: '', label: '— Tous niveaux —' }, ...niveaux.map(n => ({ value: n.id, label: n.nom }))]} />
         <FSelect label="Spécialité / Série" value={form.filiere_id} onChange={e => setForm(f => ({ ...f, filiere_id: e.target.value }))}
@@ -450,6 +606,7 @@ function TabStructure({ structure, niveaux, filieres, filterNiveau, filterMat, o
 
 function FormUA({ initial = {}, familles = [], onSubmit, onClose }) {
   const { C } = useTheme()
+  const { mobile } = useBreakpoint()
   const [form, setForm] = useState({
     titre: initial.titre || '', reference_ue: initial.reference_ue || '',
     situation_probleme: initial.situation_probleme || '',
@@ -466,7 +623,7 @@ function FormUA({ initial = {}, familles = [], onSubmit, onClose }) {
   }
   return (
     <form onSubmit={handle}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 130px', gap: 12 }}>
         <FInput label="Titre de l'UA" value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))} placeholder="ex: Les structures de contrôle" required />
         <FInput label="Référence" value={form.reference_ue} onChange={e => setForm(f => ({ ...f, reference_ue: e.target.value }))} placeholder="UA1.1" required />
       </div>
@@ -677,6 +834,7 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
 
 function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
   const { C } = useTheme()
+  const { mobile } = useBreakpoint()
   const inputBase = getInputBase(C)
 
   const initDisplayType = () => {
@@ -764,7 +922,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       {/* ── Section : Paramètres ── */}
       <div style={{ background: C.brownPale, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
         {SEC('Paramètres')}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 220px', gap: 10 }}>
           <FInput label="Titre court" value={form.titre} onChange={e => set('titre', e.target.value)} placeholder="ex : Identifier les périphériques" required />
           <FSelect label="Type d'exercice" value={form.type}
             onChange={e => set('type', e.target.value)}
@@ -777,7 +935,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
               { value: 'situation_apc', label: '🎯 Situation-problème APC' },
             ]} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: uas.length ? '2fr 1fr 1fr 1fr 2fr' : '1fr 1fr 1fr 2fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : (uas.length ? '2fr 1fr 1fr 1fr 2fr' : '1fr 1fr 1fr 2fr'), gap: 10 }}>
           {uas.length > 0 && <FSelect label="UA parente" value={form.ua_id} onChange={e => set('ua_id', e.target.value)} required options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 40) }))} />}
           <FSelect label="Difficulté" value={form.difficulte} onChange={e => set('difficulte', e.target.value)}
             options={[{ value: 1, label: '▲ Facile' }, { value: 2, label: '▲▲ Moyen' }, { value: 3, label: '▲▲▲ Difficile' }]} />
@@ -795,7 +953,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       {/* ── QCM ── */}
       {form.type === 'qcm' && (
         <>
-          <FTextarea label="Énoncé / Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+          <RichTextarea label="Énoncé / Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
             placeholder="Quelle est la fonction principale d'un système d'exploitation ?" rows={3} required />
           <div style={{ marginBottom: 12 }}>
             <FieldLabel required>Options A B C D</FieldLabel>
@@ -806,7 +964,8 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
                     {String.fromCharCode(65 + i)}
                   </span>
                   <input value={opt} onChange={e => { const o = [...form.options]; o[i] = e.target.value; set('options', o) }}
-                    placeholder={`Option ${String.fromCharCode(65 + i)}`} style={{ ...inputBase, paddingLeft: 38 }}
+                    placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                    style={{ ...inputBase, paddingLeft: 38 }}
                     onFocus={e => e.target.style.borderColor = C.brown} onBlur={e => e.target.style.borderColor = C.brownPale} />
                 </div>
               ))}
@@ -819,7 +978,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       {/* ── Vrai / Faux ── */}
       {form.type === 'vrai_faux' && (
         <>
-          <FTextarea label="Affirmation à évaluer" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+          <RichTextarea label="Affirmation à évaluer" value={form.enonce} onChange={e => set('enonce', e.target.value)}
             placeholder="Un ordinateur peut fonctionner sans système d'exploitation." rows={2} required />
           <div style={{ marginBottom: 12 }}>
             <FieldLabel required>Réponse correcte</FieldLabel>
@@ -844,7 +1003,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
         const parts = form.enonce.split('___')
         return (
           <>
-            <FTextarea label="Texte avec trous — utilise ___ pour chaque trou" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+            <RichTextarea label="Texte avec trous — utilise ___ pour chaque trou" value={form.enonce} onChange={e => set('enonce', e.target.value)}
               placeholder="Un ___ est un ensemble de ___ permettant de traiter l'information." rows={3} required />
             {nbBlanks === 0 && form.enonce.trim() && (
               <p style={{ fontSize: 11, color: C.orange, margin: '-8px 0 12px', fontWeight: 600 }}>⚠️ Ajoute ___ dans le texte pour créer des trous.</p>
@@ -898,9 +1057,9 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       {/* ── Réponse libre ── */}
       {form.type === 'reponse_libre' && (
         <>
-          <FTextarea label="Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+          <RichTextarea label="Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
             placeholder="Explique le rôle d'un système d'exploitation." rows={3} required />
-          <FTextarea label="Éléments de corrigé (non montrés avant validation)" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)}
+          <RichTextarea label="Éléments de corrigé (non montrés avant validation)" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)}
             placeholder="Le SE gère le matériel, les processus, la mémoire et les fichiers." rows={3} required />
         </>
       )}
@@ -908,7 +1067,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       {/* ── Identification de schéma ── */}
       {form.type === 'identification' && (
         <>
-          <FTextarea label="Consigne / Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
+          <RichTextarea label="Consigne / Question" value={form.enonce} onChange={e => set('enonce', e.target.value)}
             placeholder="Identifie le composant indiqué sur le schéma." rows={2} required />
           <div style={{ marginBottom: 14 }}>
             <FieldLabel required>Schéma ou image à identifier</FieldLabel>
@@ -925,7 +1084,8 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
                     {String.fromCharCode(65 + i)}
                   </span>
                   <input value={opt} onChange={e => { const o = [...form.options]; o[i] = e.target.value; set('options', o) }}
-                    placeholder={`Étiquette ${String.fromCharCode(65 + i)}`} style={{ ...inputBase, paddingLeft: 38 }}
+                    placeholder={`Étiquette ${String.fromCharCode(65 + i)}`}
+                    style={{ ...inputBase, paddingLeft: 38 }}
                     onFocus={e => e.target.style.borderColor = '#0369A1'} onBlur={e => e.target.style.borderColor = C.brownPale} />
                 </div>
               ))}
@@ -944,14 +1104,14 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
               placeholder="Tu es technicien dans une école. Le directeur te demande d'installer un logiciel sur 30 postes…" rows={4} required />
             <FTextarea label="🎯 Consigne — ce que l'apprenant doit produire" value={form.apc.consigne} onChange={e => setAPC('consigne', e.target.value)}
               placeholder="1. Identifie le type de logiciel à installer.&#10;2. Décris les étapes d'installation.&#10;3. Justifie ton choix." rows={4} required />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 10 }}>
               <FTextarea label="📚 Ressources disponibles" value={form.apc.ressources} onChange={e => setAPC('ressources', e.target.value)}
                 placeholder="Manuel TIC, Internet, documentation…" rows={2} />
               <FTextarea label="✅ Critères d'évaluation (barème)" value={form.apc.criteres} onChange={e => setAPC('criteres', e.target.value)}
                 placeholder="Identification correcte (4 pts)&#10;Étapes complètes (8 pts)&#10;Justification (8 pts)" rows={2} />
             </div>
           </div>
-          <FTextarea label="Éléments de corrigé (non montrés avant validation)" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)}
+          <RichTextarea label="Éléments de corrigé (non montrés avant validation)" value={form.reponse_correcte} onChange={e => set('reponse_correcte', e.target.value)}
             placeholder="Corrigé : logiciel d'application — étapes : 1. Vérifier la compatibilité…" rows={4} required />
         </>
       )}
@@ -959,9 +1119,9 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
       {/* ── Feedback & indices ── */}
       <div style={{ background: '#F0FDF4', border: `1px solid ${C.emerald}25`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
         <p style={{ fontSize: 10, fontWeight: 800, color: C.emerald, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 10px' }}>Feedback & indices</p>
-        <FTextarea label="Explication (affichée après la réponse)" value={form.explication} onChange={e => set('explication', e.target.value)}
+        <RichTextarea label="Explication (affichée après la réponse)" value={form.explication} onChange={e => set('explication', e.target.value)}
           placeholder="Parce que le processeur est le composant central chargé d'exécuter les instructions…" rows={2} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 10 }}>
           <FInput label="Indice 1" value={form.indice_1} onChange={e => set('indice_1', e.target.value)} placeholder="Premier indice…" />
           <FInput label="Indice 2" value={form.indice_2} onChange={e => set('indice_2', e.target.value)} placeholder="Deuxième indice…" />
         </div>
@@ -1310,7 +1470,8 @@ function countWords(contenu) {
 
 function BlockMediaPicker({ value, accept, onChange: onUrlChange, previewEl }) {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   const [uploading, setUploading] = useState(false)
   const ref = useRef(null)
 
@@ -1353,7 +1514,8 @@ function BlockMediaPicker({ value, accept, onChange: onUrlChange, previewEl }) {
 
 function BlockEditorItem({ block, index, total, onChange, onDelete, onMove }) {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   const meta = BLOCK_META[block.type] || BLOCK_META.texte
   const set = (key, val) => onChange({ ...block, [key]: val })
 
@@ -1372,11 +1534,9 @@ function BlockEditorItem({ block, index, total, onChange, onDelete, onMove }) {
 
       <div style={{ padding: '12px 14px' }}>
         {block.type === 'texte' && (
-          <textarea value={block.valeur} onChange={e => set('valeur', e.target.value)}
-            placeholder="Écrivez votre paragraphe ici…" rows={4}
-            style={{ ...inputBase, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.7 }}
-            onFocus={e => e.target.style.borderColor = C.brown}
-            onBlur={e => e.target.style.borderColor = C.brownPale} />
+          <RichTextarea value={block.valeur}
+            onChange={e => set('valeur', e.target.value)}
+            placeholder="Écrivez votre paragraphe… LaTeX: $x^2$  Gras: **texte**  Image: toolbar ↑" rows={4} />
         )}
 
         {block.type === 'titre' && (
@@ -1613,7 +1773,9 @@ function BlockRenderer({ contenu }) {
     <div style={{ fontSize: 13, lineHeight: 1.7, color: C.text }}>
       {blocks.map((block, i) => {
         if (block.type === 'texte') return (
-          <p key={i} style={{ margin: '0 0 12px', whiteSpace: 'pre-wrap' }}>{block.valeur}</p>
+          <div key={i} style={{ margin: '0 0 12px' }}>
+            <RichText text={block.valeur} style={{ fontSize: 13, lineHeight: 1.7 }} />
+          </div>
         )
         if (block.type === 'titre') {
           const s = {
@@ -1638,7 +1800,7 @@ function BlockRenderer({ contenu }) {
           return (
             <div key={i} style={{ background: s.bg, border: `1.5px solid ${s.border}`, borderRadius: 10, padding: '12px 16px', margin: '12px 0', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 16, flexShrink: 0 }}>{s.emoji}</span>
-              <p style={{ margin: 0, color: s.color, fontWeight: 600 }}>{block.valeur}</p>
+              <span style={{ color: s.color, fontWeight: 600 }}><RichTextInline text={block.valeur} /></span>
             </div>
           )
         }
@@ -1647,7 +1809,7 @@ function BlockRenderer({ contenu }) {
             {(block.items || []).map((item, j) => (
               <li key={j} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <span style={{ color: C.brownLight, fontWeight: 900, flexShrink: 0 }}>•</span>
-                <span>{item}</span>
+                <span><RichTextInline text={item} /></span>
               </li>
             ))}
           </ul>
@@ -1691,7 +1853,8 @@ function BlockRenderer({ contenu }) {
 
 function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   const [form, setForm] = useState({
     titre:       initial.titre       || '',
     type:        initial.type        || 'lecon',
@@ -1734,7 +1897,7 @@ function FormRessource({ initial = {}, uas = [], onSubmit, onClose }) {
   return (
     <form onSubmit={handle}>
       {/* UA + type */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 160px', gap: 12 }}>
         <FSelect label="UA parente" value={form.ua_id}
           onChange={e => setForm(f => ({ ...f, ua_id: e.target.value }))} required
           options={uas.map(u => ({ value: u.id, label: u.titre.substring(0, 50) }))} />
@@ -1826,14 +1989,14 @@ function MarkdownPreview({ content }) {
 
 function TabContenu({ structure, filterNiveau = 'all', filterMat = 'all', onReload }) {
   const { C } = useTheme()
-  const inputBase = getInputBase(C)
+  const { mobile } = useBreakpoint()
+  const inputBase = getInputBase(C, mobile)
   const [ressources,   setRessources]   = useState([])
   const [loadingRes,   setLoadingRes]   = useState(true)
   const [modal,        setModal]        = useState(null)
   const [deleting,     setDeleting]     = useState(null)
   const [filterUA,     setFilterUA]     = useState('all')
   const [search,       setSearch]       = useState('')
-  const { mobile } = useBreakpoint()
 
   const allUAs = structure
   .filter(m => filterMat === 'all' || String(m.id) === filterMat)

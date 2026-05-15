@@ -220,10 +220,10 @@ dispatch(loginSuccess({
           <div style={{ display:'flex', flexDirection:'column' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
               <label htmlFor="l-pw" style={{ ...fl('pw'), marginBottom:0 }}>Mot de passe</label>
-              <button type="button" onClick={() => toast('Réinitialisation bientôt disponible 🔜')}
-                style={{ background:'none', border:'none', padding:0, fontSize:11, fontWeight:700, color:C.brownLight }}>
+              <Link to="/forgot-password"
+                style={{ background:'none', border:'none', padding:0, fontSize:11, fontWeight:700, color:C.brownLight, textDecoration:'none' }}>
                 Oublié ?
-              </button>
+              </Link>
             </div>
             <div style={fw('pw')}>
               <Lock size={15} color={focused === 'pw' ? C.brown : '#C0AFA7'} style={{ flexShrink:0 }}/>

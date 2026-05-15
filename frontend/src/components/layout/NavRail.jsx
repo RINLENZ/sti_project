@@ -4,11 +4,12 @@ import { logout } from '../../store/authSlice'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import api from '../../services/api'
+import SearchModal from '../SearchModal'
 import {
   LayoutDashboard, BookOpen, LogOut, GraduationCap,
   BarChart2, Bell, Shield, UserCircle, Map,
   Sun, Moon, FileText, ClipboardList,
-  Camera, Mic, FlaskConical, PenLine, ChevronRight, MessageCircle,
+  Camera, Mic, FlaskConical, PenLine, ChevronRight, MessageCircle, Users, Search,
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
@@ -399,7 +400,20 @@ export default function NavRail({ activeView, onViewChange }) {
   const [epBadge,         setEpBadge]         = useState(0)
   const [notifOpen,       setNotifOpen]       = useState(false)
   const [notifAnchorRect, setNotifAnchorRect] = useState(null)
+  const [searchOpen,      setSearchOpen]      = useState(false)
   const bellRef = useRef(null)
+
+  // Ctrl+K ou Cmd+K pour ouvrir la recherche
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(o => !o)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   // Charge badge épreuves (apprenant uniquement)
   useEffect(() => {
@@ -423,8 +437,9 @@ export default function NavRail({ activeView, onViewChange }) {
     super_admin: {
       main: [],
       admin: [
-        { path: '/admin',             label: 'Gestion des cours',    icon: Shield   },
-        { path: '/admin/referentiel', label: 'Référentiel éducatif', icon: BookOpen },
+        { path: '/admin',               label: 'Gestion des cours',    icon: Shield   },
+        { path: '/admin/referentiel',   label: 'Référentiel éducatif', icon: BookOpen },
+        { path: '/admin/utilisateurs',  label: 'Utilisateurs',         icon: Users    },
       ],
       collect: [
         { path: '/collect-emotions', label: 'Collecte émotions', icon: Camera },
@@ -618,6 +633,14 @@ export default function NavRail({ activeView, onViewChange }) {
         paddingTop: space[3],
         flexShrink: 0,
       }}>
+        {/* Recherche */}
+        <RailItemWithTooltip
+          icon={Search}
+          label="Rechercher (Ctrl+K)"
+          active={searchOpen}
+          onClick={() => setSearchOpen(o => !o)}
+        />
+
         {/* Notifications */}
         <div ref={bellRef}>
           <RailItemWithTooltip
@@ -681,6 +704,9 @@ export default function NavRail({ activeView, onViewChange }) {
           anchorRect={notifAnchorRect}
         />
       )}
+
+      {/* Modal recherche globale */}
+      {searchOpen && <SearchModal onClose={() => setSearchOpen(false)}/>}
     </aside>
   )
 }

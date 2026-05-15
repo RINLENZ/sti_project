@@ -7,6 +7,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import { Clock, ChevronLeft, Send, CheckCircle, AlertTriangle, Award, Camera, ShieldAlert } from 'lucide-react'
 import useProctoringCamera from '../../hooks/useProctoringCamera'
+import RichText, { RichTextInline } from '../../components/RichText'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -234,9 +235,10 @@ function QuestionBlock({ q, idx, value, onChange, disabled, correction, C }) {
               {(q.type || 'question').replace(/_/g,' ')}
             </span>
           </div>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.6 }}>
-            <strong style={{ color: C.textSec }}>Q{idx + 1}.</strong> {q.enonce}
-          </p>
+          <div style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
+            <span style={{ fontWeight: 800, color: C.textSec, fontSize: 13 }}>Q{idx + 1}.</span>
+            <RichText text={q.enonce} style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}/>
+          </div>
         </div>
         <span style={{ fontSize: 12, fontWeight: 800, color, background: `${color}15`, padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>
           {q.points} pt{q.points > 1 ? 's' : ''}
@@ -287,11 +289,13 @@ function QuestionBlock({ q, idx, value, onChange, disabled, correction, C }) {
           {/* Réponse correcte si faux */}
           {corr.correct === false && q.reponse_correcte && (
             <p style={{ margin: '6px 0 0', fontSize: 11, color: C.textSec }}>
-              Réponse attendue : <strong style={{ color: C.text }}>{q.reponse_correcte}</strong>
+              Réponse attendue : <RichTextInline text={q.reponse_correcte} style={{ fontWeight: 700, color: C.text }}/>
             </p>
           )}
           {corr.explication && corr.explication !== 'Correction manuelle requise' && (
-            <p style={{ margin: '4px 0 0', fontSize: 11, color: C.textSec }}>{corr.explication}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 11, color: C.textSec }}>
+              <RichTextInline text={corr.explication}/>
+            </p>
           )}
         </div>
       )}

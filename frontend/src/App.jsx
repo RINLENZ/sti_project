@@ -13,6 +13,8 @@ function ScrollToTop() {
 const LandingPage          = lazy(() => import('./pages/LandingPage'))
 const Login                = lazy(() => import('./pages/auth/Login'))
 const Register             = lazy(() => import('./pages/auth/Register'))
+const ForgotPassword       = lazy(() => import('./pages/auth/ForgotPassword'))
+const ResetPassword        = lazy(() => import('./pages/auth/ResetPassword'))
 const Onboarding           = lazy(() => import('./pages/auth/Onboarding'))
 const OnboardingEnseignant = lazy(() => import('./pages/auth/OnboardingEnseignant'))
 
@@ -24,8 +26,9 @@ const MesEpreuves    = lazy(() => import('./pages/apprenant/MesEpreuves'))
 const EpreuveSession = lazy(() => import('./pages/apprenant/EpreuveSession'))
 
 const DashboardProf    = lazy(() => import('./pages/enseignant/DashboardProf'))
-const AdminCours       = lazy(() => import('./pages/enseignant/AdminCours'))
-const AdminReferentiel = lazy(() => import('./pages/enseignant/AdminReferentiel'))
+const AdminCours         = lazy(() => import('./pages/enseignant/AdminCours'))
+const AdminReferentiel   = lazy(() => import('./pages/enseignant/AdminReferentiel'))
+const AdminUtilisateurs  = lazy(() => import('./pages/enseignant/AdminUtilisateurs'))
 const ProfilEnseignant = lazy(() => import('./pages/enseignant/ProfilEnseignant'))
 const AdminExamen      = lazy(() => import('./pages/enseignant/AdminExamen'))
 const Corrections      = lazy(() => import('./pages/enseignant/Corrections'))
@@ -98,8 +101,10 @@ export default function App() {
 
         {/* ── Pages publiques ── */}
         <Route path="/"         element={token ? <Navigate to="/app" replace/> : <LandingPage/>}/>
-        <Route path="/login"    element={token ? <Navigate to="/app" replace/> : <Login/>}/>
-        <Route path="/register" element={token ? <Navigate to="/app" replace/> : <Register/>}/>
+        <Route path="/login"            element={token ? <Navigate to="/app" replace/> : <Login/>}/>
+        <Route path="/register"         element={token ? <Navigate to="/app" replace/> : <Register/>}/>
+        <Route path="/forgot-password"  element={<ForgotPassword/>}/>
+        <Route path="/reset-password"   element={<ResetPassword/>}/>
 
         {/* ── Onboardings ── */}
         <Route path="/onboarding" element={
@@ -162,6 +167,9 @@ export default function App() {
         }/>
         <Route path="/admin/referentiel" element={
           <PrivateRoute role="super_admin"><AppLayout><AdminReferentiel/></AppLayout></PrivateRoute>
+        }/>
+        <Route path="/admin/utilisateurs" element={
+          <PrivateRoute role="super_admin"><AppLayout><AdminUtilisateurs/></AppLayout></PrivateRoute>
         }/>
 
         {/* ── Autres ── */}

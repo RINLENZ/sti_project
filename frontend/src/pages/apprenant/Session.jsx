@@ -13,6 +13,7 @@ import { C, useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import ContentRenderer from '../../components/ContentRenderer'
+import RichText, { RichTextInline } from '../../components/RichText'
 import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY } from '../../config/models'
@@ -163,7 +164,7 @@ const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 13, fontWeight: 900
       }}>{lettre}</span>
-      <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5, flex: 1 }}>{texte}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5, flex: 1 }}><RichTextInline text={texte}/></span>
       {correct   && <CheckCircle size={17} color={C.emerald} style={{ flexShrink: 0 }}/>}
       {incorrect && <XCircle     size={17} color={C.red}     style={{ flexShrink: 0 }}/>}
     </button>
@@ -1635,9 +1636,7 @@ export default function Session() {
                 marginBottom: isIdentification ? 10 : 20, borderLeft: `4px solid ${C.brown}`,
                 position: 'relative'
               }}>
-                <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, fontWeight: 700, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', paddingRight: 36 }}>
-                  {ex.enonce}
-                </p>
+                <RichText text={ex.enonce} style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, paddingRight: 36 }}/>
                 <button onClick={() => speaking ? stopTts() : tts(ex.enonce)}
                   title={speaking ? 'Arrêter la lecture' : 'Lire l\'énoncé'}
                   style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: '50%', background: speaking ? C.red : C.brown, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, transition: 'background .2s', boxShadow: speaking ? `0 0 0 3px ${C.red}30` : 'none', animation: speaking ? 'pulse 1.5s infinite' : 'none' }}>

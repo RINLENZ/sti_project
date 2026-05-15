@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
     supabase_url: str = ""
     supabase_service_key: str = ""
+    # Email / SMTP (optionnel — si vide, le lien reset est retourné directement)
+    smtp_host:     str = ""
+    smtp_port:     int = 587
+    smtp_user:     str = ""
+    smtp_password: str = ""
+    smtp_from:     str = ""
+    frontend_url:  str = "http://localhost:5173"
 
     @property
     def cors_origins(self) -> List[str]:
