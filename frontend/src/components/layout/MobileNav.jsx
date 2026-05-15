@@ -1,7 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { logout } from '../../store/authSlice'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '../../services/api'
 import {
   Home, Map, ClipboardList, UserCircle, MoreHorizontal,
@@ -12,7 +12,7 @@ import {
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
 import SensiaLogo from '../SensiaLogo'
-import { useWebSocket } from '../../hooks/useWebSocket'
+import { useNotifications } from '../../contexts/NotificationsContext'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const BAR_H   = 60   // hauteur de la barre bottom
@@ -419,68 +419,17 @@ export default function MobileNav({ activeView, onViewChange }) {
   const location    = useLocation()
   const { C }       = useTheme()
 
-  const [sheetOpen,     setSheetOpen]     = useState(false)
-  const [epBadge,       setEpBadge]       = useState(0)
-  const [nbNonLues,     setNbNonLues]     = useState(0)
-  const [notifications, setNotifications] = useState([])
+  const { notifications, nbNonLues, markRead, markAllRead } = useNotifications()
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [epBadge,   setEpBadge]   = useState(0)
 
-  // Badge épreuves
+  // Badge épreuves (apprenant uniquement)
   useEffect(() => {
     if (user?.role !== 'apprenant') return
     api.get('/api/examens/disponibles')
       .then(({ data }) => setEpBadge(data.filter(e => !e.soumis).length))
       .catch(() => {})
   }, [user?.role])
-
-  // Notifications — chargement initial + polling de secours 120s
-  useEffect(() => {
-    if (!user) return
-    function load() {
-      api.get('/api/notifications?limit=20').then(({ data }) => {
-        setNbNonLues(data.nb_non_lues)
-        setNotifications(data.notifications)
-      }).catch(() => {})
-    }
-    load()
-    const id = setInterval(load, 120000)
-    return () => clearInterval(id)
-  }, [user?.id])
-
-  // Notifications temps réel via WebSocket
-  const handleWsNotif = useCallback((data) => {
-    if (data.type === 'notification') {
-      const newNotif = {
-        id:         data.id,
-        type:       data.notif_type,
-        titre:      data.titre,
-        message:    data.message,
-        meta:       data.meta || {},
-        lu:         false,
-        created_at: data.created_at,
-      }
-      setNotifications(prev => [newNotif, ...prev.slice(0, 19)])
-      setNbNonLues(prev => prev + 1)
-    }
-  }, [])
-
-  useWebSocket('/ws/notifications', {
-    onMessage: handleWsNotif,
-    enabled: !!user,
-  })
-
-  function markRead(notifId) {
-    api.put(`/api/notifications/${notifId}/lire`).then(() => {
-      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, lu: true } : n))
-      setNbNonLues(prev => Math.max(0, prev - 1))
-    }).catch(() => {})
-  }
-
-  function markAllRead() {
-    api.put('/api/notifications/tout-lire').then(() => {
-      setNotifications(prev => prev.map(n => ({ ...n, lu: true })))
-      setNbNonLues(0)
-    }).catch(() => {})
-  }
 
   function isActive(path) {
     return activeView === 'main' && location.pathname === path

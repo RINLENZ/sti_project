@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
+from ..dependencies import get_current_user, require_enseignant, require_super_admin
 from ..models.cours import (
     Matiere, Module, FamilleSituation,
     UniteApprentissage, RessourcePedagogique,
@@ -375,7 +376,7 @@ class ReponseSubmit(BaseModel):
     reponse: str
 
 @router.post("/exercice/verifier")
-def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
+def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Vérifie la réponse d'un apprenant et met à jour sa progression."""
     exercice = db.query(Exercice).filter(
         Exercice.id == body.exercice_id
@@ -551,7 +552,7 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db)):
 
 
 @router.get("/progression/{user_id}")
-def get_progression(user_id: UUID, db: Session = Depends(get_db)):
+def get_progression(user_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Retourne la progression globale d'un apprenant."""
     progressions = db.query(ProgressionApprenant).filter(
         ProgressionApprenant.user_id == user_id
@@ -559,7 +560,7 @@ def get_progression(user_id: UUID, db: Session = Depends(get_db)):
 
     total_exercices = db.query(Exercice).count()
     termines = [p for p in progressions if p.correct == True]
-    score_total = sum(p.score for p in termines)
+    score_total = sum((p.score or 0) for p in termines)
 
     return {
         "user_id": str(user_id),
@@ -581,7 +582,7 @@ class SessionCreate(BaseModel):
     ua_id: str
 
 @router.post("/session/creer")
-def creer_session(body: SessionCreate, db: Session = Depends(get_db)):
+def creer_session(body: SessionCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Crée une nouvelle session d'apprentissage."""
     from ..models.session import LearningSession
     session = LearningSession(
@@ -594,7 +595,7 @@ def creer_session(body: SessionCreate, db: Session = Depends(get_db)):
     return {"session_id": str(session.id)}
 
 @router.post("/session/clore/{session_id}")
-def clore_session(session_id: UUID, db: Session = Depends(get_db)):
+def clore_session(session_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """
     Clôture une session et persiste le score d'engagement final.
     Appelé depuis le frontend quand l'apprenant termine ou quitte.
@@ -701,7 +702,9 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db)):
     }
 
 @router.get("/dashboard/enseignant")
-def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
+def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_enseignant)):
+    if current_user.role == 'enseignant' and current_user.id != enseignant_id:
+        raise HTTPException(403, "Accès refusé")
     """
     Retourne une vue globale pour l'enseignant :
     - Liste des apprenants avec leur score d'engagement actuel
@@ -863,7 +866,7 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db)):
     }
 
 @router.get("/ua/recommandee/{user_id}")
-def get_ua_recommandee(user_id: UUID, db: Session = Depends(get_db)):
+def get_ua_recommandee(user_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """
     Recommande la prochaine UA à étudier selon :
     1. Les UA non commencées en priorité
@@ -956,7 +959,7 @@ def get_referentiel_public(db: Session = Depends(get_db)):
 # ── CRUD Matières ────────────────────────────────────────────────
 
 @router.post("/matieres")
-def create_matiere(body: dict, db: Session = Depends(get_db)):
+def create_matiere(body: dict, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     mat = Matiere(
         nom=body["nom"],
         code=body.get("code", ""),
@@ -966,7 +969,7 @@ def create_matiere(body: dict, db: Session = Depends(get_db)):
     return {"id": str(mat.id), "nom": mat.nom, "code": mat.code}
 
 @router.put("/matieres/{matiere_id}")
-def update_matiere(matiere_id: UUID, body: dict, db: Session = Depends(get_db)):
+def update_matiere(matiere_id: UUID, body: dict, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     mat = db.query(Matiere).filter(Matiere.id == matiere_id).first()
     if not mat: raise HTTPException(404, "Matière introuvable")
     for k in ["nom", "code", "description"]:
@@ -975,7 +978,7 @@ def update_matiere(matiere_id: UUID, body: dict, db: Session = Depends(get_db)):
     return {"message": "Matière mise à jour"}
 
 @router.delete("/matieres/{matiere_id}")
-def delete_matiere(matiere_id: UUID, db: Session = Depends(get_db)):
+def delete_matiere(matiere_id: UUID, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     mat = db.query(Matiere).filter(Matiere.id == matiere_id).first()
     if not mat: raise HTTPException(404, "Matière introuvable")
     mat.actif = False; db.commit()
@@ -987,7 +990,7 @@ def delete_matiere(matiere_id: UUID, db: Session = Depends(get_db)):
 # Ces champs sont ignorés à la sauvegarde
 
 @router.post("/ua")
-def create_ua(body: dict, db: Session = Depends(get_db)):
+def create_ua(body: dict, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     ua = UniteApprentissage(
         titre=body["titre"],
         reference_ue=body.get("reference_ue", ""),
@@ -1001,7 +1004,7 @@ def create_ua(body: dict, db: Session = Depends(get_db)):
     return {"id": str(ua.id), "titre": ua.titre}
 
 @router.put("/ua/{ua_id}")
-def update_ua(ua_id: UUID, body: dict, db: Session = Depends(get_db)):
+def update_ua(ua_id: UUID, body: dict, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
     if not ua: raise HTTPException(404, "UA introuvable")
     for k in ["titre", "reference_ue", "description", "situation_probleme",
@@ -1013,7 +1016,7 @@ def update_ua(ua_id: UUID, body: dict, db: Session = Depends(get_db)):
     return {"message": "UA mise à jour"}
 
 @router.delete("/ua/{ua_id}")
-def delete_ua(ua_id: UUID, db: Session = Depends(get_db)):
+def delete_ua(ua_id: UUID, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     ua = db.query(UniteApprentissage).filter(UniteApprentissage.id == ua_id).first()
     if not ua: raise HTTPException(404, "UA introuvable")
     ua.actif = False; db.commit()
@@ -1024,7 +1027,7 @@ def delete_ua(ua_id: UUID, db: Session = Depends(get_db)):
 # Note: Exercice n'a pas de colonne "actif" ni "statut"
 
 @router.get("/exercices")
-def list_exercices(db: Session = Depends(get_db)):
+def list_exercices(db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     """Liste tous les exercices pour AdminCours."""
     exercices = db.query(Exercice).all()
     result = []
@@ -1050,7 +1053,7 @@ def list_exercices(db: Session = Depends(get_db)):
     return result
 
 @router.post("/exercices")
-def create_exercice(body: dict, db: Session = Depends(get_db)):
+def create_exercice(body: dict, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     ex = Exercice(
         titre=body.get("titre", ""),
         type=body.get("type", "qcm"),
@@ -1071,7 +1074,7 @@ def create_exercice(body: dict, db: Session = Depends(get_db)):
     return {"id": str(ex.id), "titre": ex.titre}
 
 @router.put("/exercices/{exercice_id}")
-def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db)):
+def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
     if not ex: raise HTTPException(404, "Exercice introuvable")
     for k in ["titre", "type", "enonce", "options", "reponse_correcte",
@@ -1088,7 +1091,7 @@ def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db)
     return {"message": "Exercice mis à jour"}
 
 @router.delete("/exercices/{exercice_id}")
-def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
+def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     ex = db.query(Exercice).filter(Exercice.id == exercice_id).first()
     if not ex: raise HTTPException(404, "Exercice introuvable")
     # Exercice n'a pas de colonne actif — on supprime vraiment
@@ -1096,7 +1099,7 @@ def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/sessions/historique/{user_id}")
-def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depends(get_db)):
+def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """
     Retourne l'historique des sessions d'apprentissage d'un apprenant,
     utilisé pour tracer la courbe d'engagement dans le dashboard enseignant.
@@ -1129,7 +1132,8 @@ def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depend
 @router.get("/corrections/en_attente")
 def get_reponses_en_attente(
     ua_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_enseignant),
 ):
     """Liste toutes les réponses libres en attente de correction."""
     from ..models.user import User as UserModel
@@ -1171,7 +1175,8 @@ class EvaluationBody(BaseModel):
 def evaluer_reponse_libre(
     progression_id: UUID,
     body: EvaluationBody,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_enseignant),
 ):
     """L'enseignant valide ou invalide une réponse libre et attribue les points."""
     prog = db.query(ProgressionApprenant).filter(
