@@ -156,6 +156,21 @@ function SheetLink({ icon: Icon, label, active, badge, onClick }) {
   )
 }
 
+// ─── URL de destination par type de notification (dupliqué de NavRail) ─────────
+function getNotifUrl(notif) {
+  switch (notif.type) {
+    case 'badge_debloque':       return '/profil'
+    case 'competence_maitrisee': return '/dashboard'
+    case 'competence_progres':   return '/dashboard'
+    case 'session_terminee':     return '/dashboard'
+    case 'enseignant_lie':       return '/profil'
+    case 'apprenant_lie':        return '/prof'
+    case 'apprenant_session':    return '/prof'
+    case 'apprenant_decrocheur': return '/prof'
+    default:                     return null
+  }
+}
+
 // ─── Bottom Sheet ──────────────────────────────────────────────────────────────
 function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, nbNonLues, notifications, onMarkRead, onMarkAllRead }) {
   const { C, isDark, toggleTheme } = useTheme()
@@ -330,29 +345,75 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
           </div>
 
           {/* Notifications section */}
-          {nbNonLues > 0 && (
-            <div style={{
-              margin:         `0 ${space[4]}px ${space[3]}px`,
-              padding:       `${space[3]}px ${space[4]}px`,
-              background:     'rgba(239,68,68,0.08)',
-              borderRadius:   radius.lg,
-              border:         '1px solid rgba(239,68,68,0.2)',
-              display:       'flex',
-              alignItems:    'center',
-              gap:            space[3],
-            }}>
-              <Bell size={16} color="#EF4444" style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: type.sm, color: 'rgba(255,255,255,0.75)', fontWeight: weight.medium }}>
-                {nbNonLues} notification{nbNonLues > 1 ? 's' : ''} non lue{nbNonLues > 1 ? 's' : ''}
-              </span>
-              <button
-                onClick={() => { onMarkAllRead(); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4865A', fontSize: type.xs, fontWeight: weight.semibold, padding: 0 }}
-              >
-                Tout lire
-              </button>
+          <div style={{ margin: `0 ${space[4]}px ${space[3]}px` }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[2] }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
+                <Bell size={13} color={nbNonLues > 0 ? '#EF4444' : 'rgba(255,255,255,0.35)'} />
+                <span style={{ fontSize: type.sm, fontWeight: weight.semibold, color: 'rgba(255,255,255,0.6)' }}>
+                  Notifications
+                </span>
+                {nbNonLues > 0 && (
+                  <span style={{ background: '#EF4444', color: 'white', borderRadius: radius.pill, padding: '1px 6px', fontSize: 9, fontWeight: weight.black }}>
+                    {nbNonLues}
+                  </span>
+                )}
+              </div>
+              {nbNonLues > 0 && (
+                <button
+                  onClick={onMarkAllRead}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4865A', fontSize: type.xs, fontWeight: weight.semibold, padding: 0 }}
+                >
+                  Tout lire
+                </button>
+              )}
             </div>
-          )}
+
+            {/* Liste */}
+            {notifications.length === 0 ? (
+              <p style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: `${space[3]}px 0`, margin: 0 }}>
+                Aucune notification
+              </p>
+            ) : (
+              <div style={{ borderRadius: radius.lg, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)' }}>
+                {notifications.slice(0, 6).map((n, idx) => {
+                  const url = getNotifUrl(n)
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        if (!n.lu) onMarkRead(n.id)
+                        if (url) { navigate(url); onClose() }
+                      }}
+                      style={{
+                        width:        '100%',
+                        padding:      `${space[3]}px ${space[3]}px`,
+                        background:    n.lu ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.06)',
+                        border:        'none',
+                        borderBottom:  idx < Math.min(notifications.length, 6) - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                        cursor:        url ? 'pointer' : 'default',
+                        textAlign:     'left',
+                        display:      'flex',
+                        alignItems:   'flex-start',
+                        gap:           space[2],
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: n.lu ? 'transparent' : '#C4865A', flexShrink: 0, marginTop: 5 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: type.sm, fontWeight: n.lu ? weight.normal : weight.bold, color: n.lu ? 'rgba(255,255,255,0.38)' : 'white', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {n.titre}
+                        </p>
+                        <p style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.32)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {n.message}
+                        </p>
+                      </div>
+                      {url && <ChevronRight size={12} color="rgba(255,255,255,0.22)" style={{ flexShrink: 0, marginTop: 3 }} />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Liens navigation */}
           <div style={{ padding: `0 ${space[2]}px`, display: 'flex', flexDirection: 'column', gap: space[1] }}>

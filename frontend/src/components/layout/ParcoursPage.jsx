@@ -7,8 +7,9 @@ import {
   ChevronDown, BookMarked, Layers, Star,
   ClipboardList, FileText, Award, ShieldAlert, Clock,
 } from 'lucide-react'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { Spinner } from '../Skeleton'
+import { getCache, setCache } from '../../services/cache'
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -272,10 +273,14 @@ export default function ParcoursPage({ onBack }) {
 
   const loadFamilles = useCallback(async (mod) => {
     if (!mod) return
+    const famKey = `parcours_familles_${mod.id}`
+    const cached = getCache(famKey)
+    if (cached) { setFamilles(cached); return }
     setLoadingFam(true)
     try {
       const { data: fam } = await api.get(`/api/cours/modules/${mod.id}/familles?user_id=${user.id}`)
       setFamilles(fam)
+      setCache(famKey, fam, 2 * 60 * 1000)
     } catch { setFamilles([]) }
     finally { setLoadingFam(false) }
   }, [user.id])
@@ -283,6 +288,19 @@ export default function ParcoursPage({ onBack }) {
   useEffect(() => {
     if (!user?.id) return
     async function init() {
+      const cacheKey = `parcours_${user.id}`
+      const hit = getCache(cacheKey)
+      if (hit) {
+        setMatieres(hit.matieres)
+        setProgression(hit.progression)
+        setRecommandee(hit.recommandee)
+        setEpreuves(hit.epreuves)
+        setSelectedMat(hit.selectedMat)
+        setModules(hit.selectedMat?.modules || [])
+        setSelectedMod(hit.selectedMod)
+        setFamilles(hit.familles)
+        setLoading(false)
+      }
       try {
         const [{ data: mat }, { data: prog }] = await Promise.all([
           api.get(`/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`),
@@ -290,17 +308,28 @@ export default function ParcoursPage({ onBack }) {
         ])
         setMatieres(mat)
         setProgression(prog)
+        let firstMat = null, firstMod = null
         if (mat.length > 0) {
-          setSelectedMat(mat[0])
-          const mods = mat[0].modules || []
+          firstMat = mat[0]
+          setSelectedMat(firstMat)
+          const mods = firstMat.modules || []
           setModules(mods)
           if (mods.length > 0) {
-            setSelectedMod(mods[0])
-            await loadFamilles(mods[0])
+            firstMod = mods[0]
+            setSelectedMod(firstMod)
+            await loadFamilles(firstMod)
           }
         }
-        try { const { data: r } = await api.get(`/api/cours/ua/recommandee/${user.id}`); setRecommandee(r?.recommandee || null) } catch {}
-        try { const { data: ep } = await api.get('/api/examens/disponibles'); setEpreuves(ep) } catch {}
+        let reco = null, ep = []
+        try { const { data: r } = await api.get(`/api/cours/ua/recommandee/${user.id}`); reco = r?.recommandee || null } catch {}
+        try { const { data: e } = await api.get('/api/examens/disponibles'); ep = e } catch {}
+        setRecommandee(reco)
+        setEpreuves(ep)
+        setCache(cacheKey, {
+          matieres: mat, progression: prog, recommandee: reco, epreuves: ep,
+          selectedMat: firstMat, selectedMod: firstMod,
+          familles: getCache(`parcours_familles_${firstMod?.id}`) || [],
+        }, 2 * 60 * 1000)
       } catch {}
       finally { setLoading(false) }
     }

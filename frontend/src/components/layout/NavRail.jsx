@@ -284,12 +284,34 @@ function Avatar({ user, roleColor, size = 34 }) {
   )
 }
 
+// ─── URL de destination par type de notification ──────────────────────────────
+function getNotifUrl(notif) {
+  switch (notif.type) {
+    case 'badge_debloque':       return '/profil'
+    case 'competence_maitrisee': return '/dashboard'
+    case 'competence_progres':   return '/dashboard'
+    case 'session_terminee':     return '/dashboard'
+    case 'enseignant_lie':       return '/profil'
+    case 'apprenant_lie':        return '/prof'
+    case 'apprenant_session':    return '/prof'
+    case 'apprenant_decrocheur': return '/prof'
+    default:                     return null
+  }
+}
+
 // ─── Panel notifications ───────────────────────────────────────────────────────
 function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, anchorRect }) {
   const { C } = useTheme()
+  const navigate = useNavigate()
 
   const top  = Math.max(8, anchorRect ? anchorRect.top - 8 : 100)
   const left = RAIL_W + 8
+
+  function handleClick(notif) {
+    if (!notif.lu) onMarkRead(notif.id)
+    const url = getNotifUrl(notif)
+    if (url) { navigate(url); onClose() }
+  }
 
   return createPortal(
     <>
@@ -302,8 +324,8 @@ function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, 
           position:      'fixed',
           top:            Math.min(top, window.innerHeight - 400 - 16),
           left:           left,
-          width:          300,
-          maxHeight:     '60vh',
+          width:          320,
+          maxHeight:     '65vh',
           background:     C.sidebarBg,
           border:        '1px solid rgba(255,255,255,0.1)',
           borderRadius:   radius.lg,
@@ -324,9 +346,14 @@ function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, 
           justifyContent: 'space-between',
           flexShrink:     0,
         }}>
-          <span style={{ fontSize: type.md, fontWeight: weight.bold, color: 'white' }}>
-            Notifications
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
+            <span style={{ fontSize: type.md, fontWeight: weight.bold, color: 'white' }}>Notifications</span>
+            {nbNonLues > 0 && (
+              <span style={{ background: '#EF4444', color: 'white', borderRadius: radius.pill, padding: '1px 7px', fontSize: 9, fontWeight: weight.black }}>
+                {nbNonLues}
+              </span>
+            )}
+          </div>
           {nbNonLues > 0 && (
             <button
               onClick={onMarkAll}
@@ -343,44 +370,50 @@ function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, 
             <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.28)', fontSize: type.sm, padding: `${space[6]}px ${space[4]}px`, margin: 0 }}>
               Aucune notification
             </p>
-          ) : notifications.map(n => (
-            <button
-              key={n.id}
-              onClick={() => !n.lu && onMarkRead(n.id)}
-              style={{
-                width:          '100%',
-                padding:       `${space[3]}px ${space[4]}px`,
-                background:     n.lu ? 'none' : 'rgba(255,255,255,0.05)',
-                border:         'none',
-                borderBottom:  '1px solid rgba(255,255,255,0.06)',
-                cursor:         n.lu ? 'default' : 'pointer',
-                textAlign:      'left',
-                display:       'flex',
-                flexDirection: 'column',
-                gap:             space[1],
-                transition:    `background ${motion.fast_out}`,
-              }}
-              onMouseEnter={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
-              onMouseLeave={e => { if (!n.lu) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
-                <span style={{ fontSize: type.sm, fontWeight: n.lu ? weight.normal : weight.bold, color: n.lu ? 'rgba(255,255,255,0.4)' : 'white', lineHeight: 1.35 }}>
-                  {n.titre}
-                </span>
-                {!n.lu && (
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4865A', flexShrink: 0 }} />
-                )}
-              </div>
-              <span style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.35)', lineHeight: 1.4 }}>
-                {n.message}
-              </span>
-              <span style={{ fontSize: type['2xs'], color: 'rgba(255,255,255,0.2)' }}>
-                {n.created_at
-                  ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                  : ''}
-              </span>
-            </button>
-          ))}
+          ) : notifications.map(n => {
+            const url = getNotifUrl(n)
+            return (
+              <button
+                key={n.id}
+                onClick={() => handleClick(n)}
+                style={{
+                  width:          '100%',
+                  padding:       `${space[3]}px ${space[4]}px`,
+                  background:     n.lu ? 'none' : 'rgba(255,255,255,0.05)',
+                  border:         'none',
+                  borderBottom:  '1px solid rgba(255,255,255,0.06)',
+                  cursor:         url ? 'pointer' : 'default',
+                  textAlign:      'left',
+                  display:       'flex',
+                  alignItems:    'flex-start',
+                  gap:            space[2],
+                  transition:    `background ${motion.fast_out}`,
+                }}
+                onMouseEnter={e => { if (url) e.currentTarget.style.background = n.lu ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.09)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = n.lu ? 'none' : 'rgba(255,255,255,0.05)' }}
+              >
+                {/* Point non-lu */}
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: n.lu ? 'transparent' : '#C4865A', flexShrink: 0, marginTop: 5 }} />
+
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: space[1] }}>
+                  <span style={{ fontSize: type.sm, fontWeight: n.lu ? weight.normal : weight.bold, color: n.lu ? 'rgba(255,255,255,0.4)' : 'white', lineHeight: 1.35 }}>
+                    {n.titre}
+                  </span>
+                  <span style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.35)', lineHeight: 1.4 }}>
+                    {n.message}
+                  </span>
+                  <span style={{ fontSize: type['2xs'], color: 'rgba(255,255,255,0.2)' }}>
+                    {n.created_at
+                      ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : ''}
+                  </span>
+                </div>
+
+                {/* Flèche si navigable */}
+                {url && <ChevronRight size={13} color="rgba(255,255,255,0.25)" style={{ flexShrink: 0, marginTop: 3 }} />}
+              </button>
+            )
+          })}
         </div>
       </div>
     </>,
