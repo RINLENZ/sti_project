@@ -9,7 +9,7 @@ import {
   X, Activity, Clock, Target, Award
 } from 'lucide-react'
 
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import ContentRenderer from '../../components/ContentRenderer'
@@ -19,7 +19,7 @@ import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY } from '../../config/models'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
-const engColor = s =>
+const engColor = (s, C) =>
   s >= 0.80 ? C.emerald : s >= 0.60 ? '#2563eb' :
   s >= 0.40 ? C.orange  : s >= 0.20 ? C.red : '#7F1D1D'
 
@@ -28,14 +28,14 @@ const engLabel = s =>
   s >= 0.40 ? 'Faible' : s >= 0.20 ? 'Ennui' : 'Décroché'
 
 const ETATS = {
-  engagement_eleve:  { label: '😊 Engagé',     color: C.emerald    },
-  engagement_modere: { label: '🙂 Modéré',      color: '#2563eb'    },
-  engagement_faible: { label: '😐 Peu engagé',  color: C.orange     },
-  confusion:         { label: '🤔 Confusion',   color: C.orange     },
-  frustration:       { label: '😤 Frustration', color: C.red        },
-  ennui:             { label: '😴 Ennui',        color: C.textSec    },
-  neutre:            { label: '😐 Neutre',       color: C.brownLight },
-  decrochage:        { label: '⚠️ Décroché',    color: '#7F1D1D'    },
+  engagement_eleve:  { label: '😊 Engagé',     color: '#0D9373' },
+  engagement_modere: { label: '🙂 Modéré',      color: '#2563eb' },
+  engagement_faible: { label: '😐 Peu engagé',  color: '#F59E0B' },
+  confusion:         { label: '🤔 Confusion',   color: '#F59E0B' },
+  frustration:       { label: '😤 Frustration', color: '#DC2626' },
+  ennui:             { label: '😴 Ennui',        color: '#6B5744' },
+  neutre:            { label: '😐 Neutre',       color: '#C4865A' },
+  decrochage:        { label: '⚠️ Décroché',    color: '#7F1D1D' },
 }
 
 /* ── face-api.js : chargement des modèles CNN ────────────────── */
@@ -87,7 +87,7 @@ function fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch) {
 /* ── Gauge component ─────────────────────────────────────────── */
 const MiniGauge = ({ score, emotion, compact = false }) => {
   const { C } = useTheme()
-  const color = engColor(score)
+  const color = engColor(score, C)
   const em = ETATS[emotion] || ETATS.neutre
 
   if (compact) {
@@ -172,7 +172,7 @@ const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }
 }
 
 /* ── Confetti ────────────────────────────────────────────────── */
-const CONFETTI_COLORS = [C.brown, C.brownLight, C.emerald, C.gold, '#FCD34D', '#EC4899', '#60A5FA', '#A78BFA', '#34D399', '#F87171']
+const CONFETTI_COLORS = ['#6B3A2A', '#C4865A', '#0D9373', '#D4A853', '#FCD34D', '#EC4899', '#60A5FA', '#A78BFA', '#34D399', '#F87171']
 const CONFETTI_PIECES = Array.from({ length: 70 }, (_, i) => {
   const shape = i % 3  // 0=square, 1=circle, 2=diamond
   const anim  = i % 3 === 0 ? 'confettiFall' : i % 3 === 1 ? 'confettiFallL' : 'confettiFallR'
@@ -1139,7 +1139,7 @@ export default function Session() {
             {/* Stats en 3 colonnes */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
               {[
-                { label: 'Engagement',  value: `${Math.round(engagementScore * 100)}%`, color: engColor(engagementScore), icon: <Activity size={13}/> },
+                { label: 'Engagement',  value: `${Math.round(engagementScore * 100)}%`, color: engColor(engagementScore, C), icon: <Activity size={13}/> },
                 { label: 'Durée',       value: `${elapsedMin}min`,                       color: C.textSec,                icon: <Clock size={13}/>   },
                 { label: 'Pts gagnés',  value: `${totalPtsGagnes}`,                      color: C.gold,                   icon: <Award size={13}/>   },
               ].map((s, i) => (
@@ -1477,8 +1477,8 @@ export default function Session() {
             </>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 13px', borderRadius: 20, background: C.brownPale }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: engColor(engagementScore), animation: 'pulse 2s infinite' }}/>
-              <span style={{ fontSize: 13, fontWeight: 800, color: engColor(engagementScore) }}>{Math.round(engagementScore * 100)}%</span>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: engColor(engagementScore, C), animation: 'pulse 2s infinite' }}/>
+              <span style={{ fontSize: 13, fontWeight: 800, color: engColor(engagementScore, C) }}>{Math.round(engagementScore * 100)}%</span>
               <span style={{ fontSize: 11 }}>{(ETATS[emotion] || ETATS.neutre).label.split(' ')[0]}</span>
             </div>
           )}

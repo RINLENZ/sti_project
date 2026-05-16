@@ -5,24 +5,24 @@ import {
   Plus, Trash2, Edit3, ChevronDown, ChevronRight,
   Shield, X, Save, AlertTriangle, RefreshCw,
 } from 'lucide-react'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 
 // Section colors per type
 const SEC = {
-  cycle:   { color: C.brown,   bg: '#3D1A0F', light: C.brownPale,   label: 'Cycle' },
-  ordre:   { color: C.gold,    bg: '#3D2E0A', light: '#FEF9E7',     label: 'Ordre' },
-  filiere: { color: C.emerald, bg: '#0A2E22', light: C.emeraldPale, label: 'Filière' },
-  niveau:  { color: C.blue,    bg: '#0A1A3D', light: C.bluePale,    label: 'Niveau/Classe' },
+  cycle:   { color: '#6B3A2A', bg: '#3D1A0F', light: '#F5EDE5',   label: 'Cycle' },
+  ordre:   { color: '#D4A853', bg: '#3D2E0A', light: '#FEF9E7',   label: 'Ordre' },
+  filiere: { color: '#0D9373', bg: '#0A2E22', light: '#E6F5F0',   label: 'Filière' },
+  niveau:  { color: '#2563EB', bg: '#0A1A3D', light: '#DBEAFE',   label: 'Niveau/Classe' },
 }
 
 // ── Base input style ────────────────────────────────────────────
-const inputBase = {
+const getInputBase = C => ({
   width: '100%', padding: '9px 12px', border: `1.5px solid ${C.brownPale}`,
   borderRadius: 8, fontSize: 13, color: C.text, background: C.surface,
   outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border .15s',
-}
+})
 
 const FieldLabel = ({ children, required }) => {
   const { C } = useTheme()
@@ -35,6 +35,7 @@ const FieldLabel = ({ children, required }) => {
 
 const FInput = ({ label, value, onChange, placeholder, required, hint }) => {
   const { C } = useTheme()
+  const inputBase = getInputBase(C)
   return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}
@@ -49,6 +50,8 @@ const FInput = ({ label, value, onChange, placeholder, required, hint }) => {
 }
 
 const FSelect = ({ label, value, onChange, options, required }) => {
+  const { C } = useTheme()
+  const inputBase = getInputBase(C)
   return (
   <div style={{ marginBottom: 12 }}>
     {label && <FieldLabel required={required}>{label}</FieldLabel>}

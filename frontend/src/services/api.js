@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const BASE_URL = import.meta.env.VITE_API_URL
   || import.meta.env.VITE_BACKEND_URL
-  || 'https://sti-backend-a2d1.onrender.com'
+  || 'https://sti-proxy.sergedjiomo01.workers.dev'
 
 export { BASE_URL }
 

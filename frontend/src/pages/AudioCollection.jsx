@@ -12,7 +12,7 @@ import { useSelector } from 'react-redux'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { Mic, MicOff, Play, RotateCcw, Send, CheckCircle } from 'lucide-react'
-import { C, useTheme } from '../styles/theme.jsx'
+import { useTheme } from '../styles/theme.jsx'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 
 /* ── Commandes à collecter ──────────────────────────────────── */
@@ -23,7 +23,7 @@ const COMMANDES = [
     phrase: '"Aide"',
     consigne: 'Dis simplement le mot "Aide" d\'une voix naturelle, comme si tu demandais de l\'aide.',
     emoji: '🆘',
-    color: C.red,
+    color: '#DC2626',
   },
   {
     id: 'oui',
@@ -31,7 +31,7 @@ const COMMANDES = [
     phrase: '"Oui"',
     consigne: 'Dis "Oui" clairement. Tu peux aussi dire "Oui oui" ou "Ouais".',
     emoji: '✅',
-    color: C.emerald,
+    color: '#0D9373',
   },
   {
     id: 'non',
@@ -47,7 +47,7 @@ const COMMANDES = [
     phrase: '"Répétez" ou "Répète"',
     consigne: 'Dis "Répétez" comme pour demander qu\'on recommence une explication.',
     emoji: '🔁',
-    color: C.brown,
+    color: '#6B3A2A',
   },
   {
     id: 'incompris',
@@ -71,7 +71,7 @@ const COMMANDES = [
     phrase: 'Ne dis rien (ou parle d\'autre chose)',
     consigne: 'Reste silencieux, ou parle de quelque chose d\'autre (pas une commande). Ces exemples négatifs sont essentiels pour le modèle.',
     emoji: '🔇',
-    color: C.textSec,
+    color: '#6B5744',
   },
 ]
 
