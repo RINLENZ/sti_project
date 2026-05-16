@@ -12,19 +12,19 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   PolarRadiusAxis, ResponsiveContainer, Tooltip
 } from 'recharts'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkDashboard } from '../../components/Skeleton'
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
-const BKTLevel = p => {
+const BKTLevel = (p, C) => {
   if (p >= 95) return { label: 'Maîtrisé',      color: C.emerald,  bg: C.emeraldPale }
   if (p >= 70) return { label: 'En bonne voie', color: '#2563eb',  bg: '#EFF6FF'     }
   if (p >= 40) return { label: 'En progrès',    color: C.orange,   bg: '#FFFBEB'     }
   return              { label: 'À renforcer',    color: C.red,      bg: '#FEF2F2'     }
 }
 
-const UAStatus = pct => {
+const UAStatus = (pct, C) => {
   if (pct === 100) return { icon: CheckCircle2, color: C.emerald,     label: 'Terminé'      }
   if (pct > 0)     return { icon: PlayCircle,   color: C.brownLight,  label: 'En cours'     }
   return                  { icon: Lock,          color: C.textMuted,   label: 'Non commencé' }
@@ -165,7 +165,7 @@ const StatCard = ({ label, value, subtitle, color, Icon, xs }) => {
 /* ── UA compact card ── */
 const UACard = ({ ua, pct, isReco, onClick }) => {
   const { C } = useTheme()
-  const st = UAStatus(pct)
+  const st = UAStatus(pct, C)
   const StatusIcon = st.icon
   const [hov, setHov] = useState(false)
   return (
@@ -419,7 +419,7 @@ const SidebarBKT = ({ bktData }) => {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {top3.map(([comp, val], i) => {
-          const lvl = BKTLevel(val.pourcentage)
+          const lvl = BKTLevel(val.pourcentage, C)
           return (
             <div key={comp}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 6 }}>

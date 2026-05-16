@@ -1,11 +1,17 @@
 import { createSlice } from '@reduxjs/toolkit'
 
-const saved = localStorage.getItem('sti_user')
+let savedUser = null
+try {
+  const saved = localStorage.getItem('sti_user')
+  if (saved) savedUser = JSON.parse(saved)
+} catch {
+  localStorage.removeItem('sti_user')
+}
 
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
-    user:         saved ? JSON.parse(saved) : null,
+    user:         savedUser,
     token:        localStorage.getItem('sti_token') || null,
     refreshToken: localStorage.getItem('sti_refresh_token') || null,
     loading: false,

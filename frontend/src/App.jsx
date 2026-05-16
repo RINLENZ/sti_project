@@ -83,7 +83,7 @@ function EnseignantRoute({ children }) {
     return <Navigate to="/app" replace/>
   const onboardingDone =
     localStorage.getItem(`onboarding_done_${user.id}`) ||
-    user.matieres?.length > 0 ||
+    user.matieres_enseignees?.length > 0 ||
     user.code_classe
   if (user.role === 'enseignant' && !onboardingDone)
     return <Navigate to="/onboarding-enseignant" replace/>

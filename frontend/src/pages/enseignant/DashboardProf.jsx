@@ -13,11 +13,11 @@ import {
   PolarRadiusAxis, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { C, useTheme } from '../../styles/theme.jsx'
+import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkList, Spinner } from '../../components/Skeleton'
 
-const engColor = s => s >= 0.7 ? C.emerald : s >= 0.4 ? C.orange : C.red
+const engColor = (s, C) => s >= 0.7 ? C.emerald : s >= 0.4 ? C.orange : C.red
 const engLabel = s => s >= 0.7 ? '🟢 Engagé' : s >= 0.4 ? '🟡 Modéré' : '🔴 Décroché'
 
 // ── Composants utilitaires ────────────────────────────────────────
@@ -31,14 +31,17 @@ const ProgressBar = ({ value, color, h = 6 }) => {
   )
 }
 
-const Dot = ({ score }) => (
-  <span style={{
-    display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-    backgroundColor: engColor(score),
-    boxShadow: `0 0 0 3px ${engColor(score)}30`,
-    animation: 'pulse 2s infinite'
-  }}/>
-)
+const Dot = ({ score }) => {
+  const { C } = useTheme()
+  return (
+    <span style={{
+      display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+      backgroundColor: engColor(score, C),
+      boxShadow: `0 0 0 3px ${engColor(score, C)}30`,
+      animation: 'pulse 2s infinite'
+    }}/>
+  )
+}
 
 
 function EpreuvesWidget({ navigate, C }) {
@@ -748,11 +751,11 @@ export default function DashboardProf() {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Dot score={score}/>
-                      <span style={{ fontSize: mobile ? 13 : 14, fontWeight: 900, color: engColor(score) }}>
+                      <span style={{ fontSize: mobile ? 13 : 14, fontWeight: 900, color: engColor(score, C) }}>
                         {Math.round(score * 100)}%
                       </span>
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: engColor(score) }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: engColor(score, C) }}>
                       {engLabel(score)}
                     </span>
                     {isAlert && (
