@@ -213,6 +213,7 @@ export default function Contribuer() {
 /* ── Sous-composants ─────────────────────────────────────────── */
 
 function StatCard({ label, total, target, pct, color }) {
+  const { C } = useTheme()
   return (
     <div style={{
       background: C.surface,
@@ -241,6 +242,7 @@ function StatCard({ label, total, target, pct, color }) {
 }
 
 function ActionCard({ icon, title, subtitle, color, colorPale, tags, progress, statsRows, onClick }) {
+  const { C } = useTheme()
   const [open, setOpen] = useState(false)
 
   return (
