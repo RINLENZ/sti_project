@@ -111,6 +111,95 @@ def _call_claude(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
     return msg.content[0].text
 
 
+# ── Vision — correction de copies manuscrites ────────────────────────────────
+
+def corriger_copie_vision(image_bytes: bytes, media_type: str, contenu: dict) -> dict:
+    """
+    Utilise Claude Vision (claude-sonnet-4-6) pour lire et corriger une copie manuscrite.
+    Retourne un dict: {reponses_lues, corrections, score_total, observations}
+    """
+    import anthropic as _anthropic
+    import base64
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY non configurée — correction vision impossible")
+
+    # Construire le barème depuis le contenu de l'épreuve
+    bareme = []
+    for partie_key in ("partie1", "partie2"):
+        partie = contenu.get(partie_key, {})
+        for ex in partie.get("exercices", []):
+            for q in ex.get("questions", []):
+                bareme.append({
+                    "id": q.get("id"),
+                    "enonce": q.get("enonce", ""),
+                    "type": q.get("type", ""),
+                    "points": q.get("points", 0),
+                    "reponse_correcte": q.get("reponse_correcte", ""),
+                    "explication": q.get("explication", ""),
+                })
+
+    bareme_text = json.dumps(bareme, ensure_ascii=False, indent=2)
+
+    prompt = f"""Tu es un correcteur d'épreuves scolaires camerounaises (format APC/MINESEC).
+Tu reçois une photo d'une copie d'élève manuscrite. Lis attentivement toutes les réponses visibles.
+
+Barème de l'épreuve :
+{bareme_text}
+
+Pour chaque question du barème :
+1. Lis la réponse manuscrite de l'élève (indique "non répondu" si absent)
+2. Compare avec la réponse correcte
+3. Attribue un score entre 0 et le maximum de points
+
+Réponds UNIQUEMENT avec un JSON valide sans explication supplémentaire :
+{{
+  "reponses_lues": {{"qid": "réponse lue textuellement", ...}},
+  "corrections": {{
+    "qid": {{
+      "score": 0.0,
+      "max": 0.0,
+      "correct": true,
+      "reponse_lue": "...",
+      "commentaire": "..."
+    }}
+  }},
+  "score_total": 0.0,
+  "observations": "Observations générales sur la lisibilité et la qualité de la copie"
+}}"""
+
+    image_b64 = base64.standard_b64encode(image_bytes).decode()
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": image_b64,
+                    },
+                },
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+
+    text = msg.content[0].text.strip()
+    # Retire les blocs markdown si présents
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+    return json.loads(text)
+
+
 # ── Détection Ollama ─────────────────────────────────────────────────────────
 
 def _ollama_reachable() -> bool:

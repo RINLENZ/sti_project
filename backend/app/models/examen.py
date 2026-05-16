@@ -73,3 +73,9 @@ class EpreuveReponse(Base):
     submitted_at  = Column(DateTime(timezone=True), nullable=True)
     corrige_at    = Column(DateTime(timezone=True), nullable=True)
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    # ── Copie papier & dataset ──────────────────────────────────────────────────
+    copie_type         = Column(String(20), default="numerique")  # "numerique" | "papier"
+    image_copie_url    = Column(Text, nullable=True)               # URL vers la photo de copie
+    vision_corrections = Column(JSON, nullable=True)               # Corrections IA première lecture
+    dataset_valide     = Column(Boolean, default=False)            # Validé pour entraînement

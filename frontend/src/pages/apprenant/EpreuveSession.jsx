@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
-import { Clock, ChevronLeft, Send, CheckCircle, AlertTriangle, Award, Camera, ShieldAlert } from 'lucide-react'
+import { Clock, ChevronLeft, Send, CheckCircle, AlertTriangle, Award, Camera, ShieldAlert, FileText, Upload, Image } from 'lucide-react'
 import useProctoringCamera from '../../hooks/useProctoringCamera'
 import RichText, { RichTextInline } from '../../components/RichText'
 
@@ -83,11 +83,21 @@ function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncide
             <div style={{ height: 5, background: C.brownPale, borderRadius: 5, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: scoreColor, borderRadius: 5, transition: 'width .5s' }}/>
             </div>
-            {nbIncidents > 0 && (
-              <p style={{ margin: '8px 0 0', fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
-                <ShieldAlert size={10} style={{ verticalAlign: 'middle', marginRight: 3 }}/>
-                {nbIncidents} absence{nbIncidents > 1 ? 's' : ''} détectée{nbIncidents > 1 ? 's' : ''}
-              </p>
+            {(nbIncidents > 0 || tabCountRef.current > 0) && (
+              <div style={{ margin: '8px 0 0' }}>
+                {nbIncidents > 0 && (
+                  <p style={{ margin: '0 0 2px', fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
+                    <ShieldAlert size={10} style={{ verticalAlign: 'middle', marginRight: 3 }}/>
+                    {nbIncidents} absence{nbIncidents > 1 ? 's' : ''} caméra
+                  </p>
+                )}
+                {tabCountRef.current > 0 && (
+                  <p style={{ margin: 0, fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
+                    <ShieldAlert size={10} style={{ verticalAlign: 'middle', marginRight: 3 }}/>
+                    {tabCountRef.current} sortie{tabCountRef.current > 1 ? 's' : ''} détectée{tabCountRef.current > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
             )}
             <p style={{ margin: '4px 0 0', fontSize: 10, color: C.textSec }}>
               Les données de surveillance sont transmises à l'enseignant lors de la soumission.
@@ -320,7 +330,17 @@ export default function EpreuveSession() {
   const [results,    setResults]    = useState(null)     // réponse API soumettre
   const [existingResult, setExistingResult] = useState(null)
 
-  const timerRef = useRef(null)
+  // ── Mode copie papier
+  const [paperMode,    setPaperMode]    = useState(false)  // true = soumission photo
+  const [paperFile,    setPaperFile]    = useState(null)   // File object
+  const [paperPreview, setPaperPreview] = useState(null)   // data URL preview
+  const [paperSubmitting, setPaperSubmitting] = useState(false)
+  const paperInputRef = useRef(null)
+
+  const timerRef    = useRef(null)
+  const tabCountRef  = useRef(0)   // nombre de sorties détectées
+  const tabLogRef    = useRef([])  // log détaillé [{type:'tab_switch', debut, fin, duree_s}]
+  const tabHiddenRef = useRef(null)
 
   // ── Surveillance caméra
   const {
@@ -353,6 +373,36 @@ export default function EpreuveSession() {
     return () => clearTimeout(t)
   }, [phase, cameraActive, faceDetected])
 
+  // ── Détection sortie plateforme (changement d'onglet / alt-tab / minimiser)
+  useEffect(() => {
+    if (phase !== 'exam') return
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        tabHiddenRef.current = Date.now()
+      } else {
+        const hiddenAt = tabHiddenRef.current
+        if (!hiddenAt) return
+        tabHiddenRef.current = null
+        const duree_s = Math.round((Date.now() - hiddenAt) / 1000)
+        tabLogRef.current.push({
+          type: 'tab_switch',
+          debut: new Date(hiddenAt).toISOString(),
+          fin: new Date().toISOString(),
+          duree_s,
+        })
+        tabCountRef.current += 1
+        toast('🚨 Sortie détectée — ne quittez pas l\'épreuve !', { duration: 5000 })
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      tabHiddenRef.current = null
+    }
+  }, [phase])
+
   // ── Timer
   useEffect(() => {
     if (phase !== 'exam' || timeLeft === null) return
@@ -372,10 +422,14 @@ export default function EpreuveSession() {
     clearTimeout(timerRef.current)
     stopCamera()
     try {
+      const cameraLog  = (getIncidentsLog() || []).map(i => ({ ...i, type: i.type || 'camera_absence' }))
+      const mergedLog  = [...cameraLog, ...tabLogRef.current]
+      const totalIncid = nbIncidents + tabCountRef.current
+
       const { data } = await api.post(`/api/examens/${epreuveId}/soumettre`, {
         reponses,
-        nb_incidents: nbIncidents,
-        incidents_log: getIncidentsLog(),
+        nb_incidents: totalIncid,
+        incidents_log: mergedLog,
       })
       setResults(data)
       setPhase('results')
@@ -393,6 +447,45 @@ export default function EpreuveSession() {
       }
     }
   }, [epreuveId, reponses, phase, nbIncidents, getIncidentsLog, stopCamera])
+
+  function handlePaperFile(file) {
+    if (!file) return
+    setPaperFile(file)
+    const reader = new FileReader()
+    reader.onload = e => setPaperPreview(e.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  async function soumettreParier() {
+    if (!paperFile) { toast.error('Sélectionne une photo de ta copie'); return }
+    setPaperSubmitting(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', paperFile)
+      const { data } = await api.post(`/api/examens/${epreuveId}/soumettre-papier`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setResults({
+        ...data,
+        score_total: data.score_total,
+        corrections: data.vision_corrections?.corrections || {},
+        nb_incidents: 0,
+      })
+      setPhase('results')
+      toast.success('Copie papier soumise et analysée par IA !')
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Erreur lors de la soumission'
+      if (msg.includes('déjà soumise')) {
+        toast('Copie déjà soumise', { icon: 'ℹ️' })
+        api.get(`/api/examens/${epreuveId}/resultats`)
+          .then(({ data }) => { if (data.length > 0) { setResults(data[0]); setPhase('results') } })
+      } else {
+        toast.error(msg)
+      }
+    } finally {
+      setPaperSubmitting(false)
+    }
+  }
 
   // ── Collecte toutes les questions à plat
   function allQuestions() {
@@ -488,12 +581,88 @@ export default function EpreuveSession() {
             </button>
           ) : (
             <>
-              <button onClick={startExam} style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 800, cursor: 'pointer', boxShadow: `0 4px 20px ${C.brown}40`, marginBottom: 10 }}>
-                Commencer l'épreuve →
-              </button>
-              <p style={{ textAlign: 'center', fontSize: 11, color: C.textSec, margin: 0 }}>
-                Le chronomètre démarrera dès que tu cliques sur "Commencer"
-              </p>
+              {/* Toggle numérique / papier */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 16, background: C.bg, borderRadius: 10, padding: 4, border: `1px solid ${C.brownPale}` }}>
+                <button
+                  onClick={() => setPaperMode(false)}
+                  style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: !paperMode ? C.brown : 'transparent', color: !paperMode ? 'white' : C.textSec, transition: 'all .15s' }}
+                >
+                  📝 Répondre en ligne
+                </button>
+                <button
+                  onClick={() => setPaperMode(true)}
+                  style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: paperMode ? C.brown : 'transparent', color: paperMode ? 'white' : C.textSec, transition: 'all .15s' }}
+                >
+                  📄 Copie papier
+                </button>
+              </div>
+
+              {!paperMode ? (
+                <>
+                  <button onClick={startExam} style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 800, cursor: 'pointer', boxShadow: `0 4px 20px ${C.brown}40`, marginBottom: 10 }}>
+                    Commencer l'épreuve →
+                  </button>
+                  <p style={{ textAlign: 'center', fontSize: 11, color: C.textSec, margin: 0 }}>
+                    Le chronomètre démarrera dès que tu cliques sur "Commencer"
+                  </p>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ background: `${C.brown}08`, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.brownPale}` }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: C.brown }}>Comment ça marche ?</p>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: C.textSec, lineHeight: 1.8 }}>
+                      <li>Rédige ta copie sur papier</li>
+                      <li>Prends une photo nette de chaque page</li>
+                      <li>Upload la photo ci-dessous</li>
+                      <li>L'IA lira et corrigera ta copie automatiquement</li>
+                    </ol>
+                  </div>
+
+                  {/* Zone upload */}
+                  <input
+                    ref={paperInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={e => handlePaperFile(e.target.files[0])}
+                  />
+
+                  {paperPreview ? (
+                    <div style={{ position: 'relative' }}>
+                      <img src={paperPreview} alt="Aperçu copie" style={{ width: '100%', borderRadius: 10, maxHeight: 240, objectFit: 'cover', border: `2px solid ${C.brownPale}` }}/>
+                      <button
+                        onClick={() => { setPaperFile(null); setPaperPreview(null) }}
+                        style={{ position: 'absolute', top: 8, right: 8, background: '#EF4444', border: 'none', borderRadius: '50%', width: 24, height: 24, color: 'white', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}
+                      >✕</button>
+                      <p style={{ margin: '6px 0 0', fontSize: 11, color: C.textSec, textAlign: 'center' }}>
+                        {paperFile?.name} · {paperFile ? `${(paperFile.size / 1024).toFixed(0)} Ko` : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => paperInputRef.current?.click()}
+                      style={{ padding: '20px', border: `2px dashed ${C.brownPale}`, borderRadius: 12, background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}
+                    >
+                      <Upload size={24} color={C.brown}/>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.brown }}>Choisir / Photographier la copie</span>
+                      <span style={{ fontSize: 11, color: C.textSec }}>JPG, PNG, HEIC — max 10 Mo</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={soumettreParier}
+                    disabled={!paperFile || paperSubmitting}
+                    style={{ padding: '14px', background: paperFile ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : C.brownPale, color: paperFile ? 'white' : C.textSec, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: paperFile ? 'pointer' : 'default', boxShadow: paperFile ? `0 4px 20px ${C.brown}40` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  >
+                    {paperSubmitting ? <><div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid white', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }}/> Analyse IA en cours…</> : <><Send size={15}/> Soumettre la copie papier</>}
+                  </button>
+
+                  <p style={{ textAlign: 'center', fontSize: 11, color: C.textSec, margin: 0 }}>
+                    Claude Vision lira ta copie et l'enseignant validera la correction
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

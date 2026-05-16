@@ -5,7 +5,8 @@ from uuid import UUID
 import csv
 import io
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -651,6 +652,11 @@ def resultats(
             "reponses": r.reponses,
             "nb_incidents": r.nb_incidents,
             "incidents_log": r.incidents_log if is_owner else None,
+            # Copie papier
+            "copie_type": r.copie_type or "numerique",
+            "image_copie_url": r.image_copie_url if is_owner else None,
+            "vision_corrections": r.vision_corrections if is_owner else None,
+            "dataset_valide": r.dataset_valide or False,
         }
         for r in reponses
     ]
@@ -749,3 +755,208 @@ def resultats_apprenant(
             "submitted_at":  rep.submitted_at.isoformat() if rep and rep.submitted_at else None,
         })
     return result
+
+
+# ── Copie papier + Dataset ────────────────────────────────────────────────────
+
+@router.post("/{epreuve_id}/soumettre-papier", status_code=201)
+async def soumettre_papier(
+    epreuve_id: UUID,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """L'apprenant uploade une photo de sa copie manuscrite. Claude Vision la lit et la corrige."""
+    ep = db.query(Epreuve).filter(Epreuve.id == epreuve_id).first()
+    if not ep:
+        raise HTTPException(status_code=404, detail="Épreuve introuvable")
+    now = datetime.now(timezone.utc)
+    if _effective_statut(ep, now) != "publie":
+        raise HTTPException(status_code=403, detail="Épreuve non accessible")
+
+    existing = (
+        db.query(EpreuveReponse)
+        .filter(
+            EpreuveReponse.epreuve_id == epreuve_id,
+            EpreuveReponse.apprenant_id == current_user.id,
+            EpreuveReponse.statut == "soumis",
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Épreuve déjà soumise")
+
+    # Sauvegarde l'image
+    os.makedirs("static/copies", exist_ok=True)
+    ext = os.path.splitext(image.filename or "")[1] or ".jpg"
+    filename = f"{epreuve_id}_{current_user.id}{ext}"
+    filepath = f"static/copies/{filename}"
+
+    image_bytes = await image.read()
+    with open(filepath, "wb") as f:
+        f.write(image_bytes)
+
+    # Correction par vision IA
+    vision_result = None
+    try:
+        from ..services.llm_service import corriger_copie_vision
+        media_type = image.content_type or "image/jpeg"
+        vision_result = corriger_copie_vision(image_bytes, media_type, ep.contenu)
+    except Exception as e:
+        import logging
+        logging.warning(f"[soumettre-papier] Vision correction failed: {e}")
+
+    rep = EpreuveReponse(
+        epreuve_id=epreuve_id,
+        apprenant_id=current_user.id,
+        reponses=vision_result.get("reponses_lues") if vision_result else {},
+        corrections=None,
+        score_total=vision_result.get("score_total") if vision_result else None,
+        score_p1=None,
+        score_p2=None,
+        nb_incidents=0,
+        incidents_log=[],
+        copie_type="papier",
+        image_copie_url=f"/static/copies/{filename}",
+        vision_corrections=vision_result,
+        dataset_valide=False,
+        statut="soumis",
+        submitted_at=now,
+    )
+    db.add(rep)
+    db.commit()
+    db.refresh(rep)
+
+    return {
+        "id": str(rep.id),
+        "copie_type": "papier",
+        "image_copie_url": rep.image_copie_url,
+        "vision_corrections": vision_result,
+        "score_total": rep.score_total,
+        "statut": rep.statut,
+        "message": "Copie analysée par IA — l'enseignant va valider la correction" if vision_result else "Copie reçue — correction manuelle requise",
+    }
+
+
+@router.patch("/reponses/{reponse_id}/valider-dataset")
+def valider_dataset(
+    reponse_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_enseignant),
+):
+    """L'enseignant valide une copie papier pour le dataset d'entraînement."""
+    rep = db.query(EpreuveReponse).filter(EpreuveReponse.id == reponse_id).first()
+    if not rep:
+        raise HTTPException(status_code=404, detail="Copie introuvable")
+    ep = db.query(Epreuve).filter(Epreuve.id == rep.epreuve_id).first()
+    if not ep or str(ep.enseignant_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Action non autorisée")
+    if rep.copie_type != "papier":
+        raise HTTPException(status_code=400, detail="Seules les copies papier peuvent être validées pour le dataset")
+
+    rep.dataset_valide = not rep.dataset_valide
+    db.commit()
+    return {"id": str(rep.id), "dataset_valide": rep.dataset_valide}
+
+
+@router.get("/dataset/stats")
+def dataset_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Statistiques des copies papier pour le dataset."""
+    if current_user.role not in ("super_admin", "enseignant"):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    total  = db.query(EpreuveReponse).filter(EpreuveReponse.copie_type == "papier").count()
+    valide = db.query(EpreuveReponse).filter(
+        EpreuveReponse.copie_type == "papier",
+        EpreuveReponse.dataset_valide == True,
+    ).count()
+
+    return {
+        "total_copies_papier": total,
+        "total_validees": valide,
+        "pct_valide": round(valide / max(total, 1) * 100, 1),
+    }
+
+
+@router.get("/dataset/export")
+def dataset_export(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export JSON du dataset validé pour fine-tuning (super_admin uniquement)."""
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Accès super admin requis")
+
+    copies = (
+        db.query(EpreuveReponse)
+        .filter(
+            EpreuveReponse.copie_type == "papier",
+            EpreuveReponse.dataset_valide == True,
+        )
+        .all()
+    )
+
+    dataset = []
+    for rep in copies:
+        ep = db.query(Epreuve).filter(Epreuve.id == rep.epreuve_id).first()
+        dataset.append({
+            "id": str(rep.id),
+            "epreuve_titre": ep.titre if ep else None,
+            "image_url": rep.image_copie_url,
+            "vision_corrections_ia": rep.vision_corrections,
+            "corrections_enseignant": rep.corrections,
+            "score_total": rep.score_total,
+            "submitted_at": rep.submitted_at.isoformat() if rep.submitted_at else None,
+        })
+
+    import json as _json
+    output = _json.dumps({"dataset": dataset, "total": len(dataset)}, ensure_ascii=False, indent=2)
+    return StreamingResponse(
+        iter([output]),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="dataset_copies.json"'},
+    )
+
+
+@router.get("/dataset/copies")
+def dataset_copies_list(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Liste toutes les copies papier avec leur statut de validation (super_admin)."""
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Accès super admin requis")
+
+    copies = (
+        db.query(EpreuveReponse)
+        .filter(EpreuveReponse.copie_type == "papier")
+        .order_by(EpreuveReponse.created_at.desc())
+        .all()
+    )
+
+    apprenant_ids = [r.apprenant_id for r in copies]
+    epreuve_ids   = [r.epreuve_id   for r in copies]
+
+    apprenants = {str(u.id): u for u in db.query(User).filter(User.id.in_(apprenant_ids)).all()} if apprenant_ids else {}
+    epreuves   = {str(e.id): e for e in db.query(Epreuve).filter(Epreuve.id.in_(epreuve_ids)).all()} if epreuve_ids else {}
+
+    return [
+        {
+            "id": str(r.id),
+            "apprenant_nom": (
+                f"{apprenants[str(r.apprenant_id)].prenom} {apprenants[str(r.apprenant_id)].nom}"
+                if str(r.apprenant_id) in apprenants else "—"
+            ),
+            "epreuve_titre": epreuves[str(r.epreuve_id)].titre if str(r.epreuve_id) in epreuves else "—",
+            "image_copie_url": r.image_copie_url,
+            "score_total": r.score_total,
+            "dataset_valide": r.dataset_valide or False,
+            "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+            "has_vision": r.vision_corrections is not None,
+            "has_teacher_correction": r.corrections is not None,
+        }
+        for r in copies
+    ]

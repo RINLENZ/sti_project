@@ -9,7 +9,7 @@ import {
   FileText, Sparkles, ChevronDown, ChevronUp, Check,
   Eye, EyeOff, Archive, Globe, Plus, RefreshCw,
   Users, Zap, ShieldAlert, BarChart2, Download,
-  Calendar, Clock, X as XIcon,
+  Calendar, Clock, X as XIcon, Image, Database, CheckSquare, Square,
 } from 'lucide-react'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -467,10 +467,13 @@ function EpreuveModal({ ep, onClose, C }) {
   const [copies, setCopies]     = useState(null)
   const [loadingD, setLoadingD] = useState(true)
   const [loadingC, setLoadingC] = useState(false)
-  const [correcting, setCorrecting] = useState({})    // { reponse_id: bool }
-  const [expanded, setExpanded]     = useState(null)  // copie.id ouvert
+  const [correcting, setCorrecting]   = useState({})    // { reponse_id: bool }
+  const [expanded, setExpanded]       = useState(null)  // copie.id ouvert
   const [manualScores, setManualScores] = useState({})  // { copie_id: { qid: score } }
   const [saving, setSaving]           = useState({})  // { copie_id: bool }
+  const [incidentOpen, setIncidentOpen] = useState(null) // copie.id dont les incidents sont visibles
+  const [lightboxUrl, setLightboxUrl] = useState(null)   // URL image agrandie
+  const [validatingDs, setValidatingDs] = useState({}) // { copie_id: bool }
 
   // Charge le détail complet (contenu) dès l'ouverture
   useEffect(() => {
@@ -568,6 +571,19 @@ function EpreuveModal({ ep, onClose, C }) {
     }))
   }
 
+  async function validerDataset(copie) {
+    setValidatingDs(v => ({ ...v, [copie.id]: true }))
+    try {
+      const { data } = await api.patch(`/api/examens/reponses/${copie.id}/valider-dataset`)
+      patchCopie(copie.id, { dataset_valide: data.dataset_valide })
+      toast.success(data.dataset_valide ? 'Copie ajoutée au dataset ✓' : 'Copie retirée du dataset')
+    } catch {
+      toast.error('Impossible de mettre à jour le dataset')
+    } finally {
+      setValidatingDs(v => ({ ...v, [copie.id]: false }))
+    }
+  }
+
   const TABS = [
     { key: 'apercu', label: 'Aperçu épreuve', icon: Eye },
     { key: 'copies', label: 'Copies',          icon: Users },
@@ -618,6 +634,17 @@ function EpreuveModal({ ep, onClose, C }) {
             )
           })}
         </div>
+
+        {/* Lightbox image copie */}
+        {lightboxUrl && (
+          <div
+            onClick={() => setLightboxUrl(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 24 }}
+          >
+            <img src={lightboxUrl} alt="Copie agrandie" style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 0 40px rgba(0,0,0,.6)' }} onClick={e => e.stopPropagation()}/>
+            <button onClick={() => setLightboxUrl(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'white', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', fontSize: 18, fontWeight: 900 }}>✕</button>
+          </div>
+        )}
 
         {/* Body */}
         <div style={{ padding: '20px 24px 24px', overflowY: 'auto', maxHeight: '70vh' }}>
@@ -684,9 +711,16 @@ function EpreuveModal({ ep, onClose, C }) {
                         {/* ── Ligne récapitulatif ── */}
                         <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                           <div style={{ flex: 1 }}>
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.text }}>
-                              {copie.apprenant_nom || `Apprenant #${i + 1}`}
-                            </p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.text }}>
+                                {copie.apprenant_nom || `Apprenant #${i + 1}`}
+                              </p>
+                              {copie.copie_type === 'papier' && (
+                                <span style={{ fontSize: 10, fontWeight: 800, color: '#7C3AED', background: '#EDE9FE', padding: '2px 8px', borderRadius: 20 }}>
+                                  📄 Papier
+                                </span>
+                              )}
+                            </div>
                             <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textSec }}>
                               {copie.submitted_at ? new Date(copie.submitted_at).toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'}
                               {copie.statut === 'corrige' && <span style={{ marginLeft: 6, color: C.emerald, fontWeight: 700 }}>✓ Corrigé</span>}
@@ -702,12 +736,16 @@ function EpreuveModal({ ep, onClose, C }) {
                               <p style={{ margin: 0, fontSize: 9, color: C.textSec, fontWeight: 700 }}>/20</p>
                             </div>
 
-                            {/* Incidents */}
+                            {/* Incidents — cliquable pour voir le détail */}
                             {copie.nb_incidents > 0 && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#FEF3C7', padding: '4px 8px', borderRadius: 8, border: '1px solid #D97706' }}>
+                              <button
+                                onClick={() => setIncidentOpen(incidentOpen === copie.id ? null : copie.id)}
+                                title="Voir le détail des incidents"
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, background: incidentOpen === copie.id ? '#FEF3C7' : '#FEF3C7', padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${incidentOpen === copie.id ? '#D97706' : '#D97706'}`, cursor: 'pointer' }}
+                              >
                                 <ShieldAlert size={12} color="#D97706"/>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E' }}>{copie.nb_incidents}</span>
-                              </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E' }}>{copie.nb_incidents} ⚠</span>
+                              </button>
                             )}
 
                             {/* Auto-corriger IA */}
@@ -720,6 +758,18 @@ function EpreuveModal({ ep, onClose, C }) {
                               >
                                 {correcting[copie.id] ? <Spinner/> : <Zap size={12}/>}
                                 {correcting[copie.id] ? 'IA…' : 'IA'}
+                              </button>
+                            )}
+
+                            {/* Valider pour dataset (copies papier) */}
+                            {copie.copie_type === 'papier' && (
+                              <button
+                                onClick={() => validerDataset(copie)}
+                                disabled={validatingDs[copie.id]}
+                                title={copie.dataset_valide ? 'Retirer du dataset' : 'Valider pour le dataset d\'entraînement'}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: copie.dataset_valide ? `${C.emerald}18` : '#F3F4F6', border: `1px solid ${copie.dataset_valide ? C.emerald : '#E5E7EB'}`, borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: copie.dataset_valide ? C.emerald : C.textSec }}
+                              >
+                                {validatingDs[copie.id] ? '…' : copie.dataset_valide ? <><CheckSquare size={12}/> Dataset</> : <><Square size={12}/> Dataset</>}
                               </button>
                             )}
 
@@ -752,22 +802,113 @@ function EpreuveModal({ ep, onClose, C }) {
                           ))}
                         </div>
 
+                        {/* ── Vignette copie papier ── */}
+                        {copie.copie_type === 'papier' && copie.image_copie_url && (
+                          <div style={{ padding: '10px 16px 0', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                            <button
+                              onClick={() => setLightboxUrl(copie.image_copie_url)}
+                              style={{ border: `2px solid #C4B5FD`, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', flexShrink: 0, background: 'none', padding: 0 }}
+                              title="Agrandir la copie"
+                            >
+                              <img src={copie.image_copie_url} alt="Copie papier" style={{ width: 72, height: 72, objectFit: 'cover', display: 'block' }}/>
+                            </button>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 800, color: '#7C3AED' }}>📄 Copie manuscrite</p>
+                              {copie.vision_corrections?.observations && (
+                                <p style={{ margin: 0, fontSize: 11, color: C.textSec, lineHeight: 1.5, fontStyle: 'italic' }}>
+                                  {copie.vision_corrections.observations}
+                                </p>
+                              )}
+                              {!copie.vision_corrections && (
+                                <p style={{ margin: 0, fontSize: 11, color: C.orange }}>⚠ Correction IA non disponible — correction manuelle requise</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Détail incidents de surveillance ── */}
+                        {incidentOpen === copie.id && (
+                          <div style={{ borderTop: '1px solid #FDE68A', padding: '14px 16px', background: '#FFFBEB' }}>
+                            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 800, color: '#92400E' }}>
+                              🔍 Détail des incidents — {copie.nb_incidents} signalement{copie.nb_incidents > 1 ? 's' : ''}
+                            </p>
+                            {!copie.incidents_log || copie.incidents_log.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#B45309', margin: 0 }}>Aucun détail disponible (soumis avec une ancienne version).</p>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {copie.incidents_log.map((inc, i) => {
+                                  const isTab = inc.type === 'tab_switch'
+                                  const isCam = inc.type === 'camera_absence' || !inc.type
+                                  const debut = inc.debut ? new Date(inc.debut).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
+                                  return (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: 'white', borderRadius: 8, border: '1px solid #FDE68A' }}>
+                                      <span style={{ fontSize: 14, flexShrink: 0 }}>{isTab ? '📱' : '👁'}</span>
+                                      <div style={{ flex: 1 }}>
+                                        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#92400E' }}>
+                                          {isTab ? 'Sortie plateforme' : 'Absence caméra'}
+                                        </p>
+                                        <p style={{ margin: 0, fontSize: 11, color: '#B45309' }}>
+                                          à {debut} · {inc.duree_s ?? '?'}s
+                                        </p>
+                                      </div>
+                                      <span style={{ fontSize: 11, fontWeight: 800, color: inc.duree_s > 10 ? '#EF4444' : '#D97706', background: inc.duree_s > 10 ? '#FEE2E2' : '#FEF3C7', padding: '2px 8px', borderRadius: 10 }}>
+                                        {inc.duree_s ?? '?'}s
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                                <p style={{ margin: '6px 0 0', fontSize: 11, color: '#92400E', fontStyle: 'italic' }}>
+                                  📱 Sortie plateforme = changement d'onglet ou alt-tab &nbsp;·&nbsp; 👁 Absence caméra = visage non détecté
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* ── Détail questions / correction ── */}
                         {isOpen && (
                           <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '14px 16px', background: C.bg }}>
                             {loadingD ? (
                               <div style={{ textAlign: 'center' }}><Spinner/></div>
                             ) : (
-                              <CopieDetailView
-                                contenu={detail?.contenu}
-                                reponses={copie.reponses}
-                                corrections={copie.corrections}
-                                manualScores={manualScores[copie.id] || {}}
-                                onScoreChange={(qid, val, maxPts) => setManualScore(copie.id, qid, val, maxPts)}
-                                onSave={() => sauvegarderCorrections(copie)}
-                                saving={saving[copie.id] || false}
-                                C={C}
-                              />
+                              <>
+                                {/* Corrections IA vision pour copies papier */}
+                                {copie.copie_type === 'papier' && copie.vision_corrections?.corrections && (
+                                  <div style={{ background: '#FAF5FF', borderRadius: 10, padding: '12px 14px', marginBottom: 14, border: '1px solid #C4B5FD' }}>
+                                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: '#7C3AED' }}>
+                                      🤖 Lecture IA — Première correction (à valider)
+                                    </p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                      {Object.entries(copie.vision_corrections.corrections).map(([qid, c]) => (
+                                        <div key={qid} style={{ display: 'flex', gap: 10, padding: '6px 10px', background: 'white', borderRadius: 8, border: '1px solid #EDE9FE', alignItems: 'flex-start' }}>
+                                          <span style={{ fontSize: 11, fontWeight: 800, color: '#7C3AED', flexShrink: 0, minWidth: 60 }}>{qid}</span>
+                                          <div style={{ flex: 1 }}>
+                                            {c.reponse_lue && <p style={{ margin: '0 0 2px', fontSize: 11, color: C.textSec }}>Lu : <em>{c.reponse_lue}</em></p>}
+                                            {c.commentaire && <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>{c.commentaire}</p>}
+                                          </div>
+                                          <span style={{ fontSize: 12, fontWeight: 900, color: c.correct ? '#059669' : '#EF4444', flexShrink: 0 }}>
+                                            {c.score}/{c.max}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <p style={{ margin: '8px 0 0', fontSize: 10, color: '#7C3AED', opacity: .7 }}>
+                                      Score IA estimé : <strong>{copie.vision_corrections.score_total}/20</strong> — Ajuste les scores manuellement ci-dessous si nécessaire.
+                                    </p>
+                                  </div>
+                                )}
+
+                                <CopieDetailView
+                                  contenu={detail?.contenu}
+                                  reponses={copie.copie_type === 'papier' ? (copie.vision_corrections?.reponses_lues || copie.reponses) : copie.reponses}
+                                  corrections={copie.corrections || (copie.copie_type === 'papier' ? copie.vision_corrections?.corrections : null)}
+                                  manualScores={manualScores[copie.id] || {}}
+                                  onScoreChange={(qid, val, maxPts) => setManualScore(copie.id, qid, val, maxPts)}
+                                  onSave={() => sauvegarderCorrections(copie)}
+                                  saving={saving[copie.id] || false}
+                                  C={C}
+                                />
+                              </>
                             )}
                           </div>
                         )}

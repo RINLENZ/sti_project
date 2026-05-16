@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import redis as redis_lib
 import sqlalchemy as sa
 import time
@@ -81,6 +82,11 @@ def create_missing_tables():
         conn.execute(sa.text("CREATE INDEX IF NOT EXISTS idx_ep_rep_apprenant ON epreuve_reponses(apprenant_id)"))
         conn.execute(sa.text("ALTER TABLE epreuves ADD COLUMN IF NOT EXISTS date_ouverture TIMESTAMP WITH TIME ZONE"))
         conn.execute(sa.text("ALTER TABLE epreuves ADD COLUMN IF NOT EXISTS date_cloture   TIMESTAMP WITH TIME ZONE"))
+        # Colonnes pour les copies papier et le dataset d'entraînement
+        conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS copie_type VARCHAR(20) DEFAULT 'numerique'"))
+        conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS image_copie_url TEXT"))
+        conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS vision_corrections JSON"))
+        conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS dataset_valide BOOLEAN DEFAULT FALSE"))
         conn.execute(sa.text("COMMIT"))
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────
@@ -121,10 +127,17 @@ app.add_middleware(GZipMiddleware, minimum_size=512)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # En dev : tout port localhost est autorisé (Vite peut changer de port)
+    allow_origin_regex=r"http://localhost:\d+" if settings.environment == "development" else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# Servir les copies papier uploadées
+import os as _os
+_os.makedirs("static/copies", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(auth.router)
 app.include_router(interactions.router)
