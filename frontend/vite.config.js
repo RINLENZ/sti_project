@@ -11,8 +11,13 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         // Exclure les gros modèles ML du cache SW (trop lourds)
         workbox: {
-          globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+          // Ne pas précacher index.html — il change à chaque déploiement
+          // (nouveaux hashes de chunks). On utilise navigateFallback à la place
+          // pour éviter les ChunkLoadError après un redéploiement.
+          globPatterns: ['**/*.{js,css,svg,png,ico,woff2}'],
           globIgnores: ['**/models/**', '**/ort-wasm**', '**/vision_bundle**'],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/ws/],
           runtimeCaching: [
             // API : stale-while-revalidate — affiche le cache, met à jour en arrière-plan
             {

@@ -7,6 +7,24 @@ export default class ErrorBoundary extends Component {
   }
 
   static getDerivedStateFromError(error) {
+    // ChunkLoadError = ancien HTML en cache après un déploiement Netlify.
+    // On recharge une seule fois automatiquement au lieu d'afficher l'écran d'erreur.
+    const isChunkError =
+      error?.name === 'ChunkLoadError' ||
+      error?.message?.includes('Failed to fetch dynamically imported module') ||
+      error?.message?.includes('error loading dynamically imported module') ||
+      error?.message?.includes('Importing a module script failed')
+
+    if (isChunkError) {
+      const lastReload = sessionStorage.getItem('_chunk_reload')
+      const now = Date.now()
+      if (!lastReload || now - Number(lastReload) > 15000) {
+        sessionStorage.setItem('_chunk_reload', String(now))
+        window.location.reload()
+        return { hasError: false, error: null }
+      }
+    }
+
     return { hasError: true, error }
   }
 
