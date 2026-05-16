@@ -2,6 +2,7 @@ import { useSelector } from 'react-redux'
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import { getCache, setCache } from '../../services/cache'
 import toast from 'react-hot-toast'
 import {
   BookOpen, Clock, Target, Award, Flame, Copy, CheckCircle,
@@ -663,37 +664,63 @@ export default function Dashboard() {
       grouped.push({ module: mod, familles: famList })
     }
     setModulesFamilles(grouped)
+    return grouped
   }, [user.id])
 
   useEffect(() => {
     async function load() {
+      const cacheKey = `dashboard_${user.id}`
+      const cached = getCache(cacheKey)
+      if (cached) {
+        setMatieres(cached.matieres)
+        setProgression(cached.progression)
+        setBktData(cached.bktData)
+        setRecommandee(cached.recommandee)
+        setStats(cached.stats)
+        setSessions(cached.sessions)
+        setMatActive(cached.matieres[0] || null)
+        setModulesFamilles(cached.modulesFamilles)
+        setLoading(false)
+        return
+      }
       try {
         const { data } = await api.get(
           `/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`
         )
         setMatieres(data)
 
+        let modulesFamillesData = []
         if (data.length > 0) {
           setMatActive(data[0])
-          await loadModulesPourMatiere(data[0])
+          modulesFamillesData = await loadModulesPourMatiere(data[0])
         }
 
         const { data: prog } = await api.get(`/api/cours/progression/${user.id}`)
         setProgression(prog)
         const { data: bkt } = await api.get(`/api/bkt/apprenant/${user.id}`)
         setBktData(bkt)
+        let recoData = null, statsData = null, sessionsData = null
         try {
           const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
-          setRecommandee(reco?.recommandee || null)
+          recoData = reco?.recommandee || null
+          setRecommandee(recoData)
         } catch {}
         try {
           const { data: st } = await api.get(`/api/bkt/apprenant/${user.id}/stats`)
+          statsData = st
           setStats(st)
         } catch {}
         try {
           const { data: se } = await api.get(`/api/bkt/apprenant/${user.id}/sessions?limit=8`)
+          sessionsData = se
           setSessions(se)
         } catch {}
+
+        setCache(cacheKey, {
+          matieres: data, modulesFamilles: modulesFamillesData,
+          progression: prog, bktData: bkt,
+          recommandee: recoData, stats: statsData, sessions: sessionsData,
+        })
       } catch {
         toast.error('Erreur de chargement')
       } finally {

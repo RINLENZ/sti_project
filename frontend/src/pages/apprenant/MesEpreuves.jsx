@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import { getCache, setCache } from '../../services/cache'
 import toast from 'react-hot-toast'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
@@ -31,9 +32,11 @@ export default function MesEpreuves() {
   const [tab,      setTab]      = useState('all')
 
   useEffect(() => {
+    const cached = getCache('epreuves_disponibles')
+    if (cached) { setEpreuves(cached); setLoading(false) }
     api.get('/api/examens/disponibles')
-      .then(({ data }) => setEpreuves(data))
-      .catch(() => toast.error('Impossible de charger les épreuves'))
+      .then(({ data }) => { setEpreuves(data); setCache('epreuves_disponibles', data, 60 * 1000) })
+      .catch(() => { if (!cached) toast.error('Impossible de charger les épreuves') })
       .finally(() => setLoading(false))
   }, [])
 

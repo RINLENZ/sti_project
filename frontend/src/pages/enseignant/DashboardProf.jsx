@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import { getCache, setCache } from '../../services/cache'
 import toast from 'react-hot-toast'
 import {
   Users, TrendingUp, AlertTriangle, Activity,
@@ -376,6 +377,13 @@ export default function DashboardProf() {
   const prevScoresRef = useRef({})
 
   const fetchData = useCallback(async () => {
+    const cacheKey = `dashboard_prof_${user.id}`
+    const cached = getCache(cacheKey)
+    if (cached && loading) {
+      setData(cached)
+      setLastUpdate(new Date(cached._cachedAt))
+      setLoading(false)
+    }
     try {
       const { data: res } = await api.get(`/api/cours/dashboard/enseignant?enseignant_id=${user.id}`)
 
@@ -390,10 +398,11 @@ export default function DashboardProf() {
         prevScores[a.user_id] = curr
       }
 
+      setCache(cacheKey, { ...res, _cachedAt: Date.now() }, 2 * 60 * 1000)
       setData(res)
       setLastUpdate(new Date())
     } catch {
-      toast.error('Erreur de chargement')
+      if (!cached) toast.error('Erreur de chargement')
     } finally {
       setLoading(false)
     }
