@@ -7,7 +7,7 @@ import {
   Home, Map, ClipboardList, UserCircle, MoreHorizontal,
   BarChart2, FileText, PenLine, Shield, BookOpen,
   Camera, Mic, FlaskConical, LogOut, Sun, Moon,
-  Bell, X, ChevronRight, MessageCircle,
+  Bell, X, ChevronRight, MessageCircle, Users, GraduationCap,
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
@@ -179,6 +179,14 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
   const location  = useLocation()
   const sheetRef  = useRef(null)
   const roleInfo  = ROLE_INFO[user?.role] || ROLE_INFO.apprenant
+  const [notifExpanded, setNotifExpanded] = useState(false)
+
+  // Ouvrir automatiquement si des notifications non lues arrivent
+  const prevNbRef = useRef(nbNonLues)
+  useEffect(() => {
+    if (nbNonLues > prevNbRef.current) setNotifExpanded(true)
+    prevNbRef.current = nbNonLues
+  }, [nbNonLues])
 
   // Fermeture swipe bas (simplifié: touch start/end)
   const touchStartY = useRef(0)
@@ -199,18 +207,27 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
   }
 
   const ALL_LINKS = [
-    { path: '/dashboard',         label: 'Tableau de bord',     icon: Home,          show: user?.role === 'apprenant' },
-    { path: '/epreuves',          label: 'Mes épreuves',         icon: ClipboardList, show: user?.role === 'apprenant', badge: epBadge },
-    { path: '/prof',              label: 'Suivi des apprenants', icon: BarChart2,     show: ['enseignant','super_admin'].includes(user?.role) },
-    { path: '/corrections',       label: 'Corrections',          icon: PenLine,       show: ['enseignant','super_admin'].includes(user?.role) },
-    { path: '/prof/examens',      label: 'Épreuves IA',          icon: FileText,      show: user?.role === 'enseignant' },
-    { path: '/chat',              label: 'Messages',             icon: MessageCircle, show: ['apprenant','enseignant'].includes(user?.role) },
-    { path: '/admin',             label: 'Gestion des cours',    icon: Shield,        show: user?.role === 'super_admin' },
-    { path: '/admin/referentiel', label: 'Référentiel',          icon: BookOpen,      show: user?.role === 'super_admin' },
-    { path: '/contribuer',        label: "Contribuer à l'IA",    icon: FlaskConical,  show: ['apprenant','enseignant'].includes(user?.role) },
-    { path: '/collect-emotions',  label: 'Collecte émotions',    icon: Camera,        show: user?.role === 'super_admin' },
-    { path: '/collect-audio',     label: 'Collecte audio',       icon: Mic,           show: user?.role === 'super_admin' },
-    { path: '/profil',            label: 'Mon profil',           icon: UserCircle,    show: true },
+    // ── Apprenant (par priorité) ──────────────────────────────────
+    { path: '/dashboard',          label: 'Tableau de bord',      icon: Home,          show: user?.role === 'apprenant' },
+    { path: '/epreuves',           label: 'Mes épreuves',          icon: ClipboardList, show: user?.role === 'apprenant', badge: epBadge },
+    { path: '/chat',               label: 'Messages',              icon: MessageCircle, show: user?.role === 'apprenant' },
+    { path: '/contribuer',         label: "Contribuer à l'IA",     icon: FlaskConical,  show: user?.role === 'apprenant' },
+    // ── Enseignant (par priorité) ─────────────────────────────────
+    { path: '/prof',               label: 'Suivi des apprenants',  icon: BarChart2,     show: user?.role === 'enseignant' },
+    { path: '/corrections',        label: 'Corrections',           icon: PenLine,       show: user?.role === 'enseignant' },
+    { path: '/prof/examens',       label: 'Épreuves IA',           icon: FileText,      show: user?.role === 'enseignant' },
+    { path: '/chat',               label: 'Messages',              icon: MessageCircle, show: user?.role === 'enseignant' },
+    { path: '/contribuer',         label: "Contribuer à l'IA",     icon: FlaskConical,  show: user?.role === 'enseignant' },
+    // ── Super Admin (par priorité) ────────────────────────────────
+    { path: '/admin',              label: 'Gestion des cours',     icon: Shield,        show: user?.role === 'super_admin' },
+    { path: '/admin/referentiel',  label: 'Référentiel éducatif',  icon: BookOpen,      show: user?.role === 'super_admin' },
+    { path: '/admin/utilisateurs', label: 'Utilisateurs',          icon: Users,         show: user?.role === 'super_admin' },
+    { path: '/dashboard',          label: 'Vue apprenant',         icon: GraduationCap, show: user?.role === 'super_admin' },
+    { path: '/prof',               label: 'Vue enseignant',        icon: BarChart2,     show: user?.role === 'super_admin' },
+    { path: '/collect-emotions',   label: 'Collecte émotions',     icon: Camera,        show: user?.role === 'super_admin' },
+    { path: '/collect-audio',      label: 'Collecte audio',        icon: Mic,           show: user?.role === 'super_admin' },
+    // ── Commun ────────────────────────────────────────────────────
+    { path: '/profil',             label: 'Mon profil',            icon: UserCircle,    show: true },
   ].filter(l => l.show)
 
   return (
@@ -344,10 +361,18 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
             </div>
           </div>
 
-          {/* Notifications section */}
+          {/* Notifications section — collapsible */}
           <div style={{ margin: `0 ${space[4]}px ${space[3]}px` }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[2] }}>
+
+            {/* Header — cliquable pour ouvrir/fermer */}
+            <button
+              onClick={() => setNotifExpanded(o => !o)}
+              style={{
+                width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: `${space[2]}px 0`, marginBottom: notifExpanded ? space[2] : 0,
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
                 <Bell size={13} color={nbNonLues > 0 ? '#EF4444' : 'rgba(255,255,255,0.35)'} />
                 <span style={{ fontSize: type.sm, fontWeight: weight.semibold, color: 'rgba(255,255,255,0.6)' }}>
@@ -359,60 +384,65 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
                   </span>
                 )}
               </div>
-              {nbNonLues > 0 && (
-                <button
-                  onClick={onMarkAllRead}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4865A', fontSize: type.xs, fontWeight: weight.semibold, padding: 0 }}
-                >
-                  Tout lire
-                </button>
-              )}
-            </div>
+              <ChevronRight
+                size={14}
+                color="rgba(255,255,255,0.3)"
+                style={{ transform: notifExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform .2s' }}
+              />
+            </button>
 
-            {/* Liste */}
-            {notifications.length === 0 ? (
-              <p style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: `${space[3]}px 0`, margin: 0 }}>
-                Aucune notification
-              </p>
-            ) : (
-              <div style={{ borderRadius: radius.lg, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)' }}>
-                {notifications.slice(0, 6).map((n, idx) => {
-                  const url = getNotifUrl(n)
-                  return (
+            {/* Liste dépliable — uniquement non-lues */}
+            {notifExpanded && (() => {
+              const unread = notifications.filter(n => !n.lu)
+              return unread.length === 0 ? (
+                <p style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: `${space[2]}px 0`, margin: 0 }}>
+                  Tout est lu ✓
+                </p>
+              ) : (
+                <>
+                  <div style={{ borderRadius: radius.lg, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    {unread.slice(0, 5).map((n, idx) => {
+                      const url = getNotifUrl(n)
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => {
+                            onMarkRead(n.id)
+                            if (url) { navigate(url); onClose() }
+                          }}
+                          style={{
+                            width: '100%', padding: `${space[3]}px ${space[3]}px`,
+                            background: 'rgba(255,255,255,0.06)', border: 'none',
+                            borderBottom: idx < unread.slice(0, 5).length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                            cursor: 'pointer', textAlign: 'left',
+                            display: 'flex', alignItems: 'flex-start', gap: space[2],
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4865A', flexShrink: 0, marginTop: 5 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: type.sm, fontWeight: weight.bold, color: 'white', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {n.titre}
+                            </p>
+                            <p style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.35)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {n.message}
+                            </p>
+                          </div>
+                          {url && <ChevronRight size={12} color="rgba(255,255,255,0.22)" style={{ flexShrink: 0, marginTop: 3 }} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {nbNonLues > 0 && (
                     <button
-                      key={n.id}
-                      onClick={() => {
-                        if (!n.lu) onMarkRead(n.id)
-                        if (url) { navigate(url); onClose() }
-                      }}
-                      style={{
-                        width:        '100%',
-                        padding:      `${space[3]}px ${space[3]}px`,
-                        background:    n.lu ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.06)',
-                        border:        'none',
-                        borderBottom:  idx < Math.min(notifications.length, 6) - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                        cursor:        url ? 'pointer' : 'default',
-                        textAlign:     'left',
-                        display:      'flex',
-                        alignItems:   'flex-start',
-                        gap:           space[2],
-                      }}
+                      onClick={onMarkAllRead}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4865A', fontSize: type.xs, fontWeight: weight.semibold, padding: `${space[2]}px 0 0`, display: 'block', width: '100%', textAlign: 'right' }}
                     >
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: n.lu ? 'transparent' : '#C4865A', flexShrink: 0, marginTop: 5 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: type.sm, fontWeight: n.lu ? weight.normal : weight.bold, color: n.lu ? 'rgba(255,255,255,0.38)' : 'white', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {n.titre}
-                        </p>
-                        <p style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.32)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {n.message}
-                        </p>
-                      </div>
-                      {url && <ChevronRight size={12} color="rgba(255,255,255,0.22)" style={{ flexShrink: 0, marginTop: 3 }} />}
+                      Tout marquer lu
                     </button>
-                  )
-                })}
-              </div>
-            )}
+                  )}
+                </>
+              )
+            })()}
           </div>
 
           {/* Liens navigation */}
