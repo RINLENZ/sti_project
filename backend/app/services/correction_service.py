@@ -203,12 +203,75 @@ def scorer_question(
     }
 
 
+# ── Scoreur LLM (Groq → Ollama → Claude) ─────────────────────────────────────
+
+def scorer_question_llm(
+    type_q: str,
+    reponse_donnee: str,
+    reponse_correcte: str,
+    max_points: float,
+    enonce: str = "",
+    explication: str = "",
+) -> dict:
+    """
+    Score une réponse libre via LLM.
+    Fallback automatique vers TF-IDF si le LLM échoue.
+    """
+    import json as _json
+    import re as _re
+
+    donnee   = (reponse_donnee   or "").strip()
+    correcte = (reponse_correcte or "").strip()
+
+    if not donnee:
+        return {
+            "score": 0.0, "max": max_points, "auto": True,
+            "correct": False, "similarite": 0.0,
+            "methode": "vide", "explication": "Aucune réponse fournie.",
+        }
+
+    try:
+        from .llm_service import call_llm
+
+        prompt = (
+            f"Tu es un correcteur d'examen scolaire camerounais.\n\n"
+            f"Question ({type_q}) — {max_points} pt(s) :\n"
+            f"{enonce or '(non précisé)'}\n\n"
+            f"Réponse attendue : {correcte}\n"
+            f"Réponse de l'élève : {donnee}\n\n"
+            f"Attribue un score entre 0 et {max_points} (décimales autorisées). "
+            f"Sois strict sur le fond, indulgent sur la forme et l'orthographe.\n"
+            f'Réponds UNIQUEMENT avec ce JSON : {{"score": <nombre>, "justification": "<explication courte>"}}'
+        )
+
+        raw, backend = call_llm(prompt, max_tokens=150)
+
+        m = _re.search(r'\{[^{}]+\}', raw, _re.DOTALL)
+        if m:
+            data = _json.loads(m.group())
+            score = round(min(max_points, max(0.0, float(data.get("score", 0)))), 2)
+            return {
+                "score": score,
+                "max": max_points,
+                "auto": True,
+                "correct": score >= max_points * 0.75,
+                "similarite": None,
+                "methode": f"llm_{backend}",
+                "explication": data.get("justification", explication),
+            }
+    except Exception as e:
+        logger.warning(f"LLM scorer échoué ({e}) — fallback TF-IDF")
+
+    return scorer_question(type_q, donnee, correcte, max_points, explication)
+
+
 # ── Re-correction complète d'une copie ───────────────────────────────────────
 
 def recorriger_copie(
     contenu_epreuve: dict,
     reponses: dict,
     corrections_existantes: dict,
+    use_llm: bool = True,
 ) -> tuple[dict, float, float, float]:
     """
     Re-score toutes les questions sémantiques, conserve les scores exacts.
@@ -228,13 +291,17 @@ def recorriger_copie(
                 reponse = reponses.get(qid, "")
 
                 if type_q in SEMANTIC_TYPES and reponse:
-                    corr = scorer_question(
+                    scorer = scorer_question_llm if use_llm else scorer_question
+                    scorer_kwargs = dict(
                         type_q=type_q,
                         reponse_donnee=reponse,
                         reponse_correcte=q.get("reponse_correcte", ""),
                         max_points=points,
                         explication=q.get("explication", ""),
                     )
+                    if use_llm:
+                        scorer_kwargs["enonce"] = q.get("enonce", "")
+                    corr = scorer(**scorer_kwargs)
                     corrections[qid] = corr
                 elif qid in corrections:
                     corr = corrections[qid]

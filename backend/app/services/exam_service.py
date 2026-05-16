@@ -1,14 +1,12 @@
 """
-Génération d'épreuves par l'IA (Claude) en suivant le format officiel
-camerounais APC : deux parties (Ressources + Compétences).
+Génération d'épreuves via le service LLM unifié (Groq → Ollama → Claude).
+Format officiel camerounais APC : deux parties (Ressources + Compétences).
 """
 import json
 import re
 from typing import Any
 
-import anthropic
-
-from ..config import settings
+from .llm_service import call_llm
 
 
 # ── System prompt — format officiel camerounais ────────────────────────────
@@ -129,22 +127,25 @@ Génère maintenant l'épreuve complète en JSON (format décrit dans le system 
 
 
 def _extract_json(text: str) -> dict:
-    """Extrait le JSON même si Claude ajoute du texte autour."""
+    """Extrait le JSON même si le LLM ajoute du texte autour."""
     text = text.strip()
-    # Try direct parse
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Extract from markdown code block
     match = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
     if match:
-        return json.loads(match.group(1).strip())
-    # Find first { ... }
+        try:
+            return json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
     start = text.find("{")
     end = text.rfind("}") + 1
     if start >= 0 and end > start:
-        return json.loads(text[start:end])
+        try:
+            return json.loads(text[start:end])
+        except json.JSONDecodeError:
+            pass
     raise ValueError("Aucun JSON valide trouvé dans la réponse du modèle")
 
 
@@ -158,14 +159,9 @@ async def generer_epreuve(
     annee: str = "2025-2026",
 ) -> dict[str, Any]:
     """
-    Appelle Claude pour générer une épreuve structurée.
+    Génère une épreuve structurée via le LLM disponible (Groq → Ollama → Claude).
     Retourne le dict JSON de l'épreuve ou lève une exception.
     """
-    if not settings.anthropic_api_key:
-        raise ValueError("Clé API Anthropic non configurée (ANTHROPIC_API_KEY)")
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
     user_prompt = _build_user_prompt(
         matiere=matiere,
         niveau=niveau,
@@ -176,13 +172,12 @@ async def generer_epreuve(
         annee=annee,
     )
 
-    message = client.messages.create(
-        model="claude-opus-4-7",
+    raw_text, backend = call_llm(
+        prompt=user_prompt,
         max_tokens=4096,
         system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
     )
 
-    raw_text = message.content[0].text
     contenu = _extract_json(raw_text)
+    contenu["_backend"] = backend  # info de debug dans la réponse
     return contenu

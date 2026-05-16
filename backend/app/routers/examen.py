@@ -17,7 +17,7 @@ from ..models.examen import Epreuve, EpreuveReponse
 from ..models.referentiel import Niveau
 from ..models.user import User
 from ..services.exam_service import generer_epreuve
-from ..services.correction_service import recorriger_copie, SEMANTIC_TYPES, scorer_question
+from ..services.correction_service import recorriger_copie, SEMANTIC_TYPES, scorer_question, scorer_question_llm
 
 router = APIRouter(prefix="/api/examens", tags=["examens"])
 
@@ -49,6 +49,11 @@ class PublierRequest(BaseModel):
 class PlanifierRequest(BaseModel):
     date_ouverture: Optional[datetime] = None
     date_cloture:   Optional[datetime] = None
+
+
+class CorrectionManuelleBody(BaseModel):
+    corrections: dict[str, dict]   # { qid: { "score": float, "commentaire"?: str } }
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -186,7 +191,9 @@ async def generer(
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erreur génération IA : {e}")
+        import traceback, logging
+        logging.error(f"[generer] ERREUR COMPLÈTE:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=502, detail=f"Erreur génération IA : {type(e).__name__}: {e}")
 
     titre = body.titre or contenu.get("titre") or f"Épreuve {matiere.nom} — {body.type_epreuve}"
 
@@ -499,6 +506,7 @@ def auto_corriger_copie(
         contenu_epreuve=ep.contenu,
         reponses=rep.reponses or {},
         corrections_existantes=rep.corrections or {},
+        use_llm=True,
     )
 
     rep.corrections  = corrections
@@ -508,6 +516,71 @@ def auto_corriger_copie(
     if score_total is not None:
         rep.statut   = "corrige"
         rep.corrige_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "id": str(rep.id),
+        "score_total": rep.score_total,
+        "score_p1": rep.score_p1,
+        "score_p2": rep.score_p2,
+        "statut": rep.statut,
+        "corrections": corrections,
+    }
+
+
+@router.patch("/reponses/{reponse_id}/corriger-manuel")
+def corriger_manuel(
+    reponse_id: UUID,
+    body: CorrectionManuelleBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_enseignant),
+):
+    """
+    L'enseignant attribue manuellement des scores à des questions spécifiques.
+    Recalcule automatiquement le score total.
+    """
+    rep = db.query(EpreuveReponse).filter(EpreuveReponse.id == reponse_id).first()
+    if not rep:
+        raise HTTPException(status_code=404, detail="Copie introuvable")
+
+    ep = db.query(Epreuve).filter(Epreuve.id == rep.epreuve_id).first()
+    if not ep or str(ep.enseignant_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Action non autorisée")
+
+    corrections = dict(rep.corrections or {})
+
+    for qid, data in body.corrections.items():
+        score = round(min(float(data.get("max", 9999)), max(0.0, float(data.get("score", 0)))), 2)
+        corrections[qid] = {
+            **(corrections.get(qid) or {}),
+            "score": score,
+            "max": data.get("max", corrections.get(qid, {}).get("max", 0)),
+            "auto": False,
+            "correct": score > 0,
+            "methode": "manuelle_enseignant",
+            "explication": data.get("commentaire", ""),
+        }
+
+    # Recalcul des scores depuis le contenu de l'épreuve
+    score_p1 = 0.0
+    score_p2 = 0.0
+    for partie_key in ("partie1", "partie2"):
+        for ex in ep.contenu.get(partie_key, {}).get("exercices", []):
+            for q in ex.get("questions", []):
+                qid = q.get("id", "")
+                s = (corrections.get(qid) or {}).get("score")
+                if s is not None:
+                    if partie_key == "partie1":
+                        score_p1 += float(s)
+                    else:
+                        score_p2 += float(s)
+
+    rep.corrections = corrections
+    rep.score_p1    = round(score_p1, 2)
+    rep.score_p2    = round(score_p2, 2)
+    rep.score_total = round(score_p1 + score_p2, 2)
+    rep.statut      = "corrige"
+    rep.corrige_at  = datetime.now(timezone.utc)
     db.commit()
 
     return {
@@ -541,6 +614,7 @@ def resultats(
         reponses = (
             db.query(EpreuveReponse)
             .filter(EpreuveReponse.epreuve_id == epreuve_id)
+            .order_by(EpreuveReponse.submitted_at)
             .all()
         )
     else:
@@ -553,16 +627,28 @@ def resultats(
             .all()
         )
 
+    # Résoudre les noms des apprenants
+    apprenant_ids = [r.apprenant_id for r in reponses]
+    apprenants = {}
+    if apprenant_ids:
+        users = db.query(User).filter(User.id.in_(apprenant_ids)).all()
+        apprenants = {str(u.id): u for u in users}
+
     return [
         {
             "id": str(r.id),
             "apprenant_id": str(r.apprenant_id),
+            "apprenant_nom": (
+                f"{apprenants[str(r.apprenant_id)].prenom} {apprenants[str(r.apprenant_id)].nom}"
+                if str(r.apprenant_id) in apprenants else "Apprenant"
+            ),
             "score_total": r.score_total,
             "score_p1": r.score_p1,
             "score_p2": r.score_p2,
             "statut": r.statut,
             "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
             "corrections": r.corrections,
+            "reponses": r.reponses,
             "nb_incidents": r.nb_incidents,
             "incidents_log": r.incidents_log if is_owner else None,
         }

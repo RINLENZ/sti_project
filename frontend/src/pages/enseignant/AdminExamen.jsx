@@ -331,14 +331,156 @@ function EpreuveCard({ ep, onStatutChange, onView, C }) {
 
 // ── Page principale ──────────────────────────────────────────────────────────
 
+// ── Composant détail d'une copie (questions + réponses + correction) ───────────
+
+function CopieDetailView({ contenu, reponses, corrections, manualScores, onScoreChange, onSave, saving, C }) {
+  if (!contenu) return <p style={{ fontSize: 12, color: C.textSec }}>Contenu de l'épreuve non disponible.</p>
+
+  const methodeLabel = m => {
+    if (!m) return ''
+    if (m === 'exact') return 'Exact'
+    if (m.startsWith('llm_')) return `IA (${m.slice(4)})`
+    if (m.startsWith('semantique_listage')) return 'TF-IDF (liste)'
+    if (m.startsWith('semantique')) return 'TF-IDF'
+    if (m === 'manuelle_enseignant') return 'Enseignant'
+    if (m === 'manuelle') return 'À corriger'
+    return m
+  }
+
+  const partiesDef = [
+    { key: 'partie1', label: 'PARTIE I — RESSOURCES', color: C.brown },
+    { key: 'partie2', label: 'PARTIE II — COMPÉTENCES', color: C.emerald },
+  ]
+
+  const pendingIds = Object.entries(corrections || {})
+    .filter(([, c]) => c.score === null || c.score === undefined || c.methode === 'manuelle')
+    .map(([qid]) => qid)
+
+  const manualCount = Object.keys(manualScores || {}).length
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {partiesDef.map(({ key, label, color }) => {
+        const exercices = (contenu[key]?.exercices) || []
+        if (!exercices.length) return null
+        return (
+          <div key={key}>
+            <p style={{ fontSize: 10, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 8px', paddingLeft: 2 }}>{label}</p>
+            {exercices.map(ex => (
+              <div key={ex.id} style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: C.text, margin: '0 0 6px' }}>
+                  {ex.numero}{ex.titre ? ` — ${ex.titre}` : ''}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(ex.questions || []).map((q, qi) => {
+                    const corr     = (corrections || {})[q.id] || {}
+                    const reponse  = (reponses || {})[q.id]
+                    const needsManual = corr.score === null || corr.score === undefined || corr.methode === 'manuelle'
+                    const scoreColor  = corr.correct ? C.emerald : '#EF4444'
+
+                    return (
+                      <div key={q.id} style={{
+                        background: C.bg, borderRadius: 8, padding: '10px 12px',
+                        border: `1.5px solid ${needsManual ? '#F97316' : C.brownPale}`,
+                      }}>
+                        {/* Énoncé */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: reponse ? 6 : 0 }}>
+                          <span style={{ fontSize: 12, color: C.text, flex: 1, lineHeight: 1.5 }}>
+                            <strong style={{ color: C.textSec }}>Q{qi + 1}.</strong> {q.enonce}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color, flexShrink: 0 }}>/{q.points} pt</span>
+                        </div>
+
+                        {/* Réponse apprenant */}
+                        {reponse != null && reponse !== '' ? (
+                          <p style={{ margin: '0 0 6px', fontSize: 12, color: '#1E3A5F', background: '#EFF6FF', borderRadius: 6, padding: '6px 8px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                            <strong style={{ fontSize: 10, color: '#3B82F6', display: 'block', marginBottom: 2 }}>Réponse :</strong>
+                            {String(reponse)}
+                          </p>
+                        ) : (
+                          <p style={{ margin: '0 0 6px', fontSize: 11, color: C.textSec, fontStyle: 'italic' }}>Aucune réponse</p>
+                        )}
+
+                        {/* Correction actuelle ou champ manuel */}
+                        {needsManual ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 11, color: '#F97316', fontWeight: 700 }}>Score :</span>
+                            <input
+                              type="number" min={0} max={q.points} step={0.25}
+                              value={manualScores[q.id] ?? ''}
+                              onChange={e => onScoreChange(q.id, e.target.value, q.points)}
+                              placeholder={`0–${q.points}`}
+                              style={{ width: 72, padding: '4px 8px', border: '1.5px solid #F97316', borderRadius: 6, fontSize: 13, fontWeight: 800, textAlign: 'center', background: '#FFF7ED', color: '#C2410C', outline: 'none' }}
+                            />
+                            <span style={{ fontSize: 11, color: C.textSec }}>/ {q.points}</span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: corr.score !== null ? scoreColor : C.textSec }}>
+                              {corr.score !== null && corr.score !== undefined ? `${corr.score}/${q.points}` : '—'}
+                            </span>
+                            <span style={{ fontSize: 10, color: C.textSec, background: C.brownPale, padding: '1px 7px', borderRadius: 20 }}>
+                              {methodeLabel(corr.methode)}
+                            </span>
+                            {corr.explication && (
+                              <span style={{ fontSize: 10, color: C.textSec, fontStyle: 'italic', flex: 1 }}>
+                                {corr.explication.slice(0, 80)}{corr.explication.length > 80 ? '…' : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+
+      {/* Bouton de sauvegarde des corrections manuelles */}
+      {pendingIds.length > 0 && (
+        <button
+          onClick={onSave}
+          disabled={saving || manualCount === 0}
+          style={{
+            padding: '10px 16px', border: 'none', borderRadius: 10, cursor: manualCount > 0 ? 'pointer' : 'default',
+            background: manualCount > 0 ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` : C.brownPale,
+            color: manualCount > 0 ? 'white' : C.textSec,
+            fontSize: 13, fontWeight: 800, transition: 'all .15s',
+          }}
+        >
+          {saving ? 'Enregistrement…' : `Enregistrer les corrections (${manualCount}/${pendingIds.length} question${pendingIds.length > 1 ? 's' : ''})`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+
 // ── Modal épreuve avec onglets Aperçu / Copies ────────────────────────────────
 
 function EpreuveModal({ ep, onClose, C }) {
-  const [tab, setTab]         = useState('apercu')
-  const [copies, setCopies]   = useState(null)
+  const [tab, setTab]           = useState('apercu')
+  const [detail, setDetail]     = useState(null)
+  const [copies, setCopies]     = useState(null)
+  const [loadingD, setLoadingD] = useState(true)
   const [loadingC, setLoadingC] = useState(false)
-  const [correcting, setCorrecting] = useState({})   // { reponse_id: bool }
+  const [correcting, setCorrecting] = useState({})    // { reponse_id: bool }
+  const [expanded, setExpanded]     = useState(null)  // copie.id ouvert
+  const [manualScores, setManualScores] = useState({})  // { copie_id: { qid: score } }
+  const [saving, setSaving]           = useState({})  // { copie_id: bool }
 
+  // Charge le détail complet (contenu) dès l'ouverture
+  useEffect(() => {
+    api.get(`/api/examens/${ep.id}`)
+      .then(({ data }) => setDetail(data))
+      .catch(() => setDetail(null))
+      .finally(() => setLoadingD(false))
+  }, [ep.id])
+
+  // Charge les copies quand on ouvre l'onglet
   useEffect(() => {
     if (tab !== 'copies') return
     if (copies !== null) return
@@ -349,6 +491,10 @@ function EpreuveModal({ ep, onClose, C }) {
       .finally(() => setLoadingC(false))
   }, [tab, ep.id, copies])
 
+  function patchCopie(reponseId, patch) {
+    setCopies(prev => prev.map(c => c.id === reponseId ? { ...c, ...patch } : c))
+  }
+
   async function exportCsv() {
     try {
       const { data } = await api.get(`/api/examens/${ep.id}/export`, { responseType: 'blob' })
@@ -356,12 +502,10 @@ function EpreuveModal({ ep, onClose, C }) {
       const a = document.createElement('a')
       a.href = url
       a.download = `${ep.titre.replace(/\s+/g, '_')}_resultats.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
     } catch {
-      toast.error('Échec de l\'export CSV')
+      toast.error("Échec de l'export CSV")
     }
   }
 
@@ -369,16 +513,59 @@ function EpreuveModal({ ep, onClose, C }) {
     setCorrecting(c => ({ ...c, [reponseId]: true }))
     try {
       const { data } = await api.post(`/api/examens/reponses/${reponseId}/auto-corriger`)
-      setCopies(prev => prev.map(c => c.id === reponseId
-        ? { ...c, score_total: data.score_total, score_p1: data.score_p1, score_p2: data.score_p2, statut: data.statut }
-        : c
-      ))
-      toast.success(`Copie corrigée — ${data.score_total}/20`)
+      patchCopie(reponseId, {
+        score_total: data.score_total, score_p1: data.score_p1,
+        score_p2: data.score_p2, statut: data.statut, corrections: data.corrections,
+      })
+      toast.success(`Corrigé par IA — ${data.score_total}/20`)
     } catch {
       toast.error('Échec de la correction automatique')
     } finally {
       setCorrecting(c => ({ ...c, [reponseId]: false }))
     }
+  }
+
+  async function sauvegarderCorrections(copie) {
+    const mScores = manualScores[copie.id] || {}
+    if (!Object.keys(mScores).length) return
+    setSaving(s => ({ ...s, [copie.id]: true }))
+    try {
+      // Construit le payload { qid: { score, max } }
+      const correctionsPayload = {}
+      const contenu = detail?.contenu || {}
+      for (const partie of ['partie1', 'partie2']) {
+        for (const ex of contenu[partie]?.exercices || []) {
+          for (const q of ex.questions || []) {
+            if (mScores[q.id] !== undefined && mScores[q.id] !== '') {
+              correctionsPayload[q.id] = {
+                score: parseFloat(mScores[q.id]),
+                max: q.points,
+              }
+            }
+          }
+        }
+      }
+      const { data } = await api.patch(`/api/examens/reponses/${copie.id}/corriger-manuel`, {
+        corrections: correctionsPayload,
+      })
+      patchCopie(copie.id, {
+        score_total: data.score_total, score_p1: data.score_p1,
+        score_p2: data.score_p2, statut: data.statut, corrections: data.corrections,
+      })
+      setManualScores(prev => { const n = { ...prev }; delete n[copie.id]; return n })
+      toast.success(`Corrections enregistrées — ${data.score_total}/20`)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Erreur lors de la sauvegarde')
+    } finally {
+      setSaving(s => ({ ...s, [copie.id]: false }))
+    }
+  }
+
+  function setManualScore(copieId, qid, value, maxPts) {
+    setManualScores(prev => ({
+      ...prev,
+      [copieId]: { ...(prev[copieId] || {}), [qid]: value },
+    }))
   }
 
   const TABS = [
@@ -390,6 +577,10 @@ function EpreuveModal({ ep, onClose, C }) {
     ? (copies.reduce((s, c) => s + (c.score_total ?? 0), 0) / copies.length).toFixed(1)
     : null
 
+  const nbPending = copies?.filter(c => c.statut === 'soumis' ||
+    Object.values(c.corrections || {}).some(corr => corr.score === null || corr.methode === 'manuelle')
+  ).length ?? 0
+
   return (
     <div
       onClick={onClose}
@@ -397,7 +588,7 @@ function EpreuveModal({ ep, onClose, C }) {
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: C.surface, borderRadius: 20, maxWidth: 760, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column' }}
+        style={{ background: C.surface, borderRadius: 20, maxWidth: 800, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column' }}
       >
         {/* Header */}
         <div style={{ padding: '22px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -429,13 +620,15 @@ function EpreuveModal({ ep, onClose, C }) {
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px 24px 24px', overflowY: 'auto', maxHeight: '65vh' }}>
+        <div style={{ padding: '20px 24px 24px', overflowY: 'auto', maxHeight: '70vh' }}>
 
           {/* ── Onglet Aperçu ── */}
           {tab === 'apercu' && (
-            ep.contenu
-              ? <EpreuvePreview contenu={ep.contenu} C={C}/>
-              : <p style={{ color: C.textSec, fontSize: 13 }}>Contenu non disponible.</p>
+            loadingD
+              ? <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><Spinner/></div>
+              : detail?.contenu
+                ? <EpreuvePreview contenu={detail.contenu} C={C}/>
+                : <p style={{ color: C.textSec, fontSize: 13 }}>Contenu non disponible.</p>
           )}
 
           {/* ── Onglet Copies ── */}
@@ -455,7 +648,7 @@ function EpreuveModal({ ep, onClose, C }) {
                   {[
                     { label: 'Copies soumises', value: copies.length, color: C.brown, icon: Users },
                     { label: 'Moyenne',          value: moy ? `${moy}/20` : '—', color: C.emerald, icon: BarChart2 },
-                    { label: 'À corriger',        value: copies.filter(c => c.statut === 'soumis').length, color: C.orange, icon: Zap },
+                    { label: 'À corriger',        value: nbPending, color: C.orange, icon: Zap },
                   ].map(({ label, value, color, icon: Icon }) => (
                     <div key={label} style={{ background: C.bg, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.brownPale}`, textAlign: 'center' }}>
                       <Icon size={16} color={color} style={{ marginBottom: 4 }}/>
@@ -475,28 +668,40 @@ function EpreuveModal({ ep, onClose, C }) {
                 {/* Liste copies */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {copies.map((copie, i) => {
-                    const score = copie.score_total
+                    const score      = copie.score_total
                     const scoreColor = score === null ? C.textSec : score >= 14 ? C.emerald : score >= 10 ? C.orange : '#EF4444'
-                    const hasPending = copie.corrections && Object.values(copie.corrections).some(c => c.auto === false || c.methode === 'manuelle')
+                    const isOpen     = expanded === copie.id
+                    const hasSemanticPending = Object.values(copie.corrections || {}).some(c =>
+                      c.score === null || c.score === undefined || c.methode === 'manuelle'
+                    )
+                    const hasAutoCorrectable = Object.values(copie.corrections || {}).some(c =>
+                      c.auto === false && c.methode !== 'manuelle_enseignant'
+                    )
+
                     return (
-                      <div key={copie.id} style={{ background: C.surface, borderRadius: 12, padding: '14px 16px', border: `1.5px solid ${C.brownPale}` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                          <div>
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text }}>
-                              Apprenant #{i + 1}
+                      <div key={copie.id} style={{ background: C.surface, borderRadius: 12, border: `1.5px solid ${hasSemanticPending ? '#FED7AA' : C.brownPale}`, overflow: 'hidden' }}>
+
+                        {/* ── Ligne récapitulatif ── */}
+                        <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.text }}>
+                              {copie.apprenant_nom || `Apprenant #${i + 1}`}
                             </p>
                             <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textSec }}>
-                              Soumis le {copie.submitted_at ? new Date(copie.submitted_at).toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'}
+                              {copie.submitted_at ? new Date(copie.submitted_at).toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'}
+                              {copie.statut === 'corrige' && <span style={{ marginLeft: 6, color: C.emerald, fontWeight: 700 }}>✓ Corrigé</span>}
                             </p>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             {/* Score */}
-                            <div style={{ textAlign: 'center' }}>
+                            <div style={{ textAlign: 'center', minWidth: 40 }}>
                               <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>
                                 {score !== null ? score.toFixed(1) : '—'}
                               </p>
                               <p style={{ margin: 0, fontSize: 9, color: C.textSec, fontWeight: 700 }}>/20</p>
                             </div>
+
                             {/* Incidents */}
                             {copie.nb_incidents > 0 && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#FEF3C7', padding: '4px 8px', borderRadius: 8, border: '1px solid #D97706' }}>
@@ -504,37 +709,68 @@ function EpreuveModal({ ep, onClose, C }) {
                                 <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E' }}>{copie.nb_incidents}</span>
                               </div>
                             )}
-                            {/* Bouton re-correction */}
-                            {hasPending && (
+
+                            {/* Auto-corriger IA */}
+                            {hasAutoCorrectable && (
                               <button
                                 onClick={() => autocorriger(copie.id)}
                                 disabled={correcting[copie.id]}
-                                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+                                title="Re-corriger avec l'IA (Groq)"
+                                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: `${C.brown}18`, color: C.brown, border: `1px solid ${C.brown}40`, borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
                               >
                                 {correcting[copie.id] ? <Spinner/> : <Zap size={12}/>}
-                                {correcting[copie.id] ? 'Correction…' : 'Auto-corriger'}
+                                {correcting[copie.id] ? 'IA…' : 'IA'}
                               </button>
                             )}
+
+                            {/* Bouton développer */}
+                            <button
+                              onClick={() => setExpanded(isOpen ? null : copie.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: isOpen ? C.brownPale : C.bg, border: `1px solid ${C.brownPale}`, borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: C.textSec }}
+                            >
+                              {isOpen ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+                              {hasSemanticPending ? 'Corriger' : 'Voir'}
+                            </button>
                           </div>
                         </div>
 
-                        {/* Barre P1 / P2 */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                        {/* Barres P1 / P2 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '0 16px 12px' }}>
                           {[
-                            { label: 'Partie I', score: copie.score_p1, color: C.brown },
-                            { label: 'Partie II', score: copie.score_p2, color: C.emerald },
-                          ].map(({ label, score: s, color }) => (
+                            { label: 'Partie I', s: copie.score_p1, color: C.brown },
+                            { label: 'Partie II', s: copie.score_p2, color: C.emerald },
+                          ].map(({ label, s, color }) => (
                             <div key={label}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                                 <span style={{ fontSize: 10, color: C.textSec, fontWeight: 700 }}>{label}</span>
-                                <span style={{ fontSize: 10, fontWeight: 800, color }}>{s !== null ? `${s}/10` : '—'}</span>
+                                <span style={{ fontSize: 10, fontWeight: 800, color }}>{s !== null && s !== undefined ? `${s}/10` : '—'}</span>
                               </div>
                               <div style={{ height: 4, background: C.brownPale, borderRadius: 4, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${s !== null ? Math.min(100, s / 10 * 100) : 0}%`, background: color, borderRadius: 4 }}/>
+                                <div style={{ height: '100%', width: `${s !== null && s !== undefined ? Math.min(100, s / 10 * 100) : 0}%`, background: color, borderRadius: 4 }}/>
                               </div>
                             </div>
                           ))}
                         </div>
+
+                        {/* ── Détail questions / correction ── */}
+                        {isOpen && (
+                          <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '14px 16px', background: C.bg }}>
+                            {loadingD ? (
+                              <div style={{ textAlign: 'center' }}><Spinner/></div>
+                            ) : (
+                              <CopieDetailView
+                                contenu={detail?.contenu}
+                                reponses={copie.reponses}
+                                corrections={copie.corrections}
+                                manualScores={manualScores[copie.id] || {}}
+                                onScoreChange={(qid, val, maxPts) => setManualScore(copie.id, qid, val, maxPts)}
+                                onSave={() => sauvegarderCorrections(copie)}
+                                saving={saving[copie.id] || false}
+                                C={C}
+                              />
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

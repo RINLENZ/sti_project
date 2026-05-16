@@ -13,20 +13,25 @@ import json
 import os
 import urllib.request
 import urllib.error
-from typing import Optional
 
 
 # ── Groq ────────────────────────────────────────────────────────────────────
 
-def _call_groq(prompt: str, max_tokens: int = 8000) -> str:
+def _call_groq(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY non configurée")
 
     model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
     payload = json.dumps({
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": 0.7,
         "max_tokens": max_tokens,
     }).encode()
@@ -37,6 +42,7 @@ def _call_groq(prompt: str, max_tokens: int = 8000) -> str:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            "User-Agent": "python-httpx/0.27.0",
         },
         method="POST",
     )
@@ -46,18 +52,23 @@ def _call_groq(prompt: str, max_tokens: int = 8000) -> str:
             return data["choices"][0]["message"]["content"]
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
-        raise RuntimeError(f"Groq HTTP {e.code}: {body[:200]}")
+        raise RuntimeError(f"Groq HTTP {e.code}: {body[:300]}")
 
 
 # ── Ollama ───────────────────────────────────────────────────────────────────
 
-def _call_ollama(prompt: str, max_tokens: int = 8000) -> str:
+def _call_ollama(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
     host = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434").rstrip("/")
     model = os.environ.get("OLLAMA_MODEL", "mistral")
 
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
     payload = json.dumps({
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": False,
         "options": {"temperature": 0.7, "num_predict": max_tokens},
     }).encode()
@@ -80,7 +91,7 @@ def _call_ollama(prompt: str, max_tokens: int = 8000) -> str:
 
 # ── Claude / Anthropic ───────────────────────────────────────────────────────
 
-def _call_claude(prompt: str, max_tokens: int = 8000) -> str:
+def _call_claude(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
     import anthropic as _anthropic
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -88,17 +99,37 @@ def _call_claude(prompt: str, max_tokens: int = 8000) -> str:
         raise RuntimeError("ANTHROPIC_API_KEY non configurée")
 
     client = _anthropic.Anthropic(api_key=api_key)
-    msg = client.messages.create(
+    kwargs = dict(
         model="claude-haiku-4-5-20251001",
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
+    if system:
+        kwargs["system"] = system
+
+    msg = client.messages.create(**kwargs)
     return msg.content[0].text
+
+
+# ── Détection Ollama ─────────────────────────────────────────────────────────
+
+def _ollama_reachable() -> bool:
+    host = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434").rstrip("/")
+    try:
+        req = urllib.request.Request(f"{host}/api/tags", method="GET")
+        with urllib.request.urlopen(req, timeout=2):
+            return True
+    except Exception:
+        return False
 
 
 # ── Point d'entrée public ────────────────────────────────────────────────────
 
-def call_llm(prompt: str, max_tokens: int = 8000) -> tuple[str, str]:
+def call_llm(
+    prompt: str,
+    max_tokens: int = 8000,
+    system: str = "",
+) -> tuple[str, str]:
     """
     Appelle le LLM disponible dans l'ordre de priorité.
     Retourne (texte_réponse, nom_du_backend_utilisé).
@@ -108,24 +139,24 @@ def call_llm(prompt: str, max_tokens: int = 8000) -> tuple[str, str]:
 
     errors: list[str] = []
 
-    # 1. Groq (priorité — gratuit, 70B, rapide)
+    # 1. Groq (priorité — gratuit, Llama 3.3 70B, rapide)
     if os.environ.get("GROQ_API_KEY"):
         try:
-            return _call_groq(prompt, max_tokens), "groq"
+            return _call_groq(prompt, max_tokens, system), "groq"
         except Exception as e:
             errors.append(f"Groq: {e}")
 
-    # 2. Ollama (local, si installé)
+    # 2. Ollama (local, si installé et joignable)
     if os.environ.get("OLLAMA_HOST") or _ollama_reachable():
         try:
-            return _call_ollama(prompt, max_tokens), "ollama"
+            return _call_ollama(prompt, max_tokens, system), "ollama"
         except Exception as e:
             errors.append(f"Ollama: {e}")
 
-    # 3. Claude (Anthropic — fallback payant)
+    # 3. Claude — fallback
     if os.environ.get("ANTHROPIC_API_KEY"):
         try:
-            return _call_claude(prompt, max_tokens), "claude"
+            return _call_claude(prompt, max_tokens, system), "claude"
         except Exception as e:
             errors.append(f"Claude: {e}")
 
@@ -139,14 +170,3 @@ def call_llm(prompt: str, max_tokens: int = 8000) -> tuple[str, str]:
             f"Erreurs : {' | '.join(errors)}"
         ),
     )
-
-
-def _ollama_reachable() -> bool:
-    """Vérifie rapidement si Ollama écoute sur le port par défaut."""
-    host = os.environ.get("OLLAMA_HOST", "http://host.docker.internal:11434").rstrip("/")
-    try:
-        req = urllib.request.Request(f"{host}/api/tags", method="GET")
-        with urllib.request.urlopen(req, timeout=2):
-            return True
-    except Exception:
-        return False
