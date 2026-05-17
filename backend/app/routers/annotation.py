@@ -49,8 +49,20 @@ def _sb():
 def _count(etat: str) -> int:
     if _use_supabase():
         try:
-            files = _sb().storage.from_(BUCKET).list(f"frames/{etat}")
-            return len([f for f in (files or []) if (f.get("name") or "").endswith(".jpg")])
+            sb = _sb()
+            total, offset, limit = 0, 0, 1000
+            while True:
+                files = sb.storage.from_(BUCKET).list(
+                    f"frames/{etat}", {"limit": limit, "offset": offset}
+                )
+                if not files:
+                    break
+                batch = [f for f in files if (f.get("name") or "").endswith(".jpg")]
+                total += len(batch)
+                if len(files) < limit:
+                    break
+                offset += limit
+            return total
         except Exception:
             return 0
     d = os.path.join(FRAMES_DIR, etat)
@@ -61,8 +73,20 @@ def _count(etat: str) -> int:
 def _count_audio(commande: str) -> int:
     if _use_supabase():
         try:
-            files = _sb().storage.from_(BUCKET).list(f"audio/{commande}")
-            return len([f for f in (files or []) if (f.get("name") or "").endswith(".wav")])
+            sb = _sb()
+            total, offset, limit = 0, 0, 1000
+            while True:
+                files = sb.storage.from_(BUCKET).list(
+                    f"audio/{commande}", {"limit": limit, "offset": offset}
+                )
+                if not files:
+                    break
+                batch = [f for f in files if (f.get("name") or "").endswith(".wav")]
+                total += len(batch)
+                if len(files) < limit:
+                    break
+                offset += limit
+            return total
         except Exception:
             return 0
     d = os.path.join(AUDIO_DIR, commande)

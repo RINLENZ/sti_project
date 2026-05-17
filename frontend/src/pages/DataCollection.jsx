@@ -67,7 +67,7 @@ const ETATS = [
   },
 ]
 
-const TARGET      = 1000   // minimum pour entraînement
+const TARGET      = 2000   // doit correspondre au backend (annotation.py TARGET)
 const TARGET_SIZE = 112    // résolution standard FER (vs 96 avant)
 const WASM_CDN    = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
 const MODEL_URL   = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite'
@@ -319,9 +319,10 @@ export default function DataCollection() {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
             {ETATS.map(etat => {
-              const count = stats?.par_etat?.[etat.id] || 0
-              const pct   = Math.min(100, Math.round(count / TARGET * 100))
-              const done  = count >= TARGET
+              const count  = stats?.par_etat?.[etat.id] || 0
+              const target = stats?.target_par_etat || TARGET
+              const pct    = Math.min(100, Math.round(count / target * 100))
+              const done   = count >= target
               return (
                 <button
                   key={etat.id}
@@ -340,7 +341,7 @@ export default function DataCollection() {
                     <div style={{ height: '100%', width: `${pct}%`, background: done ? '#10B981' : etat.color, borderRadius: 4, transition: 'width .5s' }}/>
                   </div>
                   <div style={{ fontSize: 10, color: '#6B7280', marginTop: 3, display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{count}/{TARGET} frames</span>
+                    <span>{count}/{target} frames</span>
                     {done && <span style={{ color: '#10B981', fontWeight: 800 }}>✓ Complet</span>}
                   </div>
                 </button>
@@ -524,13 +525,13 @@ export default function DataCollection() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: '#6B3A2A' }}>Progression globale du dataset</h3>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#6B7280' }}>
-                {stats.total} / {TARGET * ETATS.length} frames totales
+                {stats.total} / {(stats.target_par_etat || TARGET) * ETATS.length} frames totales
               </span>
             </div>
             <div style={{ height: 8, background: '#E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 8,
-                width: `${Math.round(stats.total / (TARGET * ETATS.length) * 100)}%`,
+                width: `${Math.round(stats.total / ((stats.target_par_etat || TARGET) * ETATS.length) * 100)}%`,
                 background: 'linear-gradient(90deg, #6B3A2A, #10B981)',
                 transition: 'width .5s',
               }}/>
