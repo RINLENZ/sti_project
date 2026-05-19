@@ -36,6 +36,7 @@ const DataCollection   = lazy(() => import('./pages/DataCollection'))
 const AudioCollection  = lazy(() => import('./pages/AudioCollection'))
 const Contribuer       = lazy(() => import('./pages/Contribuer'))
 const DatasetPage      = lazy(() => import('./pages/DatasetPage'))
+const TrainingPage     = lazy(() => import('./pages/TrainingPage'))
 const Chat             = lazy(() => import('./pages/Chat'))
 
 const AppLayout = lazy(() => import('./components/layout/AppLayout'))
@@ -174,6 +175,9 @@ export default function App() {
         }/>
         <Route path="/admin/dataset" element={
           <PrivateRoute role="super_admin"><AppLayout><DatasetPage/></AppLayout></PrivateRoute>
+        }/>
+        <Route path="/admin/training" element={
+          <PrivateRoute role="super_admin"><AppLayout><TrainingPage/></AppLayout></PrivateRoute>
         }/>
 
         {/* ── Autres ── */}

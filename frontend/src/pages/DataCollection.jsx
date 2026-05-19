@@ -6,7 +6,7 @@
  * MediaPipe BlazeFace détecte et croppe le visage à la capture.
  * Fallback centre si aucun visage détecté.
  */
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import api from '../services/api'
@@ -83,6 +83,10 @@ export default function DataCollection() {
   const streamRef       = useRef(null)
   const faceDetectorRef = useRef(null)
   const autoRef         = useRef(null)
+
+  // ID unique généré à l'ouverture de la page — identifie cette session de contribution
+  // même si plusieurs personnes utilisent le même compte
+  const contribId = useMemo(() => crypto.randomUUID(), [])
 
   const [stats,          setStats]          = useState(null)
   const [cameraActive,   setCameraActive]   = useState(false)
@@ -227,6 +231,7 @@ export default function DataCollection() {
       const { data } = await api.post('/api/annotation/frame', {
         image_base64: b64,
         etat:         selectedEtat,
+        session_id:   contribId,
       })
       return data
     } catch (err) {

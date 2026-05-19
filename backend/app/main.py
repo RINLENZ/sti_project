@@ -25,6 +25,7 @@ from .routers import examen
 from .routers import notifications
 from .routers import ws as ws_router
 from .routers import chat as chat_router
+from .routers import training as training_router
 
 app = FastAPI(
     title="STI Adaptatif — API",
@@ -150,6 +151,7 @@ app.include_router(examen.router)
 app.include_router(notifications.router)
 app.include_router(ws_router.router)
 app.include_router(chat_router.router)
+app.include_router(training_router.router)
 
 @app.get("/health")
 def health_check():

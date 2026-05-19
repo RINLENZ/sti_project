@@ -131,11 +131,13 @@ def soumettre_frame(
     except Exception:
         raise HTTPException(400, "Image base64 invalide")
 
-    frame_id = str(uuid.uuid4())
+    frame_id    = str(uuid.uuid4())
+    contrib_id  = body.session_id or str(current_user.id)
+    filename    = f"{contrib_id}_{frame_id}.jpg"
 
     if _use_supabase():
         try:
-            path = f"frames/{body.etat}/{current_user.id}_{frame_id}.jpg"
+            path = f"frames/{body.etat}/{filename}"
             _sb().storage.from_(BUCKET).upload(
                 path, img_bytes, {"content-type": "image/jpeg", "upsert": "false"}
             )
@@ -144,7 +146,7 @@ def soumettre_frame(
     else:
         etat_dir = os.path.join(FRAMES_DIR, body.etat)
         os.makedirs(etat_dir, exist_ok=True)
-        with open(os.path.join(etat_dir, f"{current_user.id}_{frame_id}.jpg"), "wb") as f:
+        with open(os.path.join(etat_dir, filename), "wb") as f:
             f.write(img_bytes)
 
     total_etat = existing + 1
@@ -225,11 +227,13 @@ def soumettre_audio(
     except Exception:
         raise HTTPException(400, "Audio base64 invalide")
 
-    sample_id = str(uuid.uuid4())
+    sample_id  = str(uuid.uuid4())
+    contrib_id = str(current_user.id)
+    filename   = f"{contrib_id}_{sample_id}.wav"
 
     if _use_supabase():
         try:
-            path = f"audio/{body.commande}/{current_user.id}_{sample_id}.wav"
+            path = f"audio/{body.commande}/{filename}"
             _sb().storage.from_(BUCKET).upload(
                 path, audio_bytes, {"content-type": "audio/wav", "upsert": "false"}
             )
@@ -238,7 +242,7 @@ def soumettre_audio(
     else:
         cmd_dir = os.path.join(AUDIO_DIR, body.commande)
         os.makedirs(cmd_dir, exist_ok=True)
-        with open(os.path.join(cmd_dir, f"{current_user.id}_{sample_id}.wav"), "wb") as f:
+        with open(os.path.join(cmd_dir, filename), "wb") as f:
             f.write(audio_bytes)
 
     total = existing + 1
