@@ -4,7 +4,7 @@
  * Désactivé tant que MODELS_READY = false.
  */
 import { useRef } from 'react'
-import { MODELS_READY } from '../config/models'
+import { EMOTION_MODEL_READY } from '../config/models'
 
 const IMG_SIZE = 224
 const LABELS   = ['engagement_eleve','engagement_faible','confusion','frustration','ennui','neutre']
@@ -42,7 +42,7 @@ export function useEmotionOnnx() {
   }
 
   async function predict(videoElement) {
-    if (!MODELS_READY) return null
+    if (!EMOTION_MODEL_READY) return null
     if (!videoElement?.videoWidth) return null
     const session = await getSession()
     if (!session) return null
@@ -78,6 +78,7 @@ export function useEmotionOnnx() {
 
       let maxIdx = 0
       probs.forEach((p, i) => { if (p > probs[maxIdx]) maxIdx = i })
+      console.log('[ONNX probs]', Object.fromEntries(LABELS.map((l, i) => [l, probs[i].toFixed(3)])))
 
       return {
         emotion:    LABELS[maxIdx],

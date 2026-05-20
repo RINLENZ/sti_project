@@ -16,7 +16,7 @@ import ContentRenderer from '../../components/ContentRenderer'
 import RichText, { RichTextInline } from '../../components/RichText'
 import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
 import { useKWSModel } from '../../hooks/useKWSModel'
-import { MODELS_READY } from '../../config/models'
+import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = (s, C) =>
@@ -781,8 +781,8 @@ export default function Session() {
           const vid = videoRef.current
           if (!vid || !vid.videoWidth) return
 
-          // Priorité au modèle ONNX africain quand MODELS_READY
-          if (MODELS_READY) {
+          // Priorité au modèle ONNX africain EfficientNet-B0 V3
+          if (EMOTION_MODEL_READY) {
             const res = await predictEmotionOnnx(vid)
             if (res) {
               cnnEmotionRef.current = { emotion: res.emotion, probs: res.probs, dominant: res.emotion, source: 'onnx' }
