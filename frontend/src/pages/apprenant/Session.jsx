@@ -773,36 +773,37 @@ export default function Session() {
       setCameraActive(true)
       toast.success('Analyse visuelle activée ✓')
 
-      // Charger face-api.js en arrière-plan puis lancer la détection CNN toutes les 3s
-      const ok = await loadFaceApiModels()
-      if (ok) {
-        toast.success('Modèle CNN expression chargé ✓', { duration: 2000 })
-        faceApiIntervalRef.current = setInterval(async () => {
-          const vid = videoRef.current
-          if (!vid || !vid.videoWidth) return
+      // Démarre l'intervalle ONNX immédiatement (sans attendre face-api.js)
+      faceApiIntervalRef.current = setInterval(async () => {
+        const vid = videoRef.current
+        if (!vid || !vid.videoWidth) return
 
-          // Priorité au modèle ONNX africain EfficientNet-B0 V3
-          if (EMOTION_MODEL_READY) {
-            const res = await predictEmotionOnnx(vid)
-            if (res) {
-              cnnEmotionRef.current = { emotion: res.emotion, probs: res.probs, dominant: res.emotion, source: 'onnx' }
-              return
-            }
+        // Priorité au modèle ONNX africain EfficientNet-B0 V3
+        if (EMOTION_MODEL_READY) {
+          const res = await predictEmotionOnnx(vid)
+          if (res) {
+            cnnEmotionRef.current = { emotion: res.emotion, probs: res.probs, dominant: res.emotion, source: 'onnx' }
+            return
           }
+        }
 
-          // Fallback : face-api.js (modèle générique Ekman)
-          if (!faceApiReady) return
-          try {
-            const opts = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 })
-            const det  = await window.faceapi.detectSingleFace(vid, opts).withFaceExpressions()
-            if (det?.expressions) {
-              const probs = det.expressions
-              const dominant = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0]
-              cnnEmotionRef.current = { emotion: CNN_TO_ETAT[dominant] || 'neutre', probs, dominant, source: 'faceapi' }
-            }
-          } catch {}
-        }, 3000)
-      }
+        // Fallback : face-api.js (modèle générique Ekman)
+        if (!faceApiReady) return
+        try {
+          const opts = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 })
+          const det  = await window.faceapi.detectSingleFace(vid, opts).withFaceExpressions()
+          if (det?.expressions) {
+            const probs = det.expressions
+            const dominant = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0]
+            cnnEmotionRef.current = { emotion: CNN_TO_ETAT[dominant] || 'neutre', probs, dominant, source: 'faceapi' }
+          }
+        } catch {}
+      }, 3000)
+
+      // Charge face-api.js en arrière-plan (fallback optionnel)
+      loadFaceApiModels().then(ok => {
+        if (ok) toast.success('face-api chargé ✓', { duration: 2000 })
+      })
     } catch { toast.error('Caméra non disponible') }
   }
 
