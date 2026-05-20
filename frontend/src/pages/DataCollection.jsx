@@ -249,27 +249,31 @@ export default function DataCollection() {
     setCapturing(false)
   }
 
-  /* Auto-capture × 10 */
+  /* Auto-capture × 10 — setTimeout récursif pour éviter les captures parallèles */
   async function handleAutoCapture() {
     if (autoRunning) {
-      clearInterval(autoRef.current)
+      clearTimeout(autoRef.current)
       setAutoRunning(false)
       return
     }
     setAutoRunning(true)
     setAutoCount(0)
-    let count = 0
-    autoRef.current = setInterval(async () => {
+
+    async function captureNext(count) {
       if (count >= 10) {
-        clearInterval(autoRef.current)
         setAutoRunning(false)
         toast.success('10 frames capturées !')
         loadStats()
         return
       }
       const result = await captureFrame()
-      if (result) { count++; setAutoCount(count) }
-    }, 800)
+      const next   = result ? count + 1 : count
+      if (result) setAutoCount(next)
+      // attend que la capture soit terminée AVANT de planifier la suivante
+      autoRef.current = setTimeout(() => captureNext(next), 600)
+    }
+
+    captureNext(0)
   }
 
   useEffect(() => () => stopCamera(), [])

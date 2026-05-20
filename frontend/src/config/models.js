@@ -1,4 +1,3 @@
-// Passe à true quand accuracy > 70% (après plus de collecte de données)
-// Émotion actuelle : ~18%  → objectif ~10 000 images
-// KWS actuel       : ~16%  → objectif ~300 clips/classe
-export const MODELS_READY = false
+// Emotion V3 (EfficientNet-B0) : 91.95% val accuracy — activé
+// KWS : en cours d'entraînement
+export const MODELS_READY = true

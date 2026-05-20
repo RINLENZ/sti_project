@@ -16,7 +16,8 @@ backend/data/frames/
 backend/data/audio/
 
 # Modèles ML entraînés (trop lourds pour git)
-frontend/public/models/*.onnx
+# emotion_africain.onnx : commité (18.7 MB, EfficientNet-B0 V3 91.95%)
+frontend/public/models/kws_commands.onnx
 frontend/public/models/*.npz
 frontend/public/models/*.keras
 frontend/public/models/kws_savedmodel/
