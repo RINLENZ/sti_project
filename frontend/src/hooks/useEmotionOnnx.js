@@ -22,8 +22,11 @@ async function getSession() {
   _loading = true
   try {
     const ort = await import('onnxruntime-web')
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/'
-    _session = await ort.InferenceSession.create('/models/emotion_africain.onnx')
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/'
+    _session = await ort.InferenceSession.create(
+      '/models/emotion_africain.onnx',
+      { executionProviders: ['wasm'] }
+    )
     console.log('[EmotionONNX] Modèle EfficientNet-B0 chargé ✓')
     return _session
   } catch (e) {

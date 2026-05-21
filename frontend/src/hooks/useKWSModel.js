@@ -25,8 +25,11 @@ async function getKWSSession() {
   _loading = true
   try {
     const ort = await import('onnxruntime-web')
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/'
-    _session = await ort.InferenceSession.create('/models/kws_commands.onnx')
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/'
+    _session = await ort.InferenceSession.create(
+      '/models/kws_commands.onnx',
+      { executionProviders: ['wasm'] }
+    )
     return _session
   } catch (e) {
     console.warn('[KWS] Chargement échoué :', e.message)
