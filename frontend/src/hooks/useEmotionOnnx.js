@@ -70,8 +70,9 @@ export function useEmotionOnnx() {
       const canvas = getCanvas()
       canvas.width  = IMG_SIZE
       canvas.height = IMG_SIZE
-      canvas.getContext('2d').drawImage(videoElement, 0, 0, IMG_SIZE, IMG_SIZE)
-      const { data } = canvas.getContext('2d').getImageData(0, 0, IMG_SIZE, IMG_SIZE)
+      const ctx2d = canvas.getContext('2d', { willReadFrequently: true })
+      ctx2d.drawImage(videoElement, 0, 0, IMG_SIZE, IMG_SIZE)
+      const { data } = ctx2d.getImageData(0, 0, IMG_SIZE, IMG_SIZE)
 
       // (1, 3, 224, 224) channels-first + normalisation ImageNet
       const n     = IMG_SIZE * IMG_SIZE
