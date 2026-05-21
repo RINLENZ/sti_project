@@ -38,20 +38,9 @@ const ETATS = {
   decrochage:        { label: '⚠️ Décroché',    color: '#7F1D1D' },
 }
 
-/* ── face-api.js : chargement des modèles CNN ────────────────── */
-const FACEAPI_MODELS_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'
+/* ── face-api.js : désactivé — CDN 404, remplacé par ONNX EfficientNet-B0 ── */
 let faceApiReady = false
-async function loadFaceApiModels() {
-  if (faceApiReady || !window.faceapi) return false
-  try {
-    await Promise.all([
-      window.faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODELS_URL),
-      window.faceapi.nets.faceExpressionNet.loadFromUri(FACEAPI_MODELS_URL),
-    ])
-    faceApiReady = true
-    return true
-  } catch { return false }
-}
+async function loadFaceApiModels() { return false }
 
 /* ── Mapping expressions CNN → états affectifs académiques ─────
    Basé sur Ekman & Friesen (FACS) adapté au contexte scolaire :
