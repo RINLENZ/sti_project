@@ -88,9 +88,14 @@ export function useEmotionOnnx() {
       const out    = await session.run(feeds)
       const logits = Array.from(out[session.outputNames[0]].data)
 
+      // Correction de biais (domain shift : frustration sur-détectée, engagement_eleve sous-détecté)
+      // Ordre : engagement_eleve, engagement_faible, confusion, frustration, ennui, neutre
+      const BIAS = [0.8, 0.1, 0.1, -1.2, -0.3, 0.3]
+      const corrected = logits.map((v, i) => v + BIAS[i])
+
       // Softmax
-      const maxL  = Math.max(...logits)
-      const exps  = logits.map(x => Math.exp(x - maxL))
+      const maxL  = Math.max(...corrected)
+      const exps  = corrected.map(x => Math.exp(x - maxL))
       const sumE  = exps.reduce((a, b) => a + b, 0)
       const probs = exps.map(x => x / sumE)
 
