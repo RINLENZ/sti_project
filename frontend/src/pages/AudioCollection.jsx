@@ -7,7 +7,7 @@
  *
  * Accès : tout utilisateur connecté (contribution volontaire)
  */
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -173,6 +173,9 @@ export default function AudioCollection() {
   const { user } = useSelector(s => s.auth)
   const { xs, mobile } = useBreakpoint()
 
+  // ID unique par session de contribution — identifie le vrai locuteur
+  const contribId = useMemo(() => crypto.randomUUID(), [])
+
   const [stats,        setStats]        = useState(null)
   const [selectedCmd,  setSelectedCmd]  = useState(COMMANDES[0])
   const [phase,        setPhase]        = useState('idle')   // idle|countdown|recording|review
@@ -270,6 +273,7 @@ export default function AudioCollection() {
       const { data } = await api.post('/api/annotation/audio', {
         audio_base64: audioB64,
         commande:     selectedCmd.id,
+        session_id:   contribId,
       })
       toast.success(`✓ ${data.total}/${TARGET} pour "${selectedCmd.label}"`)
       if (audioUrl) URL.revokeObjectURL(audioUrl)

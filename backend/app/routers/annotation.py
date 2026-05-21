@@ -106,6 +106,7 @@ class AudioSubmit(BaseModel):
     audio_base64: str
     commande: str
     duree_ms: Optional[int] = None
+    session_id: Optional[str] = None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -228,7 +229,7 @@ def soumettre_audio(
         raise HTTPException(400, "Audio base64 invalide")
 
     sample_id  = str(uuid.uuid4())
-    contrib_id = str(current_user.id)
+    contrib_id = body.session_id or str(current_user.id)
     filename   = f"{contrib_id}_{sample_id}.wav"
 
     if _use_supabase():
