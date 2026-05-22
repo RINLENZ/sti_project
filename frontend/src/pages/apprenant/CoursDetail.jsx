@@ -79,14 +79,23 @@ function Sidebar({ ua, uaId, navigate }) {
           </div>
         ))}
 
-        <button onClick={() => navigate(`/session/${uaId}`)} style={{
+        <button onClick={() => navigate(`/tutoriel/${uaId}`)} style={{
           width: '100%', marginTop: 14, padding: '12px',
           background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
           color: 'white', border: 'none', borderRadius: 10,
           fontSize: 13, fontWeight: 800, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
         }}>
-          <Play size={14} fill="white"/> Commencer
+          🤖 Démarrer avec Alisha
+        </button>
+        <button onClick={() => navigate(`/session/${uaId}`)} style={{
+          width: '100%', marginTop: 8, padding: '10px',
+          background: 'none', color: C.brown,
+          border: `1.5px solid ${C.brownLight}50`, borderRadius: 10,
+          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+        }}>
+          <Play size={12} fill={C.brown}/> Exercices seuls
         </button>
       </div>
     </>

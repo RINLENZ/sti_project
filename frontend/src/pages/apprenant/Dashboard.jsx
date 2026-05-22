@@ -939,6 +939,75 @@ export default function Dashboard() {
 
       {Hero}
 
+      {/* ── Bandeau Alisha — tutoriel guidé ── */}
+      <div style={{
+        background:    C.surface,
+        borderRadius:   16,
+        border:        `1.5px solid ${C.brownPale}`,
+        padding:       xs ? '14px 16px' : '16px 20px',
+        marginBottom:  xs ? 12 : 16,
+        display:       'flex',
+        alignItems:    'center',
+        gap:            14,
+        animation:     'fadeUp .42s ease',
+        boxShadow:     `0 4px 16px ${C.brown}10`,
+      }}>
+        {/* Mini Alisha inline (SVG petit = pas de lazy load) */}
+        <div style={{
+          width:           44, height: 44, borderRadius: '50%',
+          background:      `linear-gradient(135deg, ${C.brownDark}, ${C.brownMid})`,
+          display:        'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize:        22, flexShrink: 0,
+        }}>🤖</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: 0 }}>
+            {recommandee ? `Alisha te propose : ${recommandee.titre?.slice(0, 40)}…` : 'Apprends avec Alisha'}
+          </p>
+          <p style={{ fontSize: 11, color: C.textSec, margin: '2px 0 0' }}>
+            Tutoriel interactif pas à pas · Sans enseignant requis
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <button
+            onClick={() => recommandee
+              ? navigate(`/tutoriel/${recommandee.ua_id}`)
+              : navigate('/dashboard')
+            }
+            disabled={!recommandee}
+            style={{
+              padding:      '8px 14px',
+              borderRadius:  10,
+              border:       'none',
+              background:   `linear-gradient(135deg, ${C.brown}, ${C.brownMid})`,
+              color:        'white',
+              fontWeight:    700,
+              fontSize:      12,
+              cursor:        recommandee ? 'pointer' : 'not-allowed',
+              opacity:       recommandee ? 1 : 0.4,
+              whiteSpace:   'nowrap',
+            }}
+          >
+            Commencer →
+          </button>
+          <button
+            onClick={() => navigate('/live/rejoindre')}
+            style={{
+              padding:      '6px 14px',
+              borderRadius:  10,
+              border:       `1.5px solid ${C.border}`,
+              background:    'none',
+              color:         C.textSec,
+              fontWeight:    600,
+              fontSize:      11,
+              cursor:        'pointer',
+              whiteSpace:   'nowrap',
+            }}
+          >
+            🔴 Rejoindre live
+          </button>
+        </div>
+      </div>
+
       {/* ── Activité recommandée — action immédiate ── */}
       {RecoCard}
 

@@ -2,6 +2,60 @@ import asyncio
 from typing import Dict, Set
 from fastapi import WebSocket
 
+# ── Gestionnaire de sessions live (par salle) ─────────────────────
+
+class LiveRoomManager:
+    """Gère les connexions WebSocket pour les cours en direct (room_id → {user_id: ws})."""
+
+    def __init__(self):
+        self._rooms: Dict[str, Dict[str, WebSocket]] = {}
+
+    async def join(self, room_id: str, user_id: str, ws: WebSocket):
+        await ws.accept()
+        self._rooms.setdefault(room_id, {})[user_id] = ws
+
+    def leave(self, room_id: str, user_id: str):
+        room = self._rooms.get(room_id, {})
+        room.pop(user_id, None)
+        if not room:
+            self._rooms.pop(room_id, None)
+
+    def count(self, room_id: str) -> int:
+        return len(self._rooms.get(room_id, {}))
+
+    def user_ids(self, room_id: str) -> list[str]:
+        return list(self._rooms.get(room_id, {}).keys())
+
+    def is_in_room(self, room_id: str, user_id: str) -> bool:
+        return user_id in self._rooms.get(room_id, {})
+
+    async def broadcast(self, room_id: str, data: dict, exclude: str | None = None):
+        room = dict(self._rooms.get(room_id, {}))
+        dead = []
+        for uid, ws in room.items():
+            if uid == exclude:
+                continue
+            try:
+                await ws.send_json(data)
+            except Exception:
+                dead.append(uid)
+        for uid in dead:
+            self.leave(room_id, uid)
+
+    async def send_to(self, room_id: str, user_id: str, data: dict):
+        ws = self._rooms.get(room_id, {}).get(user_id)
+        if ws:
+            try:
+                await ws.send_json(data)
+            except Exception:
+                self.leave(room_id, user_id)
+
+
+live_manager = LiveRoomManager()
+
+
+# ── Gestionnaire de notifications personnelles ────────────────────
+
 class ConnectionManager:
     def __init__(self):
         self._connections: Dict[str, Set[WebSocket]] = {}

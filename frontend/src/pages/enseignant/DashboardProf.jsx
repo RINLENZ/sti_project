@@ -97,6 +97,7 @@ function EpreuvesWidget({ navigate, C }) {
         {[
           { label: 'Cours',       path: '/admin',       icon: '📚' },
           { label: 'Corrections', path: '/corrections', icon: '✏️' },
+          { label: 'Live',        path: '/live/creer',  icon: '🔴' },
         ].map(item => (
           <button key={item.path} onClick={() => navigate(item.path)} style={{
             flex: 1, background: C.brownPale, border: 'none', borderRadius: 9,

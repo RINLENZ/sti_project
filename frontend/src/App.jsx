@@ -32,12 +32,19 @@ const AdminUtilisateurs  = lazy(() => import('./pages/enseignant/AdminUtilisateu
 const ProfilEnseignant = lazy(() => import('./pages/enseignant/ProfilEnseignant'))
 const AdminExamen      = lazy(() => import('./pages/enseignant/AdminExamen'))
 const Corrections      = lazy(() => import('./pages/enseignant/Corrections'))
+const CreerCoursLive   = lazy(() => import('./pages/enseignant/CreerCoursLive'))
+const CoursLivePilot   = lazy(() => import('./pages/enseignant/CoursLive'))
+
+const SalleAttente    = lazy(() => import('./pages/apprenant/SalleAttente'))
+const EleveLive       = lazy(() => import('./pages/apprenant/EleveLive'))
+const TutorielAlisha  = lazy(() => import('./pages/apprenant/TutorielAlisha'))
 const DataCollection   = lazy(() => import('./pages/DataCollection'))
 const AudioCollection  = lazy(() => import('./pages/AudioCollection'))
 const Contribuer       = lazy(() => import('./pages/Contribuer'))
 const DatasetPage      = lazy(() => import('./pages/DatasetPage'))
 const TrainingPage     = lazy(() => import('./pages/TrainingPage'))
 const Chat             = lazy(() => import('./pages/Chat'))
+const AlishaDemo       = lazy(() => import('./pages/dev/AlishaDemo'))
 
 const AppLayout = lazy(() => import('./components/layout/AppLayout'))
 
@@ -102,6 +109,7 @@ export default function App() {
       <Routes>
 
         {/* ── Pages publiques ── */}
+        <Route path="/dev/alisha" element={<AlishaDemo/>}/>
         <Route path="/"         element={token ? <Navigate to="/app" replace/> : <LandingPage/>}/>
         <Route path="/login"            element={token ? <Navigate to="/app" replace/> : <Login/>}/>
         <Route path="/register"         element={token ? <Navigate to="/app" replace/> : <Register/>}/>
@@ -161,6 +169,23 @@ export default function App() {
         }/>
         <Route path="/prof/examens" element={
           <EnseignantRoute><AppLayout><AdminExamen/></AppLayout></EnseignantRoute>
+        }/>
+        <Route path="/live/creer" element={
+          <EnseignantRoute><CreerCoursLive/></EnseignantRoute>
+        }/>
+        <Route path="/live/pilot/:sessionId" element={
+          <EnseignantRoute><CoursLivePilot/></EnseignantRoute>
+        }/>
+
+        {/* ── Routes live apprenant ── */}
+        <Route path="/live/rejoindre" element={
+          <ApprenantRoute><SalleAttente/></ApprenantRoute>
+        }/>
+        <Route path="/live/session/:sessionId" element={
+          <PrivateRoute><EleveLive/></PrivateRoute>
+        }/>
+        <Route path="/tutoriel/:uaId" element={
+          <ApprenantRoute><TutorielAlisha/></ApprenantRoute>
         }/>
 
         {/* ── Routes super admin ── */}

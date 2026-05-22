@@ -16,6 +16,7 @@ from .models import cours
 from .models import examen as _examen_models         # noqa: F401 — registers tables
 from .models import notification as _notif_models    # noqa: F401 — registers tables
 from .models import chat as _chat_models             # noqa: F401 — registers tables
+from .models import cours_live as _cours_live_models # noqa: F401 — registers tables
 from .routers import cours
 from .routers import bkt
 from .routers import admin
@@ -26,6 +27,7 @@ from .routers import notifications
 from .routers import ws as ws_router
 from .routers import chat as chat_router
 from .routers import training as training_router
+from .routers import cours_live as cours_live_router
 
 app = FastAPI(
     title="STI Adaptatif — API",
@@ -152,6 +154,7 @@ app.include_router(notifications.router)
 app.include_router(ws_router.router)
 app.include_router(chat_router.router)
 app.include_router(training_router.router)
+app.include_router(cours_live_router.router)
 
 @app.get("/health")
 def health_check():
