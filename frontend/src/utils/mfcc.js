@@ -102,6 +102,93 @@ function powerToDb(melSpec) {
   return out
 }
 
+export const MAX_FRAMES_V3 = 100  // longueur fixe pour le modèle V3
+
+/**
+ * Différentiel MFCC (équivalent librosa.feature.delta, width=9).
+ * mfccMatrix : Float32Array row-major [coeff * nFrames].
+ * Retourne Float32Array de même taille.
+ */
+function computeDelta(mfccMatrix, nCoeff, nFrames, width = 9) {
+  const W = Math.floor(width / 2)   // = 4
+  // dénominateur = 2 * sum(k^2) pour k=1..W
+  let denom = 0
+  for (let k = 1; k <= W; k++) denom += k * k
+  denom *= 2   // = 60
+
+  const delta = new Float32Array(nCoeff * nFrames)
+  for (let c = 0; c < nCoeff; c++) {
+    for (let t = 0; t < nFrames; t++) {
+      let s = 0
+      for (let k = 1; k <= W; k++) {
+        const tFwd = Math.min(t + k, nFrames - 1)
+        const tBwd = Math.max(t - k, 0)
+        s += k * (mfccMatrix[c * nFrames + tFwd] - mfccMatrix[c * nFrames + tBwd])
+      }
+      delta[c * nFrames + t] = s / denom
+    }
+  }
+  return delta
+}
+
+/**
+ * Extrait MFCC + Δ + Δ² (120 × MAX_FRAMES_V3) depuis un PCM mono 16kHz.
+ * Retourne Float32Array shape (120 * 100) row-major, sans normalisation globale
+ * (la normalisation est appliquée dans useKWSModel avec les stats du train set).
+ */
+export function computeMFCCFull(pcm) {
+  const target = SR
+  let audio = new Float32Array(target)
+  audio.set(pcm.slice(0, Math.min(pcm.length, target)))
+
+  // Normalise amplitude
+  let maxAmp = 0
+  for (let i = 0; i < audio.length; i++) if (Math.abs(audio[i]) > maxAmp) maxAmp = Math.abs(audio[i])
+  if (maxAmp > 0) for (let i = 0; i < audio.length; i++) audio[i] /= maxAmp
+
+  const nFramesRaw = Math.floor((audio.length - N_FFT) / HOP_LENGTH) + 1
+  const nFrames    = Math.min(MAX_FRAMES_V3, nFramesRaw)
+
+  const re = new Float32Array(N_FFT)
+  const im = new Float32Array(N_FFT)
+  const mfccMatrix = new Float32Array(N_MFCC * MAX_FRAMES_V3)
+
+  for (let t = 0; t < nFrames; t++) {
+    const start = t * HOP_LENGTH
+    re.fill(0); im.fill(0)
+    for (let i = 0; i < N_FFT && start + i < audio.length; i++)
+      re[i] = audio[start + i] * HANN[i]
+
+    fftInPlace(re, im)
+
+    const power = new Float32Array(N_FFT / 2 + 1)
+    for (let i = 0; i <= N_FFT / 2; i++)
+      power[i] = (re[i] ** 2 + im[i] ** 2) / N_FFT
+
+    const melSpec = new Float32Array(N_MELS)
+    for (let m = 0; m < N_MELS; m++) {
+      let s = 0
+      for (let k = 0; k <= N_FFT / 2; k++) s += MEL_FB[m][k] * power[k]
+      melSpec[m] = s
+    }
+
+    const melDb  = powerToDb(melSpec)
+    const coeffs = dctOrtho(melDb)
+    for (let k = 0; k < N_MFCC; k++) mfccMatrix[k * MAX_FRAMES_V3 + t] = coeffs[k]
+  }
+
+  // Δ et Δ²
+  const delta1 = computeDelta(mfccMatrix, N_MFCC, MAX_FRAMES_V3)
+  const delta2 = computeDelta(delta1,     N_MFCC, MAX_FRAMES_V3)
+
+  // Concatène : (120, 100) row-major
+  const full = new Float32Array(N_MFCC * 3 * MAX_FRAMES_V3)
+  full.set(mfccMatrix)
+  full.set(delta1, N_MFCC * MAX_FRAMES_V3)
+  full.set(delta2, N_MFCC * 2 * MAX_FRAMES_V3)
+  return full  // (120 * 100) = 12 000 éléments
+}
+
 /**
  * Calcule la matrice MFCC (40 × N_FRAMES × 1) depuis un Float32Array PCM mono 16kHz.
  * Renvoie un Float32Array shape (N_MFCC × N_FRAMES × 1) = 40 × 101 × 1 = 4040 éléments.
