@@ -10,40 +10,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const PAYS    = ['Cameroun', "Côte d'Ivoire", 'Sénégal', 'Mali', 'Burkina Faso', 'Congo', 'Gabon', 'Autre']
 
-/* ── Collection d'avatars ── */
-const AVATARS = [
-  { id: 'student_boy_1',  emoji: '👦🏿', label: 'Élève',        bg: '#DBEAFE', ring: '#3B82F6' },
-  { id: 'student_girl_1', emoji: '👧🏿', label: 'Élève',        bg: '#FCE7F3', ring: '#EC4899' },
-  { id: 'student_boy_2',  emoji: '👦🏾', label: 'Étudiant',     bg: '#D1FAE5', ring: '#10B981' },
-  { id: 'student_girl_2', emoji: '👧🏾', label: 'Étudiante',    bg: '#FEF3C7', ring: '#F59E0B' },
-  { id: 'scholar_1',      emoji: '🧑🏿‍🎓', label: 'Diplômé',     bg: '#EDE9FE', ring: '#8B5CF6' },
-  { id: 'scholar_2',      emoji: '👩🏾‍🎓', label: 'Diplômée',    bg: '#FFE4E6', ring: '#F43F5E' },
-  { id: 'scholar_3',      emoji: '👨🏿‍🎓', label: 'Diplômé',     bg: '#ECFDF5', ring: '#059669' },
-  { id: 'scholar_4',      emoji: '🧑🏾‍🎓', label: 'Diplômé',     bg: '#FFF7ED', ring: '#EA580C' },
-  { id: 'coder_1',        emoji: '🧑🏿‍💻', label: 'Codeur',      bg: '#F0FDF4', ring: '#22C55E' },
-  { id: 'coder_2',        emoji: '👩🏾‍💻', label: 'Codeuse',     bg: '#EFF6FF', ring: '#2563EB' },
-  { id: 'scientist_1',    emoji: '🧑🏿‍🔬', label: 'Scientifique',bg: '#F0FDFA', ring: '#14B8A6' },
-  { id: 'teacher_f',      emoji: '👩🏾‍🏫', label: 'Enseignante', bg: '#FDF4FF', ring: '#A855F7' },
-  { id: 'teacher_m',      emoji: '👨🏿‍🏫', label: 'Enseignant',  bg: '#FFFBEB', ring: '#D97706' },
-  { id: 'artist',         emoji: '🧑🏾‍🎨', label: 'Artiste',     bg: '#FFF1F2', ring: '#FB7185' },
-  { id: 'lion',           emoji: '🦁',    label: 'Lion',         bg: '#FEF9C3', ring: '#EAB308' },
-  { id: 'elephant',       emoji: '🐘',    label: 'Éléphant',     bg: '#E0E7FF', ring: '#6366F1' },
-  { id: 'leopard',        emoji: '🐆',    label: 'Léopard',      bg: '#FEF3C7', ring: '#F59E0B' },
-  { id: 'owl',            emoji: '🦉',    label: 'Hibou',        bg: '#FDF4FF', ring: '#C026D3' },
-  { id: 'eagle',          emoji: '🦅',    label: 'Aigle',        bg: '#ECFDF5', ring: '#10B981' },
-  { id: 'parrot',         emoji: '🦜',    label: 'Perroquet',    bg: '#D1FAE5', ring: '#34D399' },
-  { id: 'books',          emoji: '📚',    label: 'Livres',       bg: '#DBEAFE', ring: '#60A5FA' },
-  { id: 'microscope',     emoji: '🔬',    label: 'Sciences',     bg: '#D1FAE5', ring: '#34D399' },
-  { id: 'rocket',         emoji: '🚀',    label: 'Explorateur',  bg: '#EDE9FE', ring: '#7C3AED' },
-  { id: 'star',           emoji: '⭐',    label: 'Étoile',       bg: '#FEF9C3', ring: '#FBBF24' },
-  { id: 'trophy',         emoji: '🏆',    label: 'Champion',     bg: '#FFF7ED', ring: '#D4A853' },
-  { id: 'brain',          emoji: '🧠',    label: 'Génie',        bg: '#FCE7F3', ring: '#DB2777' },
-  { id: 'globe',          emoji: '🌍',    label: 'Afrique',      bg: '#ECFDF5', ring: '#0D9373' },
-  { id: 'drum',           emoji: '🥁',    label: 'Rythme',       bg: '#FFF1F2', ring: '#E11D48' },
-  { id: 'seedling',       emoji: '🌱',    label: 'Croissance',   bg: '#F0FDF4', ring: '#16A34A' },
-  { id: 'sun',            emoji: '☀️',    label: 'Soleil',        bg: '#FFFBEB', ring: '#F59E0B' },
-  { id: 'gem',            emoji: '💎',    label: 'Diamant',      bg: '#EFF6FF', ring: '#3B82F6' },
-]
+import { AVATARS, getAvatarEmoji } from '../../utils/avatars'
 
 /* ── AvatarDisplay ── */
 function AvatarDisplay({ avatarId, initiales, size = 80, editable = false, onClick }) {

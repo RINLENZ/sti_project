@@ -13,6 +13,7 @@ import {
   Camera, Mic, FlaskConical, PenLine,
 } from 'lucide-react'
 import { C, useTheme } from '../../styles/theme.jsx'
+import { getAvatarEmoji } from '../../utils/avatars'
 
 const ROLE_INFO = {
   super_admin: { label: 'Super Admin', color: '#D4A853', emoji: '⚙️' },
@@ -218,10 +219,12 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
       </div>
 
       {/* ── Avatar ── */}
-      {!collapsed && (
+      {!collapsed && (() => {
+        const avatarEmoji = getAvatarEmoji(user?.avatar)
+        return (
         <div style={{ margin: '12px 12px 0', padding: '11px 13px', background: 'rgba(255,255,255,0.05)', borderRadius: 12, border: `1px solid ${C.sidebarBorder}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${C.brownLight}, ${C.brown})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: 'white', border: `2px solid ${roleInfo.color}40` }}>
-            {user?.prenom?.[0]}{user?.nom?.[0]}
+          <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: avatarEmoji ? 'rgba(255,255,255,0.08)' : `linear-gradient(135deg, ${C.brownLight}, ${C.brown})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: avatarEmoji ? 20 : 12, fontWeight: 800, color: 'white', border: `2px solid ${roleInfo.color}40` }}>
+            {avatarEmoji ?? `${user?.prenom?.[0] ?? ''}${user?.nom?.[0] ?? ''}`}
           </div>
           <div style={{ overflow: 'hidden', flex: 1 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>
@@ -230,7 +233,7 @@ function DesktopSidebar({ collapsed, setCollapsed, activeView, onViewChange }) {
             <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', margin: 0 }}>{user?.email}</p>
           </div>
         </div>
-      )}
+      )})()}
 
       {/* ── Nav ── */}
       <nav style={{ flex: 1, padding: '12px 0 8px', overflowY: 'auto', overflowX: 'hidden', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' }}>
@@ -560,9 +563,12 @@ function MobileBottomNav({ activeView, onViewChange }) {
 
         <div style={{ overflowY: 'auto', padding: '12px 14px 16px' }}>
           {/* Profil card */}
+          {(() => {
+            const avatarEmoji = getAvatarEmoji(user?.avatar)
+            return (
           <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.05)', borderRadius: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg, ${C.brownLight}, ${C.brown})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: 'white' }}>
-              {user?.prenom?.[0]}{user?.nom?.[0]}
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: avatarEmoji ? 'rgba(255,255,255,0.08)' : `linear-gradient(135deg, ${C.brownLight}, ${C.brown})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: avatarEmoji ? 24 : 15, fontWeight: 800, color: 'white' }}>
+              {avatarEmoji ?? `${user?.prenom?.[0] ?? ''}${user?.nom?.[0] ?? ''}`}
             </div>
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, color: 'white', margin: 0 }}>{user?.prenom} {user?.nom}</p>
@@ -570,6 +576,7 @@ function MobileBottomNav({ activeView, onViewChange }) {
               {user?.niveau_label && <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', margin: '2px 0 0' }}>{user.niveau_label}{user.filiere_label && ` · ${user.filiere_label}`}</p>}
             </div>
           </div>
+          )})()}
 
           {/* Notifications accordion */}
           <div style={{ marginBottom: 8 }}>

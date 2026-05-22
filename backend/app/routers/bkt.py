@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -15,7 +15,13 @@ router = APIRouter(prefix="/api/bkt", tags=["BKT"])
 
 
 @router.get("/apprenant/{user_id}")
-def get_mastery_apprenant(user_id: UUID, db: Session = Depends(get_db)):
+def get_mastery_apprenant(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if str(current_user.id) != str(user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
     masteries = db.query(BKTMastery).filter(
         BKTMastery.user_id == user_id
     ).all()
@@ -49,6 +55,8 @@ def get_stats_apprenant(
     current_user: User = Depends(get_current_user),
 ):
     """Stats agrégées : BKT + sessions pour le profil apprenant."""
+    if str(current_user.id) != str(user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
     masteries = db.query(BKTMastery).filter(BKTMastery.user_id == user_id).all()
     nb_competences  = len(masteries)
     nb_maitrisees   = sum(1 for m in masteries if m.p_mastery >= 0.8)
@@ -86,6 +94,8 @@ def get_sessions_apprenant(
     current_user: User = Depends(get_current_user),
 ):
     """Dernières sessions d'apprentissage avec titre du cours."""
+    if str(current_user.id) != str(user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
     sessions = (
         db.query(LearningSession)
         .filter(
@@ -124,7 +134,7 @@ def get_sessions_apprenant(
 
 
 @router.get("/classe")
-def get_mastery_classe(db: Session = Depends(get_db)):
+def get_mastery_classe(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     apprenants = db.query(User).filter(User.role == "apprenant").all()
 
     students_data = []

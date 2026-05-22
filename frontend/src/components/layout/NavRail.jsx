@@ -15,6 +15,7 @@ import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
 import SensiaLogo from '../SensiaLogo'
 import { useNotifications } from '../../contexts/NotificationsContext'
+import { getAvatarEmoji } from '../../utils/avatars'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const RAIL_W = 64
@@ -262,24 +263,27 @@ function Divider() {
   )
 }
 
-// ─── Avatar initiales ─────────────────────────────────────────────────────────
+// ─── Avatar (emoji ou initiales) ──────────────────────────────────────────────
 function Avatar({ user, roleColor, size = 34 }) {
+  const emoji = getAvatarEmoji(user?.avatar)
   return (
     <div style={{
       width:          size, height: size,
       borderRadius:   radius.md,
-      background:    `linear-gradient(135deg, rgba(196,134,90,0.6), rgba(107,58,42,0.8))`,
+      background:     emoji
+        ? 'rgba(255,255,255,0.08)'
+        : 'linear-gradient(135deg, rgba(196,134,90,0.6), rgba(107,58,42,0.8))',
       display:       'flex',
       alignItems:    'center',
       justifyContent: 'center',
-      fontSize:       size > 30 ? 12 : 10,
+      fontSize:       emoji ? (size > 30 ? 20 : 16) : (size > 30 ? 12 : 10),
       fontWeight:     weight.extrabold,
       color:          'white',
       border:        `2px solid ${roleColor ?? '#C4865A'}30`,
       flexShrink:     0,
       userSelect:    'none',
     }}>
-      {user?.prenom?.[0]}{user?.nom?.[0]}
+      {emoji ?? `${user?.prenom?.[0] ?? ''}${user?.nom?.[0] ?? ''}`}
     </div>
   )
 }

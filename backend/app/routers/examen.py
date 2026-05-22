@@ -249,6 +249,9 @@ def epreuves_disponibles(
         query = query.filter(
             (Epreuve.niveau_id == current_user.niveau_id) | (Epreuve.niveau_id == None)
         )
+    else:
+        # Apprenant sans niveau : seulement les épreuves génériques (pas de niveau requis)
+        query = query.filter(Epreuve.niveau_id == None)
 
     epreuves = query.order_by(Epreuve.created_at.desc()).all()
 

@@ -397,7 +397,9 @@ class ReponseSubmit(BaseModel):
     reponse: str
 
 @router.post("/exercice/verifier")
-def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if str(current_user.id) != str(body.user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(403, "Accès non autorisé")
     """Vérifie la réponse d'un apprenant et met à jour sa progression."""
     exercice = db.query(Exercice).filter(
         Exercice.id == body.exercice_id
@@ -573,7 +575,9 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), _: User
 
 
 @router.get("/progression/{user_id}")
-def get_progression(user_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_progression(user_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if str(current_user.id) != str(user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(403, "Accès non autorisé")
     """Retourne la progression globale d'un apprenant."""
     progressions = db.query(ProgressionApprenant).filter(
         ProgressionApprenant.user_id == user_id
@@ -603,7 +607,9 @@ class SessionCreate(BaseModel):
     ua_id: str
 
 @router.post("/session/creer")
-def creer_session(body: SessionCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def creer_session(body: SessionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if str(current_user.id) != str(body.user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(403, "Accès non autorisé")
     """Crée une nouvelle session d'apprentissage."""
     from ..models.session import LearningSession
     session = LearningSession(
@@ -616,7 +622,7 @@ def creer_session(body: SessionCreate, db: Session = Depends(get_db), _: User = 
     return {"session_id": str(session.id)}
 
 @router.post("/session/clore/{session_id}")
-def clore_session(session_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def clore_session(session_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Clôture une session et persiste le score d'engagement final.
     Appelé depuis le frontend quand l'apprenant termine ou quitte.
@@ -632,6 +638,8 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db), _: User = Dep
     ).first()
     if not session:
         raise HTTPException(404, "Session introuvable")
+    if str(current_user.id) != str(session.user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(403, "Accès non autorisé")
 
     # Récupère les événements depuis Redis
     try:
@@ -1120,7 +1128,9 @@ def delete_exercice(exercice_id: UUID, db: Session = Depends(get_db), _: User = 
 
 
 @router.get("/sessions/historique/{user_id}")
-def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_sessions_historique(user_id: UUID, limit: int = 20, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if str(current_user.id) != str(user_id) and current_user.role not in ("enseignant", "super_admin"):
+        raise HTTPException(403, "Accès non autorisé")
     """
     Retourne l'historique des sessions d'apprentissage d'un apprenant,
     utilisé pour tracer la courbe d'engagement dans le dashboard enseignant.

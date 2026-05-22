@@ -13,6 +13,7 @@ import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
 import SensiaLogo from '../SensiaLogo'
 import { useNotifications } from '../../contexts/NotificationsContext'
+import { getAvatarEmoji } from '../../utils/avatars'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const BAR_H   = 60   // hauteur de la barre bottom
@@ -321,6 +322,9 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
         <div style={{ overflowY: 'auto', flex: 1 }}>
 
           {/* Profil card */}
+          {(() => {
+            const avatarEmoji = getAvatarEmoji(user?.avatar)
+            return (
           <div style={{
             margin:          `${space[3]}px ${space[4]}px`,
             padding:        `${space[3]}px ${space[4]}px`,
@@ -334,17 +338,19 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
             <div style={{
               width:          44, height: 44,
               borderRadius:   radius.md,
-              background:    `linear-gradient(135deg, rgba(196,134,90,0.6), rgba(107,58,42,0.9))`,
+              background:     avatarEmoji
+                ? 'rgba(255,255,255,0.08)'
+                : 'linear-gradient(135deg, rgba(196,134,90,0.6), rgba(107,58,42,0.9))',
               display:       'flex',
               alignItems:    'center',
               justifyContent: 'center',
-              fontSize:       16,
+              fontSize:       avatarEmoji ? 26 : 16,
               fontWeight:     weight.extrabold,
               color:          'white',
               flexShrink:     0,
               border:        `2px solid ${roleInfo.color}30`,
             }}>
-              {user?.prenom?.[0]}{user?.nom?.[0]}
+              {avatarEmoji ?? `${user?.prenom?.[0] ?? ''}${user?.nom?.[0] ?? ''}`}
             </div>
             <div style={{ overflow: 'hidden', flex: 1 }}>
               <p style={{ fontSize: type.md, fontWeight: weight.bold, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -360,6 +366,7 @@ function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, n
               )}
             </div>
           </div>
+          )})()}
 
           {/* Notifications section — collapsible */}
           <div style={{ margin: `0 ${space[4]}px ${space[3]}px` }}>
