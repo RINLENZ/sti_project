@@ -3,12 +3,14 @@
  * Séquence : Intro → Ressources → Exercices d'application → Terminé
  * Aucun enseignant requis. Aucun suivi BKT. Vérification locale uniquement.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import Alisha from '../../components/Alisha'
+import useAlishaVoice from '../../hooks/useAlishaVoice'
+import { ProgressiveContent } from '../../components/RichContent'
 import api from '../../services/api'
 
 // ── Séquence linéaire : intro → ressources → exercices ───────────
@@ -178,11 +180,16 @@ export default function TutorielAlisha() {
   const { xs }    = useBreakpoint()
   const { user }  = useSelector(s => s.auth)
 
-  const [ua,       setUa]       = useState(null)
-  const [sequence, setSequence] = useState([])
-  const [stepIdx,  setStepIdx]  = useState(0)
-  const [phase,    setPhase]    = useState('loading')
-  const [feedback, setFeedback] = useState(null)
+  const [ua,         setUa]        = useState(null)
+  const [sequence,   setSequence]  = useState([])
+  const [stepIdx,    setStepIdx]   = useState(0)
+  const [phase,      setPhase]     = useState('loading')
+  const [feedback,   setFeedback]  = useState(null)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [muted,      setMuted]     = useState(false)
+
+  const { speak, stop, supported } = useAlishaVoice()
+  const prevMessageRef = useRef(null)
 
   useEffect(() => {
     api.get(`/api/cours/ua/${uaId}?user_id=${user.id}`)
@@ -195,6 +202,22 @@ export default function TutorielAlisha() {
   }, [uaId, user.id, navigate])
 
   const currentStep = sequence[stepIdx] ?? null
+
+  // ── Voix Alisha ────────────────────────────────────────────────
+  useEffect(() => {
+    const msg = alishaMsg(phase, currentStep, feedback)
+    if (!msg || msg === prevMessageRef.current || muted || !supported) {
+      if (muted) stop()
+      return
+    }
+    prevMessageRef.current = msg
+    speak(msg, {
+      onStart: () => setIsSpeaking(true),
+      onEnd:   () => setIsSpeaking(false),
+    })
+    return stop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, stepIdx, muted])
 
   function handleReponse(reponse) {
     if (!currentStep || currentStep.type !== 'exercice') return
@@ -215,7 +238,9 @@ export default function TutorielAlisha() {
 
   const totalSteps  = sequence.length
   const progressPct = totalSteps > 0 ? Math.round((stepIdx / totalSteps) * 100) : 0
-  const alishaState = alishaStateFor(phase, currentStep, feedback)
+  const alishaState = isSpeaking && phase !== 'feedback'
+    ? 'speaking'
+    : alishaStateFor(phase, currentStep, feedback)
   const message     = alishaMsg(phase, currentStep, feedback)
 
   // ── Écran terminé ─────────────────────────────────────────────
@@ -290,6 +315,20 @@ export default function TutorielAlisha() {
           <span style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, whiteSpace: 'nowrap' }}>
             {stepIdx + 1} / {totalSteps}
           </span>
+          {supported && (
+            <button
+              onClick={() => setMuted(m => !m)}
+              title={muted ? 'Activer la voix' : 'Couper la voix'}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 18, lineHeight: 1, padding: 0,
+                opacity: muted ? 0.35 : 1,
+                transition: 'opacity .2s',
+              }}
+            >
+              {muted ? '🔇' : '🔊'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -327,7 +366,7 @@ export default function TutorielAlisha() {
 
         {/* Carte principale */}
         {currentStep && (
-          <div style={{
+          <div key={stepIdx} style={{
             background:    C.surface,
             borderRadius:   20,
             border:        `1.5px solid ${C.border}`,
@@ -386,32 +425,13 @@ export default function TutorielAlisha() {
 
             {/* ── Ressource ── */}
             {currentStep.type === 'ressource' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <span style={tagStyle(C.brownPale, C.brown)}>📖 Leçon</span>
-                  <h2 style={{ fontSize: xs ? 16 : 18, fontWeight: 800, color: C.text, margin: 0 }}>
-                    {currentStep.data.titre}
-                  </h2>
-                </div>
-                <p style={{ fontSize: 15, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', margin: 0 }}>
-                  {currentStep.data.contenu}
-                </p>
-
-                {currentStep.data.points_cles?.length > 0 && (
-                  <div style={sectionBox(C.goldPale, C.gold)}>
-                    <p style={sectionLabel(C.brownMid)}>🔑 À retenir</p>
-                    <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {currentStep.data.points_cles.map((p, i) => (
-                        <li key={i} style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>{p}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <button onClick={advance} style={primaryBtn(C)}>
-                  J'ai compris →
-                </button>
-              </div>
+              <ProgressiveContent
+                key={currentStep.data.id || stepIdx}
+                data={currentStep.data}
+                onDone={advance}
+                C={C}
+                xs={xs}
+              />
             )}
 
             {/* ── Exercice ── */}
@@ -433,7 +453,7 @@ export default function TutorielAlisha() {
                   </details>
                 )}
 
-                <ExerciceStep exercice={currentStep.data} onReponse={handleReponse} C={C} />
+                <ExerciceStep key={currentStep.data.id} exercice={currentStep.data} onReponse={handleReponse} C={C} />
               </div>
             )}
 
