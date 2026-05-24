@@ -8,6 +8,7 @@ import { Copy, CheckCircle, GraduationCap, ChevronRight } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import SensiaLogo from '../../components/SensiaLogo'
+import Alisha from '../../components/Alisha'
 
 const PAYS = [
   { code: 'CM', name: 'Cameroun',      flag: '🇨🇲' },
@@ -177,11 +178,12 @@ export default function Onboarding() {
   const totalSteps = getTotalSteps()
 
   if (loadingRef) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${C.brown}, #1A0A05)` }}>
-      <div style={{ textAlign: 'center', color: 'white' }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid rgba(255,255,255,.2)', borderTopColor: C.gold, margin: '0 auto 16px', animation: 'spin 1s linear infinite' }}/>
-        <p style={{ fontSize: 14, opacity: .7 }}>Chargement du référentiel…</p>
-      </div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, background: `linear-gradient(135deg, ${C.brown}, #1A0A05)`, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <Alisha state="thinking" size={110} />
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,.75)', fontWeight: 600, margin: 0 }}>
+        Je prépare ton profil…
+      </p>
     </div>
   )
 
@@ -236,13 +238,16 @@ export default function Onboarding() {
         animation: 'fadeUp .5s ease', position: 'relative'
       }}>
 
-        {/* Logo */}
+        {/* Alisha + message de bienvenue */}
         <div style={{ textAlign:'center', marginBottom: 24 }}>
-          <div style={{ display:'flex', justifyContent:'center', marginBottom:12, animation:'float 4s ease-in-out infinite' }}>
-            <SensiaLogo size={40}/>
+          <div style={{ display:'flex', justifyContent:'center', marginBottom: 8 }}>
+            <Alisha state="welcome" size={90} />
           </div>
-          <p style={{ fontSize:13, color:C.textSec, fontWeight:600 }}>
-            Bienvenue, <span style={{ color:C.brown, fontWeight:800 }}>{user?.prenom}</span> ! 👋
+          <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: '0 0 4px' }}>
+            Bonjour, <span style={{ color: C.brown }}>{user?.prenom}</span> ! 👋
+          </p>
+          <p style={{ fontSize: 12, color: C.textSec, margin: 0, fontWeight: 500 }}>
+            Je suis Alisha — dis-moi qui tu es pour personnaliser ta leçon.
           </p>
         </div>
 

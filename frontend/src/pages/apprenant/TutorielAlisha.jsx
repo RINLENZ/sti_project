@@ -14,12 +14,13 @@ import { useKWSModel } from '../../hooks/useKWSModel'
 import { ProgressiveContent } from '../../components/RichContent'
 import api from '../../services/api'
 
-// ── Séquence linéaire : intro → ressources → exercices ───────────
+// ── Séquence linéaire : intro → ressources → exercices (triés par difficulté) ──
 
 function buildSequence(ua) {
   const steps = [{ type: 'intro', data: ua }]
   ;(ua.ressources || []).forEach(r => steps.push({ type: 'ressource', data: r }))
-  ;(ua.exercices  || []).forEach(e => steps.push({ type: 'exercice',  data: e }))
+  const exercices = [...(ua.exercices || [])].sort((a, b) => (a.difficulte ?? 1) - (b.difficulte ?? 1))
+  exercices.forEach(e => steps.push({ type: 'exercice', data: e }))
   return steps
 }
 
@@ -56,6 +57,9 @@ function alishaMsg(phase, step, feedback) {
       : `Pas tout à fait… La bonne réponse était : "${feedback.reponse_correcte}"`
   }
 
+  if (step.type === 'explication') {
+    return "Je vais te réexpliquer ce point avant de continuer. 💡"
+  }
   if (step.type === 'ressource') {
     const pts = step.data.points_cles
     return pts?.length > 0 ? `Retiens bien : "${pts[0]}"` : `Voici la leçon : ${step.data.titre}`
@@ -69,9 +73,10 @@ function alishaMsg(phase, step, feedback) {
 }
 
 function alishaStateFor(phase, step, feedback, bktNiveau) {
-  if (phase === 'loading')  return 'thinking'
-  if (phase === 'done')     return 'celebration'
-  if (step?.type === 'intro') return 'welcome'
+  if (phase === 'loading')        return 'thinking'
+  if (phase === 'done')           return 'celebration'
+  if (step?.type === 'intro')     return 'welcome'
+  if (step?.type === 'explication') return 'thinking'
   if (phase === 'feedback' && feedback?.correct === true) {
     return bktNiveau === 'maitrise' ? 'excited' : 'correct'
   }
@@ -185,31 +190,65 @@ export default function TutorielAlisha() {
   const { xs }    = useBreakpoint()
   const { user }  = useSelector(s => s.auth)
 
-  const [ua,           setUa]          = useState(null)
-  const [sequence,     setSequence]    = useState([])
-  const [stepIdx,      setStepIdx]     = useState(0)
-  const [phase,        setPhase]       = useState('loading')
-  const [feedback,     setFeedback]    = useState(null)
-  const [isSpeaking,   setIsSpeaking]  = useState(false)
-  const [muted,        setMuted]       = useState(() => localStorage.getItem('alisha_muted') === '1')
-  const [bktResult,    setBktResult]   = useState(null)   // résultat BKT du dernier exercice
-  const [audioActive,  setAudioActive] = useState(false)
+  const [ua,             setUa]           = useState(null)
+  const [sequence,       setSequence]     = useState([])
+  const [stepIdx,        setStepIdx]      = useState(0)
+  const [phase,          setPhase]        = useState('loading')
+  const [feedback,       setFeedback]     = useState(null)
+  const [isSpeaking,     setIsSpeaking]   = useState(false)
+  const [muted,          setMuted]        = useState(() => localStorage.getItem('alisha_muted') === '1')
+  const [bktResult,      setBktResult]    = useState(null)
+  const [audioActive,    setAudioActive]  = useState(false)
+  const [ressourceAide,  setRessourceAide] = useState(null)
+  const [badgeNotif,     setBadgeNotif]   = useState(null)  // { titre, message, emoji }
+  const [scoreCorrects,  setScoreCorrects] = useState(0)    // nb réponses correctes
+
+  const sessionIdRef       = useRef(null)   // LearningSession courante
+  const stepStartRef       = useRef(null)   // timestamp début step actuel
+  const consecutiveErrRef  = useRef(0)      // erreurs consécutives sur même compétence
+  const lastCompetenceRef  = useRef(null)   // compétence du dernier exercice
 
   const { speak, stop, supported } = useAlishaVoice()
   const { lastKeyword } = useKWSModel(audioActive)
   const prevMessageRef = useRef(null)
 
+  // ── helper interaction log (fire-and-forget) ──────────────────
+  function logInteraction(type, data = {}) {
+    if (!sessionIdRef.current) return
+    api.post('/api/interaction', {
+      session_id: sessionIdRef.current,
+      user_id:    user.id,
+      type, data,
+    }).catch(() => {})
+  }
+
   useEffect(() => {
+    let cancelled = false
     api.get(`/api/cours/ua/${uaId}?user_id=${user.id}`)
-      .then(r => {
+      .then(async r => {
+        if (cancelled) return
         setUa(r.data)
         setSequence(buildSequence(r.data))
         setPhase('step')
-        setAudioActive(true)   // active le KWS dès le début du tutoriel
+        setAudioActive(true)
+        stepStartRef.current = Date.now()
+        // Crée la LearningSession
+        try {
+          const s = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
+          sessionIdRef.current = s.data.session_id
+        } catch {}
       })
       .catch(() => navigate('/dashboard'))
-    return () => setAudioActive(false)
-  }, [uaId, user.id, navigate])
+    return () => {
+      cancelled = true
+      setAudioActive(false)
+      // Clôture la session si l'utilisateur quitte avant la fin
+      if (sessionIdRef.current) {
+        api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uaId, user.id])
 
   const currentStep = sequence[stepIdx] ?? null
 
@@ -231,32 +270,87 @@ export default function TutorielAlisha() {
 
   async function handleReponse(reponse) {
     if (!currentStep || currentStep.type !== 'exercice') return
-    const result = checkReponse(currentStep.data, reponse)
+    const result   = checkReponse(currentStep.data, reponse)
+    const timeSecs = stepStartRef.current ? Math.round((Date.now() - stepStartRef.current) / 1000) : 0
     setFeedback(result)
     setPhase('feedback')
 
-    // Mise à jour BKT si la compétence est renseignée
     const competence = currentStep.data.competence_evaluee
+    const exerciceId = currentStep.data.id
+
+    // Log interaction réponse
+    logInteraction('response', {
+      exercice_id: exerciceId,
+      competence:  competence ?? null,
+      correct:     result.correct,
+      time_seconds: timeSecs,
+      difficulte:  currentStep.data.difficulte ?? 1,
+    })
+
+    if (result.correct) {
+      setScoreCorrects(n => n + 1)
+      consecutiveErrRef.current = 0
+    } else if (result.correct === false) {
+      if (competence === lastCompetenceRef.current) {
+        consecutiveErrRef.current += 1
+      } else {
+        consecutiveErrRef.current = 1
+      }
+    }
+    lastCompetenceRef.current = competence ?? null
+
+    // Mise à jour BKT
     if (competence && result.correct !== null) {
       try {
         const bkt = await api.post(`/api/bkt/apprenant/${user.id}/update-exercice`, {
-          ua_id:      uaId,
-          competence: competence,
-          correct:    result.correct,
+          ua_id:          uaId,
+          competence,
+          correct:        result.correct,
+          exercice_id:    exerciceId,
+          reponse_donnee: String(reponse),
         })
         setBktResult(bkt.data)
-      } catch {
-        // BKT non bloquant
-      }
+
+        // Injecter réexplication si 2 erreurs consécutives et BKT faible
+        if (consecutiveErrRef.current >= 2 && bkt.data.p_mastery < 0.40) {
+          consecutiveErrRef.current = 0
+          api.get(`/api/cours/ua/${uaId}/ressource-aide`, { params: { competence } })
+            .then(r => {
+              if (!r.data) return
+              setSequence(prev => {
+                const copy = [...prev]
+                const explicationStep = {
+                  type: 'explication',
+                  data: { ...r.data, _injected: true },
+                }
+                copy.splice(stepIdx + 1, 0, explicationStep)
+                return copy
+              })
+            }).catch(() => {})
+        } else if (bkt.data.niveau === 'a_renforcer') {
+          api.get(`/api/cours/ua/${uaId}/ressource-aide`, { params: { competence } })
+            .then(r => setRessourceAide(r.data)).catch(() => {})
+        }
+      } catch {}
     }
   }
 
   function advance() {
     setFeedback(null)
     setBktResult(null)
+    setRessourceAide(null)
+    stepStartRef.current = Date.now()
     const next = stepIdx + 1
     if (next >= sequence.length) {
       setPhase('done')
+      // Clôture la session avec le score final
+      if (sessionIdRef.current) {
+        const nbEx = sequence.filter(s => s.type === 'exercice').length
+        const score = nbEx > 0 ? scoreCorrects / nbEx : null
+        api.post(`/api/cours/session/clore/${sessionIdRef.current}`, { score_final: score })
+          .catch(() => {})
+        sessionIdRef.current = null
+      }
     } else {
       setStepIdx(next)
       setPhase('step')
@@ -268,10 +362,10 @@ export default function TutorielAlisha() {
     if (!lastKeyword) return
     const { keyword } = lastKeyword
     if (keyword === 'aide' && phase === 'step' && currentStep?.type === 'exercice') {
-      // Révèle l'indice
       const details = document.querySelector('details')
       if (details && !details.open) details.open = true
       speak('Voici un indice pour t\'aider.', {})
+      logInteraction('help_requested', { level: 1, source: 'kws' })
     } else if (keyword === 'repeter' && supported && !muted) {
       const msg = alishaMsg(phase, currentStep, feedback)
       if (msg) speak(msg, { onStart: () => setIsSpeaking(true), onEnd: () => setIsSpeaking(false) })
@@ -306,6 +400,23 @@ export default function TutorielAlisha() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, stepIdx, currentStep])
 
+  // ── WebSocket — notifications badges en temps réel ────────────
+  useEffect(() => {
+    if (!user?.id) return
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws/${user.id}`)
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data)
+        if (msg.type === 'notification' && msg.notif_type === 'badge_debloque') {
+          setBadgeNotif({ titre: msg.titre, message: msg.message })
+          setTimeout(() => setBadgeNotif(null), 5000)
+        }
+      } catch {}
+    }
+    return () => ws.close()
+  }, [user?.id])
+
   const totalSteps  = sequence.length
   const progressPct = totalSteps > 0 ? Math.round((stepIdx / totalSteps) * 100) : 0
   const bktNiveau   = bktResult?.niveau ?? null
@@ -325,6 +436,7 @@ export default function TutorielAlisha() {
 
   // ── Écran terminé ─────────────────────────────────────────────
   if (phase === 'done') {
+    const nbExercices = ua?.exercices?.length ?? 0
     return (
       <div style={{
         minHeight:      '100vh',
@@ -334,25 +446,91 @@ export default function TutorielAlisha() {
         alignItems:     'center',
         justifyContent: 'center',
         padding:        '40px 20px',
-        gap:             24,
+        gap:             28,
         fontFamily:     "'DM Sans', system-ui, sans-serif",
       }}>
         <Alisha state="celebration" size={140} />
+
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: C.brown, margin: '0 0 8px' }}>
             Leçon terminée !
           </h1>
           <p style={{ fontSize: 15, color: C.textSec, margin: 0 }}>{ua?.titre}</p>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button onClick={() => navigate(`/cours/${uaId}`)} style={actionBtn(C.surface, C.brown, C.brownLight)}>
-            Voir le cours
+
+        {/* ── Choix : session complète ou arrêter ── */}
+        <div style={{
+          background:    C.surface,
+          border:       `1.5px solid ${C.border}`,
+          borderRadius:  20,
+          padding:      '24px 28px',
+          maxWidth:      420,
+          width:        '100%',
+          display:      'flex',
+          flexDirection: 'column',
+          gap:           14,
+        }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: C.textSec, margin: 0, textAlign: 'center' }}>
+            Que veux-tu faire maintenant ?
+          </p>
+
+          {/* Option 1 : session complète */}
+          <button
+            onClick={() => navigate(`/session/${uaId}?skip=1`)}
+            style={{
+              padding:      '16px 20px',
+              borderRadius:  14,
+              border:       'none',
+              background:   `linear-gradient(135deg, ${C.brown}, ${C.brownMid})`,
+              color:        'white',
+              fontWeight:    800,
+              fontSize:      15,
+              cursor:        'pointer',
+              display:      'flex',
+              flexDirection: 'column',
+              alignItems:   'flex-start',
+              gap:           4,
+              textAlign:    'left',
+            }}
+          >
+            <span>✏️ Session d'exercices complète</span>
+            <span style={{ fontSize: 12, fontWeight: 500, opacity: .8 }}>
+              {nbExercices > 0
+                ? `${nbExercices} exercice${nbExercices > 1 ? 's' : ''} · BKT mis à jour`
+                : 'Tous les exercices de cette unité'}
+            </span>
           </button>
+
+          {/* Option 2 : arrêter */}
           <button
             onClick={() => navigate('/dashboard')}
-            style={actionBtn(`linear-gradient(135deg, ${C.brown}, ${C.brownMid})`, 'white', 'transparent')}
+            style={{
+              padding:      '14px 20px',
+              borderRadius:  14,
+              border:       `2px solid ${C.border}`,
+              background:    C.bg,
+              color:         C.textSec,
+              fontWeight:    700,
+              fontSize:      14,
+              cursor:        'pointer',
+            }}
           >
-            Tableau de bord →
+            🏠 Retourner au tableau de bord
+          </button>
+
+          <button
+            onClick={() => navigate(`/cours/${uaId}`)}
+            style={{
+              background: 'none',
+              border:     'none',
+              color:       C.textMuted,
+              fontSize:    12,
+              fontWeight:  600,
+              cursor:      'pointer',
+              padding:     '4px 0',
+            }}
+          >
+            Relire le cours →
           </button>
         </div>
       </div>
@@ -514,6 +692,31 @@ export default function TutorielAlisha() {
               />
             )}
 
+            {/* ── Réexplication (injectée dynamiquement après 2 erreurs) ── */}
+            {currentStep.type === 'explication' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{
+                  background:   '#FFF7ED',
+                  border:      '1.5px solid #F97316',
+                  borderRadius:  12,
+                  padding:      '10px 14px',
+                  display:     'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <span style={{ fontSize: 18 }}>💡</span>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#9A3412' }}>
+                    Alisha réexplique ce point avant de continuer
+                  </p>
+                </div>
+                <ProgressiveContent
+                  key={`expl-${stepIdx}`}
+                  data={currentStep.data}
+                  onDone={advance}
+                  C={C}
+                  xs={xs}
+                />
+              </div>
+            )}
+
             {/* ── Exercice ── */}
             {currentStep.type === 'exercice' && phase === 'step' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -605,6 +808,42 @@ export default function TutorielAlisha() {
                     </div>
                   </div>
                 )}
+                {/* Extrait de cours Alisha — BKT < 0.4 */}
+                {ressourceAide && feedback?.correct === false && (
+                  <div style={{
+                    borderRadius: 14, overflow: 'hidden',
+                    border: `1.5px solid ${C.brownLight}40`,
+                    animation: 'fadeUp .4s ease',
+                  }}>
+                    <div style={{
+                      background: `linear-gradient(135deg, ${C.brown}, ${C.brownMid})`,
+                      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8
+                    }}>
+                      <span style={{ fontSize: 16 }}>📖</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: 'white', flex: 1 }}>
+                        Révise ce point : {ressourceAide.titre}
+                      </span>
+                      <button onClick={() => setRessourceAide(null)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>✕</button>
+                    </div>
+                    <div style={{ background: C.brownPale, padding: '12px 14px' }}>
+                      <p style={{ margin: '0 0 8px', fontSize: 13, color: C.text, lineHeight: 1.7, fontStyle: 'italic' }}>
+                        {ressourceAide.extrait}
+                      </p>
+                      {ressourceAide.points_cles?.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {ressourceAide.points_cles.map((pt, i) => (
+                            <span key={i} style={{
+                              background: `${C.brown}18`, color: C.brown,
+                              padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700
+                            }}>{pt}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <button onClick={advance} style={primaryBtn(C)}>
                   {stepIdx + 1 >= sequence.length ? 'Terminer 🎉' : 'Continuer →'}
                 </button>
@@ -626,7 +865,37 @@ export default function TutorielAlisha() {
           from { opacity: 0; transform: translateY(10px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(60px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
       `}</style>
+
+      {/* ── Toast badge débloqué ── */}
+      {badgeNotif && (
+        <div style={{
+          position:     'fixed',
+          bottom:        24,
+          right:         24,
+          zIndex:        999,
+          background:   'linear-gradient(135deg, #6B3A2A, #A0522D)',
+          color:        'white',
+          borderRadius:  16,
+          padding:      '14px 18px',
+          boxShadow:    '0 8px 32px rgba(0,0,0,0.25)',
+          maxWidth:      300,
+          animation:    'slideInRight .35s ease',
+          display:      'flex',
+          gap:           12,
+          alignItems:   'flex-start',
+        }}>
+          <span style={{ fontSize: 24, flexShrink: 0 }}>🏅</span>
+          <div>
+            <p style={{ margin: '0 0 3px', fontWeight: 800, fontSize: 13 }}>{badgeNotif.titre}</p>
+            <p style={{ margin: 0, fontSize: 11, opacity: .85 }}>{badgeNotif.message}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

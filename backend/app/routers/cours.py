@@ -398,6 +398,51 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db), user_id: Optional[
     }
 
 
+@router.get("/ua/{ua_id}/ressource-aide")
+def get_ressource_aide(
+    ua_id: UUID,
+    competence: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Retourne un extrait de la ressource la plus pertinente pour aider
+    un apprenant en difficulté (BKT < 0.4) sur une compétence donnée.
+    """
+    ressources = (
+        db.query(RessourcePedagogique)
+        .filter(RessourcePedagogique.ua_id == ua_id)
+        .order_by(RessourcePedagogique.ordre)
+        .all()
+    )
+    if not ressources:
+        raise HTTPException(404, "Aucune ressource disponible")
+
+    # Si une compétence est précisée, préfère la ressource dont le titre ou les
+    # points_clés contiennent un terme commun avec la compétence.
+    best = ressources[0]
+    if competence:
+        comp_words = set(competence.lower().split())
+        def relevance(r):
+            text = (r.titre + " " + " ".join(r.points_cles or [])).lower()
+            return sum(1 for w in comp_words if w in text)
+        candidates = sorted(ressources, key=relevance, reverse=True)
+        best = candidates[0]
+
+    # Extrait : 600 premiers caractères du contenu textuel
+    extrait = (best.contenu or "")[:600]
+    if len(best.contenu or "") > 600:
+        extrait += "…"
+
+    return {
+        "id":         str(best.id),
+        "titre":      best.titre,
+        "type":       best.type,
+        "extrait":    extrait,
+        "points_cles": best.points_cles or [],
+    }
+
+
 class ReponseSubmit(BaseModel):
     exercice_id: UUID
     user_id: UUID
@@ -904,58 +949,73 @@ def dashboard_enseignant(enseignant_id: UUID, db: Session = Depends(get_db), cur
 @router.get("/ua/recommandee/{user_id}")
 def get_ua_recommandee(user_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """
-    Recommande la prochaine UA à étudier selon :
-    1. Les UA non commencées en priorité
-    2. Les UA dont les compétences ont le BKT le plus faible
-    3. Respecte l'ordre des UA dans la famille
+    Recommande la prochaine UA via logique ZPD (Zone Proximale de Développement) :
+    - Exclut les UA déjà maîtrisées (BKT moyen ≥ 0.80)
+    - Vérifie que les prérequis sont acquis (BKT ≥ 0.40 par prérequis)
+    - Favorise la zone d'apprentissage optimale (BKT entre 0.25 et 0.70)
+    - Prioritise les UA en cours (commencées mais non maîtrisées)
     """
     from ..models.cours import BKTMastery
-    from ..services.bkt_service import interpret_mastery
 
-    # Récupère toutes les UA actives
     uas = db.query(UniteApprentissage).filter(
         UniteApprentissage.actif == True
     ).order_by(UniteApprentissage.ordre).all()
 
-    # Récupère les maîtrises BKT de cet apprenant
-    masteries = db.query(BKTMastery).filter(
-        BKTMastery.user_id == user_id
-    ).all()
+    masteries = db.query(BKTMastery).filter(BKTMastery.user_id == user_id).all()
     mastery_map = {m.competence: m.p_mastery for m in masteries}
 
-    # Score chaque UA
+    def ua_bkt_moyen(ua):
+        comps = ua.competences or []
+        if not comps:
+            return 0.0
+        return sum(mastery_map.get(c, 0.0) for c in comps) / len(comps)
+
+    def prereqs_ok(ua):
+        prereqs = ua.prerequis or []
+        if not prereqs:
+            return True
+        # Les prérequis sont des noms de compétences ou des ua_ids
+        return all(mastery_map.get(p, 0.0) >= 0.40 for p in prereqs)
+
+    def zpd_score(ua, bkt_moy, nb_tent):
+        # UA déjà maîtrisée → exclure
+        if bkt_moy >= 0.80:
+            return None
+        # Prérequis non acquis → exclure
+        if not prereqs_ok(ua):
+            return None
+        # En cours (commencée) → priorité haute
+        en_cours_bonus = 0.3 if nb_tent > 0 else 0.0
+        # Zone optimale : BKT entre 0.25–0.70 → score proche de 1
+        zpd = 1.0 - abs(bkt_moy - 0.45) * 2
+        return max(0.0, zpd) + en_cours_bonus
+
     scored = []
     for ua in uas:
-        competences = ua.competences or []
-        if not competences:
-            score_bkt = 0.0
-        else:
-            scores = [mastery_map.get(c, 0.1) for c in competences]
-            score_bkt = sum(scores) / len(scores)
-
-        # Vérifie si des exercices ont été faits
-        nb_tentatives = db.query(ProgressionApprenant).filter(
+        bkt_moy = ua_bkt_moyen(ua)
+        nb_tent = db.query(ProgressionApprenant).filter(
             ProgressionApprenant.user_id == user_id,
-            ProgressionApprenant.ua_id   == ua.id
+            ProgressionApprenant.ua_id   == ua.id,
         ).count()
-
+        score = zpd_score(ua, bkt_moy, nb_tent)
+        if score is None:
+            continue
         scored.append({
+            "id":           str(ua.id),
             "ua_id":        str(ua.id),
             "titre":        ua.titre,
             "reference_ue": ua.reference_ue,
-            "score_bkt":    round(score_bkt, 3),
-            "nb_tentatives": nb_tentatives,
-            "priorite":     0 if nb_tentatives == 0 else score_bkt
+            "score_bkt":    round(bkt_moy, 3),
+            "nb_tentatives": nb_tent,
+            "zpd_score":    round(score, 3),
         })
 
-    # Trie : d'abord les UA non commencées, puis par BKT croissant
-    scored.sort(key=lambda x: (1 if x["nb_tentatives"] > 0 else 0, x["score_bkt"]))
-
+    scored.sort(key=lambda x: -x["zpd_score"])
     recommandee = scored[0] if scored else None
 
     return {
         "recommandee": recommandee,
-        "toutes":      scored
+        "toutes":      scored,
     }
 
 

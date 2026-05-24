@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useEffect, Suspense, lazy } from 'react'
 import { useTheme } from './styles/theme.jsx'
+import Alisha from './components/Alisha'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -56,16 +57,13 @@ function PageLoader() {
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      background: C.bg, gap: 14,
+      background: C.bg, gap: 10,
+      fontFamily: "'DM Sans', system-ui, sans-serif",
     }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: '50%',
-        border: `3px solid ${C.border}`,
-        borderTopColor: C.brown,
-        animation: 'spin 0.8s linear infinite',
-      }}/>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <p style={{ fontSize: 13, color: C.textMuted, fontWeight: 600 }}>Chargement…</p>
+      <Alisha state="thinking" size={100} />
+      <p style={{ fontSize: 13, color: C.textMuted, fontWeight: 600, margin: 0 }}>
+        Chargement…
+      </p>
     </div>
   )
 }

@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react'
+const Alisha = lazy(() => import('../../components/Alisha'))
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -325,7 +326,13 @@ export default function EpreuveSession() {
   const [epreuve,    setEpreuve]    = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [phase,      setPhase]      = useState('intro')  // intro | exam | submitting | results
-  const [reponses,   setReponses]   = useState({})       // { qid: valeur }
+  const [reponses,   setReponses]   = useState(() => {
+    // Restaure un brouillon sauvegardé si la session a été interrompue
+    try {
+      const saved = localStorage.getItem(`epreuve_draft_${epreuveId}`)
+      return saved ? JSON.parse(saved) : {}
+    } catch { return {} }
+  })
   const [timeLeft,   setTimeLeft]   = useState(null)     // secondes
   const [results,    setResults]    = useState(null)     // réponse API soumettre
   const [existingResult, setExistingResult] = useState(null)
@@ -350,6 +357,13 @@ export default function EpreuveSession() {
 
   // ── Chargement épreuve
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`epreuve_draft_${epreuveId}`)
+      if (saved && Object.keys(JSON.parse(saved)).length > 0) {
+        toast('📋 Brouillon restauré — tes réponses précédentes ont été récupérées', { duration: 4000 })
+      }
+    } catch {}
+
     api.get(`/api/examens/${epreuveId}`)
       .then(({ data }) => {
         setEpreuve(data)
@@ -411,6 +425,16 @@ export default function EpreuveSession() {
     return () => clearTimeout(timerRef.current)
   }, [phase, timeLeft])
 
+  // ── Auto-sauvegarde brouillon toutes les 30 secondes pendant l'épreuve
+  useEffect(() => {
+    if (phase !== 'exam') return
+    const key = `epreuve_draft_${epreuveId}`
+    const interval = setInterval(() => {
+      try { localStorage.setItem(key, JSON.stringify(reponses)) } catch {}
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [phase, epreuveId, reponses])
+
   function startExam() {
     if (existingResult) { setResults(existingResult); setPhase('results'); return }
     setPhase('exam')
@@ -433,6 +457,7 @@ export default function EpreuveSession() {
       })
       setResults(data)
       setPhase('results')
+      try { localStorage.removeItem(`epreuve_draft_${epreuveId}`) } catch {}
       if (autoSubmit) toast('⏱ Temps écoulé — copie soumise automatiquement', { icon: '⏱' })
       else toast.success('Copie soumise avec succès !')
     } catch (err) {
@@ -522,6 +547,16 @@ export default function EpreuveSession() {
         <button onClick={() => navigate('/epreuves')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
           <ChevronLeft size={15}/> Mes épreuves
         </button>
+
+        {/* Alisha encourageante avant l'épreuve */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, marginBottom: 18 }}>
+          <Suspense fallback={null}>
+            <Alisha state="excited" size={72} />
+          </Suspense>
+          <div style={{ background: C.surface, border: `1.5px solid ${C.brownPale}`, borderRadius: '14px 14px 14px 0', padding: '10px 16px', fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.5, maxWidth: 260 }}>
+            Tu es prêt·e ? Concentre-toi, je serai là à la fin. Bonne chance ! 💪
+          </div>
+        </div>
 
         <div style={{ background: C.surface, borderRadius: xs ? 18 : 24, padding: xs ? '22px 16px' : '36px 32px', boxShadow: `0 8px 40px ${C.brown}18`, border: `1.5px solid ${C.brownPale}`, animation: 'fadeUp .35s ease both' }}>
 
@@ -683,6 +718,19 @@ export default function EpreuveSession() {
         <button onClick={() => navigate('/epreuves')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, fontSize: 13, fontWeight: 600, marginBottom: 20 }}>
           <ChevronLeft size={15}/> Mes épreuves
         </button>
+
+        {/* Alisha réaction résultats */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, marginBottom: 18 }}>
+          <Suspense fallback={null}>
+            <Alisha state={score >= 14 ? 'celebration' : score >= 10 ? 'correct' : 'confused'} size={72} />
+          </Suspense>
+          <div style={{ background: C.surface, border: `1.5px solid ${mention.color}40`, borderRadius: '14px 14px 14px 0', padding: '10px 16px', fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.5, maxWidth: 260 }}>
+            {score >= 16 ? "Incroyable ! Tu es au top de ta classe ! 🌟"
+              : score >= 14 ? "Très bon résultat — continue comme ça !"
+              : score >= 10 ? "C'est passé ! Continue à travailler les points faibles."
+              : "Ne te décourage pas — analyse les corrections ensemble."}
+          </div>
+        </div>
 
         {/* Score card */}
         <div style={{ background: C.surface, borderRadius: xs ? 18 : 24, padding: xs ? '22px 16px' : '32px', textAlign: 'center', border: `2px solid ${mention.color}40`, marginBottom: 24, boxShadow: `0 4px 24px ${mention.color}18`, animation: 'fadeUp .35s ease both' }}>

@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react'
+const Alisha = lazy(() => import('../../components/Alisha'))
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import api from '../../services/api'
@@ -540,6 +541,8 @@ export default function Session() {
   const [bruitPerturb, setBruitPerturb] = useState(false)
   const [explicationIA, setExplicationIA] = useState(null)
   const [loadingIA,     setLoadingIA]     = useState(false)
+  const [iaHistory,     setIaHistory]     = useState([])   // historique conversationnel tuteur IA par exercice
+  const [ressourceAide, setRessourceAide] = useState(null) // extrait de cours affiché sur BKT < 0.4
   const [ressources, setRessources] = useState([])
   const [phase,      setPhase]      = useState(skipLecon ? 'exercices' : 'lecon')
   const [elapsedMin, setElapsedMin] = useState(0)
@@ -1003,6 +1006,12 @@ export default function Session() {
         toast.success(`+${data.points_gagnes} points !`, { icon: '🎯' })
       } else {
         setStreak(0)
+        // Si BKT indique que la compétence est à renforcer, charger l'extrait de cours
+        if (data.bkt?.niveau === 'a_renforcer') {
+          api.get(`/api/cours/ua/${uaId}/ressource-aide`, {
+            params: { competence: data.bkt.competence }
+          }).then(r => setRessourceAide(r.data)).catch(() => {})
+        }
       }
     } catch { toast.error('Erreur de vérification') }
     finally { setSubmitting(false) }
@@ -1019,7 +1028,7 @@ export default function Session() {
       setTermine(true)
     } else {
       setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
-      setIndices(0); setAdaptation(null); setExplicationIA(null)
+      setIndices(0); setAdaptation(null); setExplicationIA(null); setIaHistory([]); setRessourceAide(null)
       setAnswerFlash(null); setFeedbackMsg('')
       setQuestionTime(Date.now())
     }
@@ -1033,8 +1042,17 @@ export default function Session() {
       const { data } = await api.post('/api/tuteur/expliquer', {
         exercice_id: ex.id, reponse_donnee: reponse || '',
         niveau: user?.niveau_label || 'Première', filiere: user?.filiere_label || 'F6 BIPE',
+        conversation_history: iaHistory,
       })
       setExplicationIA(data.explication_ia)
+      // Conserve l'échange pour les relances suivantes sur le même exercice
+      if (data.assistant_message) {
+        setIaHistory(prev => [
+          ...prev,
+          { role: 'user', content: `J'ai répondu « ${reponse || ''} ». Explique-moi.` },
+          { role: 'assistant', content: data.assistant_message },
+        ])
+      }
     } catch { toast.error('Tuteur IA indisponible') }
     finally { setLoadingIA(false) }
   }
@@ -1226,11 +1244,40 @@ export default function Session() {
   const multiParts       = isMultiBlank ? ex.enonce.split('___') : []
   const multiNbBlanks    = nbBlanksInEnonce
   const MASCOT = {
-
     engagement_eleve:'🦁', engagement_modere:'🐘', engagement_faible:'🐢',
     confusion:'🤔', frustration:'🐆', ennui:'😴', neutre:'🦉', decrochage:'⚠️',
   }
   const mascot = MASCOT[emotion] || '🦉'
+
+  // ── État Alisha mappé sur contexte session ────────────────────
+  const alishaState = answerFlash === 'correct'        ? 'correct'
+    : answerFlash === 'wrong'                           ? 'wrong'
+    : loadingIA                                         ? 'typing'
+    : explicationIA                                     ? 'speaking'
+    : emotion === 'confusion' || emotion === 'decrochage' ? 'confused'
+    : emotion === 'frustration'                         ? 'wrong'
+    : emotion === 'ennui'                               ? 'idle'
+    : emotion === 'engagement_eleve'                    ? 'excited'
+    : resultat                                          ? 'speaking'
+    : 'question'
+
+  const alishaBubble = answerFlash === 'correct'
+    ? 'Excellent ! Continue comme ça !'
+    : answerFlash === 'wrong'
+    ? 'Pas tout à fait — tu vas y arriver !'
+    : loadingIA
+    ? 'Je cherche une explication adaptée…'
+    : explicationIA
+    ? 'Voilà une autre façon de voir les choses.'
+    : emotion === 'confusion'
+    ? 'Tu sembles perdu·e ? Les indices peuvent t\'aider.'
+    : emotion === 'frustration'
+    ? 'Prends une respiration. Tu progresses !'
+    : emotion === 'ennui'
+    ? 'Allez, encore un effort !'
+    : emotion === 'decrochage'
+    ? 'Tu es toujours là ? Fais une petite pause si besoin.'
+    : null
 
   /* ── Panneau IA ─────────────────────────────────────────── */
   const PanneauIA = ({ isOverlay = false }) => (
@@ -1557,13 +1604,31 @@ export default function Session() {
                      : undefined,
             transition: 'box-shadow .3s ease, border-color .3s ease',
           }}>
-            {/* Méta badges + mascotte */}
+            {/* Méta badges + Alisha */}
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-              {/* Mascotte réactive */}
-              <span style={{ fontSize:22, lineHeight:1, animation: answerFlash ? 'popIn .4s ease' : undefined }}
-                title={`État : ${emotion}`}>
-                {answerFlash === 'correct' ? '🎉' : answerFlash === 'wrong' ? '💪' : mascot}
-              </span>
+              {/* Alisha réactive */}
+              <Suspense fallback={<span style={{ fontSize:22 }}>{mascot}</span>}>
+                <div style={{ flexShrink: 0, marginBottom: -4 }}>
+                  <Alisha state={alishaState} size={52} />
+                </div>
+              </Suspense>
+              {/* Bulle contextuelle */}
+              {alishaBubble && (
+                <div style={{
+                  background:    '#FFF7ED',
+                  border:       '1.5px solid #F97316',
+                  borderRadius:  10,
+                  padding:      '5px 11px',
+                  fontSize:      11,
+                  fontWeight:    700,
+                  color:        '#9A3412',
+                  maxWidth:      180,
+                  lineHeight:    1.4,
+                  animation:    'slideDown .25s ease',
+                }}>
+                  {alishaBubble}
+                </div>
+              )}
               {/* Streak badge */}
               {streak >= 2 && !resultat && (
                 <div style={{ display:'flex', alignItems:'center', gap:3, background:'#FEF3C7', borderRadius:20, padding:'2px 9px', border:'1.5px solid #FDE68A', animation:'streakPop .35s cubic-bezier(.22,1,.36,1)' }}>
@@ -1991,6 +2056,37 @@ export default function Session() {
                       </div>
                     )}
 
+                    {/* Extrait de cours Alisha — BKT < 0.4 */}
+                    {ressourceAide && !resultat.correct && (
+                      <div style={{
+                        marginTop: 10, borderRadius: 12, overflow: 'hidden',
+                        border: `1px solid ${C.brownLight}40`, animation: 'slideDown .3s ease'
+                      }}>
+                        <div style={{ background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 16 }}>📖</span>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: 'white', flex: 1 }}>
+                            Révise ce point : {ressourceAide.titre}
+                          </span>
+                          <button onClick={() => setRessourceAide(null)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: 14, padding: 2 }}>✕</button>
+                        </div>
+                        <div style={{ background: C.brownPale, padding: '10px 12px' }}>
+                          <p style={{ margin: '0 0 8px', fontSize: 12, color: C.text, lineHeight: 1.7, fontStyle: 'italic' }}>
+                            {ressourceAide.extrait}
+                          </p>
+                          {ressourceAide.points_cles?.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {ressourceAide.points_cles.map((pt, i) => (
+                                <span key={i} style={{ background: `${C.brown}18`, color: C.brown, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
+                                  {pt}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bouton Tuteur IA */}
                     {!resultat.correct && (
                       <div style={{ marginTop: 12 }}>
@@ -2017,12 +2113,16 @@ export default function Session() {
                             border: `1px solid ${C.gold}40`,
                             animation: 'slideDown .3s ease'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                              <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: `linear-gradient(135deg, ${C.brown}, ${C.gold})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>🧠</div>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: C.brown }}>Tuteur SenSia</span>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 10 }}>
+                              <Suspense fallback={<span style={{ fontSize: 20 }}>🧠</span>}>
+                                <Alisha state="speaking" size={44} />
+                              </Suspense>
+                              <div style={{ flex: 1 }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, color: C.brown, display: 'block' }}>Alisha explique</span>
+                                <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: '4px 0 0' }}>{explicationIA}</p>
+                              </div>
                             </div>
-                            <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: 0 }}>{explicationIA}</p>
-                            <button onClick={() => setExplicationIA(null)} style={{ marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.textSec, textDecoration: 'underline', padding: 0 }}>
+                            <button onClick={() => setExplicationIA(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.textSec, textDecoration: 'underline', padding: 0 }}>
                               Fermer
                             </button>
                           </div>

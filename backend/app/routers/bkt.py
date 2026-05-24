@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 from uuid import UUID
 from datetime import datetime, timezone
 from ..database import get_db
-from ..models.cours import BKTMastery, Exercice, UniteApprentissage
+from ..models.cours import BKTMastery, Exercice, UniteApprentissage, ProgressionApprenant
 from ..models.examen import EpreuveReponse, Epreuve
 from ..models.session import LearningSession
 from ..models.user import User
@@ -17,9 +18,11 @@ router = APIRouter(prefix="/api/bkt", tags=["BKT"])
 
 
 class BKTExerciceUpdate(BaseModel):
-    ua_id: UUID
-    competence: str
-    correct: bool
+    ua_id:          UUID
+    competence:     str
+    correct:        bool
+    exercice_id:    Optional[UUID] = None
+    reponse_donnee: Optional[str]  = None
 
 
 @router.post("/apprenant/{user_id}/update-exercice")
@@ -57,6 +60,60 @@ def update_mastery_exercice(
 
     db.commit()
     db.refresh(mastery)
+
+    # ── Sync ProgressionApprenant ──────────────────────────────────
+    if body.exercice_id:
+        exercice = db.query(Exercice).filter(Exercice.id == body.exercice_id).first()
+        points   = exercice.points if exercice else 10
+
+        prog = db.query(ProgressionApprenant).filter(
+            ProgressionApprenant.user_id     == user_id,
+            ProgressionApprenant.exercice_id == body.exercice_id,
+        ).first()
+        if not prog:
+            prog = ProgressionApprenant(
+                user_id=user_id, ua_id=body.ua_id,
+                exercice_id=body.exercice_id,
+                date_debut=datetime.now(timezone.utc),
+            )
+            db.add(prog)
+        prog.tentatives     = (prog.tentatives or 0) + 1
+        prog.correct        = body.correct
+        prog.reponse_donnee = body.reponse_donnee
+        prog.score          = points if body.correct else 0
+        prog.statut         = "termine" if body.correct else "en_cours"
+        if body.correct:
+            prog.date_fin = datetime.now(timezone.utc)
+        db.commit()
+
+    # ── Notifications badges ───────────────────────────────────────
+    try:
+        from ..services.notification_service import notif_badge, notif_competence_maitrisee, notif_competence_progres
+        nb_total = db.query(BKTMastery).filter(BKTMastery.user_id == user_id).with_entities(
+            BKTMastery.nb_tentatives
+        ).all()
+        total_tentatives = sum(r[0] for r in nb_total)
+        BADGE_TENTATIVES = {1: "premier_pas", 10: "studieux", 50: "assidu", 100: "expert"}
+        if total_tentatives in BADGE_TENTATIVES:
+            notif_badge(db, user_id, BADGE_TENTATIVES[total_tentatives])
+
+        p_new  = mastery.p_mastery
+        p_prev = p_new / (1 + (1 - p_new))  # approximation avant update (non bloquant)
+        if p_new >= 0.95 and p_prev < 0.95:
+            notif_competence_maitrisee(db, user_id, mastery.competence)
+            nb_maitrisees = db.query(BKTMastery).filter(
+                BKTMastery.user_id == user_id, BKTMastery.p_mastery >= 0.95
+            ).count()
+            if nb_maitrisees == 1:
+                notif_badge(db, user_id, "premiere_maitrise")
+            elif nb_maitrisees == 5:
+                notif_badge(db, user_id, "multi_maitre")
+        elif p_new >= 0.70 and mastery.nb_tentatives <= 3:
+            notif_competence_progres(db, user_id, mastery.competence, 70)
+        elif p_new >= 0.40 and mastery.nb_tentatives <= 2:
+            notif_competence_progres(db, user_id, mastery.competence, 40)
+    except Exception:
+        pass
 
     interp = interpret_mastery(mastery.p_mastery)
     return {

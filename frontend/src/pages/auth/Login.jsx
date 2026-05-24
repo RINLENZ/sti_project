@@ -6,6 +6,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import SensiaLogo from '../../components/SensiaLogo'
+import Alisha from '../../components/Alisha'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const C = {
@@ -182,23 +183,15 @@ dispatch(loginSuccess({
         {/* Bande déco top */}
         <div style={{ position:'absolute',top:0,left:28,right:28,height:3,borderRadius:'0 0 3px 3px',background:`linear-gradient(90deg,${C.brown},${C.gold},${C.emerald})` }}/>
 
-        {/* ── Header : onde ECG + SensiaLogo ── */}
-        <div style={{ display:'flex', alignItems:'center', gap:13, marginBottom:24 }}>
-          {/* Carré gradient avec onde ECG */}
-          <div style={{
-            width:50, height:50, borderRadius:14, flexShrink:0,
-            background:`linear-gradient(135deg,${C.brown},${C.gold})`,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            boxShadow:`0 6px 20px ${C.brown}55`,
-            animation:'floatY 4s ease-in-out infinite',
-          }}>
-            <ECGWave width={32} height={20} color="white"/>
+        {/* ── Header : Alisha + SensiaLogo ── */}
+        <div style={{ display:'flex', alignItems:'flex-end', gap:13, marginBottom:24 }}>
+          <div style={{ flexShrink: 0, marginBottom: -4 }}>
+            <Alisha state="idle" size={64} />
           </div>
-          {/* SensiaLogo + sous-titre */}
           <div>
             <SensiaLogo size={28} light={false}/>
             <p style={{ fontSize:12, color:C.textSec, margin:'3px 0 0', fontWeight:500 }}>
-              Connecte-toi pour continuer
+              Content de te revoir ! Connecte-toi.
             </p>
           </div>
         </div>
