@@ -4,6 +4,7 @@
  * Affichage section par section (groupé par h1) avec stagger par bloc.
  */
 import { useState, useEffect } from 'react'
+import { useTheme } from '../styles/theme.jsx'
 
 // ── Parsing ───────────────────────────────────────────────────────
 
@@ -32,16 +33,23 @@ export function groupBySections(blocks) {
 
 // ── Alertes ───────────────────────────────────────────────────────
 
-const ALERT = {
+const ALERT_LIGHT = {
   info:    { bg: '#EFF6FF', border: '#3B82F6', color: '#1E40AF', icon: 'ℹ️' },
   warning: { bg: '#FFF7ED', border: '#F97316', color: '#9A3412', icon: '⚠️' },
   success: { bg: '#ECFDF5', border: '#10B981', color: '#065F46', icon: '✅' },
   danger:  { bg: '#FEF2F2', border: '#EF4444', color: '#991B1B', icon: '🚨' },
 }
+const ALERT_DARK = {
+  info:    { bg: '#1E3A5F', border: '#3B82F6', color: '#93C5FD', icon: 'ℹ️' },
+  warning: { bg: '#78350F', border: '#F97316', color: '#FED7AA', icon: '⚠️' },
+  success: { bg: '#14532D', border: '#10B981', color: '#6EE7B7', icon: '✅' },
+  danger:  { bg: '#7F1D1D', border: '#EF4444', color: '#FCA5A5', icon: '🚨' },
+}
 
 // ── Rendu d'un bloc ───────────────────────────────────────────────
 
 export function Block({ block, C }) {
+  const { isDark } = useTheme()
   switch (block.type) {
 
     case 'titre': {
@@ -113,7 +121,8 @@ export function Block({ block, C }) {
       )
 
     case 'alerte': {
-      const s = ALERT[block.style] || ALERT.info
+      const palette = isDark ? ALERT_DARK : ALERT_LIGHT
+      const s = palette[block.style] || palette.info
       return (
         <div style={{
           background:   s.bg,
@@ -301,6 +310,7 @@ export function ProgressiveContent({ data, onDone, C, xs }) {
       {/* Bouton — n'apparaît qu'une fois tous les blocs visibles */}
       {allVisible && (
         <button
+          data-advance
           onClick={nextSection}
           style={{
             marginTop:    24,
@@ -317,6 +327,7 @@ export function ProgressiveContent({ data, onDone, C, xs }) {
           }}
         >
           {isLastSection ? "J'ai compris →" : 'Suite →'}
+
         </button>
       )}
     </div>

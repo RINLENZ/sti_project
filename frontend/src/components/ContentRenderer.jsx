@@ -1,5 +1,18 @@
 import { useTheme } from '../styles/theme.jsx'
 
+const ALERTE_LIGHT = {
+  info:    { bg: '#EFF6FF', border: '#3B82F6', color: '#1E40AF', emoji: 'ℹ' },
+  success: { bg: '#F0FDF4', border: '#22C55E', color: '#166534', emoji: '✓' },
+  warning: { bg: '#FFFBEB', border: '#F59E0B', color: '#92400E', emoji: '⚠' },
+  danger:  { bg: '#FEF2F2', border: '#EF4444', color: '#991B1B', emoji: '✕' },
+}
+const ALERTE_DARK = {
+  info:    { bg: '#1E3A5F', border: '#3B82F6', color: '#93C5FD', emoji: 'ℹ' },
+  success: { bg: '#14532D', border: '#22C55E', color: '#86EFAC', emoji: '✓' },
+  warning: { bg: '#78350F', border: '#F59E0B', color: '#FCD34D', emoji: '⚠' },
+  danger:  { bg: '#7F1D1D', border: '#EF4444', color: '#FCA5A5', emoji: '✕' },
+}
+
 // ── Inline Markdown : **gras** et `code` ─────────────────────────
 function renderInline(text, C) {
   if (!text) return text
@@ -70,16 +83,8 @@ function MarkdownBlock({ content, C }) {
   return <div>{elements}</div>
 }
 
-// ── Styles alerte ────────────────────────────────────────────────
-const ALERTE = {
-  info:    { bg: '#EFF6FF', border: '#3B82F6', color: '#1E40AF', emoji: 'ℹ' },
-  success: { bg: '#F0FDF4', border: '#22C55E', color: '#166534', emoji: '✓' },
-  warning: { bg: '#FFFBEB', border: '#F59E0B', color: '#92400E', emoji: '⚠' },
-  danger:  { bg: '#FEF2F2', border: '#EF4444', color: '#991B1B', emoji: '✕' },
-}
-
 // ── Rendu d'un bloc ──────────────────────────────────────────────
-function renderBlock(block, i, C) {
+function renderBlock(block, i, C, isDark) {
   if (block.type === 'texte') return (
     <p key={i} style={{ margin: '0 0 12px', whiteSpace: 'pre-wrap', fontSize: 14, color: C.text, lineHeight: 1.8 }}>{block.valeur}</p>
   )
@@ -105,7 +110,8 @@ function renderBlock(block, i, C) {
   )
 
   if (block.type === 'alerte') {
-    const s = ALERTE[block.style] || ALERTE.info
+    const palette = isDark ? ALERTE_DARK : ALERTE_LIGHT
+    const s = palette[block.style] || palette.info
     return (
       <div key={i} style={{ background: s.bg, border: `1.5px solid ${s.border}`, borderRadius: 10, padding: '12px 16px', margin: '12px 0', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ fontSize: 16, flexShrink: 0 }}>{s.emoji}</span>
@@ -195,7 +201,7 @@ function renderBlock(block, i, C) {
 
 // ── Export principal ─────────────────────────────────────────────
 export default function ContentRenderer({ content }) {
-  const { C } = useTheme()
+  const { C, isDark } = useTheme()
   if (!content) return <p style={{ color: C.textSec, fontStyle: 'italic', fontSize: 14 }}>Aucun contenu.</p>
 
   let blocks = null
@@ -207,6 +213,6 @@ export default function ContentRenderer({ content }) {
   if (!blocks) return <MarkdownBlock content={content} C={C} />
 
   return (
-    <div>{blocks.map((block, i) => renderBlock(block, i, C))}</div>
+    <div>{blocks.map((block, i) => renderBlock(block, i, C, isDark))}</div>
   )
 }

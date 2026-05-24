@@ -133,7 +133,7 @@ function Mouth({ state, mouthFrame }) {
   const getMouthShape = () => {
     if (state === 'speaking')                    return lipSyncCycle[mouthFrame % lipSyncCycle.length]
     if (state === 'thinking' || state === 'focus' || state === 'typing') return MOUTH_SHAPES.small
-    if (state === 'confused')                    return MOUTH_SHAPES.empathy
+    if (state === 'confused' || state === 'networkError') return MOUTH_SHAPES.empathy
     if (state === 'sleep')                       return MOUTH_SHAPES.small
     return MOUTH_SHAPES.smile
   }

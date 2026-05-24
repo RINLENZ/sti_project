@@ -38,6 +38,7 @@ const CoursLivePilot   = lazy(() => import('./pages/enseignant/CoursLive'))
 const SalleAttente    = lazy(() => import('./pages/apprenant/SalleAttente'))
 const EleveLive       = lazy(() => import('./pages/apprenant/EleveLive'))
 const TutorielAlisha  = lazy(() => import('./pages/apprenant/TutorielAlisha'))
+const ProgressionMap  = lazy(() => import('./pages/apprenant/ProgressionMap'))
 const DataCollection   = lazy(() => import('./pages/DataCollection'))
 const AudioCollection  = lazy(() => import('./pages/AudioCollection'))
 const Contribuer       = lazy(() => import('./pages/Contribuer'))
@@ -186,6 +187,9 @@ export default function App() {
         }/>
         <Route path="/tutoriel/:uaId" element={
           <ApprenantRoute><TutorielAlisha/></ApprenantRoute>
+        }/>
+        <Route path="/progression" element={
+          <ApprenantRoute><ProgressionMap/></ApprenantRoute>
         }/>
 
         {/* ── Routes super admin ── */}

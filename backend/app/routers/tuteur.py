@@ -6,7 +6,7 @@ Contexte : apprenant africain, lycée camerounais, programme APC.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from ..database import get_db
 from ..models.cours import Exercice, UniteApprentissage
@@ -18,11 +18,17 @@ from ..config import settings
 router = APIRouter(prefix="/api/tuteur", tags=["tuteur-ia"])
 
 
+class MessageItem(BaseModel):
+    role:    str   # "user" | "assistant"
+    content: str
+
+
 class ExplicationRequest(BaseModel):
-    exercice_id:    UUID
-    reponse_donnee: str
-    niveau:         Optional[str] = "Première"
-    filiere:        Optional[str] = "F6 BIPE"
+    exercice_id:          UUID
+    reponse_donnee:       str
+    niveau:               Optional[str]             = "Première"
+    filiere:              Optional[str]             = "F6 BIPE"
+    conversation_history: Optional[List[MessageItem]] = []
 
 
 @router.post("/expliquer")
@@ -43,46 +49,59 @@ def expliquer_exercice(
     if settings.anthropic_api_key:
         try:
             import anthropic
-            prompt = f"""Tu es un tuteur pédagogique bienveillant pour un lycéen camerounais.
+
+            system_prompt = f"""Tu es un tuteur pédagogique bienveillant pour un lycéen camerounais.
 L'élève est en classe de {body.niveau}, filière {body.filiere}.
 
 EXERCICE : {exercice.titre}
 ÉNONCÉ : {exercice.enonce}
 OPTIONS : {', '.join(exercice.options or [])}
 BONNE RÉPONSE : {exercice.reponse_correcte}
-RÉPONSE DE L'ÉLÈVE : {body.reponse_donnee}
 COMPÉTENCE VISÉE : {exercice.competence_evaluee or ''}
 CONTEXTE : {ua.titre if ua else ''}
 
-Génère une explication courte (4-6 phrases) qui :
-1. Explique pourquoi la réponse est incorrecte sans juger
-2. Explique le concept avec un exemple concret camerounais
-3. Montre pourquoi la bonne réponse est correcte
-4. Encourage l'élève
+Tu gardes la mémoire des échanges précédents pour adapter tes explications.
+Réponds toujours en français simple et direct, sans markdown, en 4-6 phrases maximum."""
 
-Réponds en français simple et direct, sans markdown."""
+            # Construit les messages : historique + nouvelle question
+            history = body.conversation_history or []
+            messages = [
+                {"role": m.role, "content": m.content}
+                for m in history[-6:]  # max 3 tours (6 messages)
+            ]
+            messages.append({
+                "role": "user",
+                "content": f"J'ai répondu « {body.reponse_donnee} ». Explique-moi pourquoi c'est {'correct' if body.reponse_donnee == exercice.reponse_correcte else 'incorrect'} et aide-moi à comprendre."
+            })
 
             client  = anthropic.Anthropic(api_key=settings.anthropic_api_key)
             message = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=400,
-                messages=[{"role": "user", "content": prompt}]
+                max_tokens=450,
+                system=system_prompt,
+                messages=messages,
             )
+            explication = message.content[0].text.strip()
             return {
-                "explication_ia":   message.content[0].text.strip(),
+                "explication_ia":   explication,
                 "exercice_titre":   exercice.titre,
                 "reponse_correcte": exercice.reponse_correcte,
-                "source":           "claude"
+                "source":           "claude",
+                # Retourne le nouveau message assistant pour que le frontend
+                # puisse l'ajouter à son historique local
+                "assistant_message": explication,
             }
         except Exception:
             pass  # Fallback vers mode local
 
     # ── Mode dégradé — explication depuis les données de l'exercice ──
+    explication = _explication_locale(exercice, body.reponse_donnee)
     return {
-        "explication_ia":   _explication_locale(exercice, body.reponse_donnee),
-        "exercice_titre":   exercice.titre,
-        "reponse_correcte": exercice.reponse_correcte,
-        "source":           "local"
+        "explication_ia":    explication,
+        "exercice_titre":    exercice.titre,
+        "reponse_correcte":  exercice.reponse_correcte,
+        "source":            "local",
+        "assistant_message": explication,
     }
 
 

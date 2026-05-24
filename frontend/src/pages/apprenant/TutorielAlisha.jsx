@@ -1,7 +1,7 @@
 /**
  * Mode tutoriel guidé par Alisha.
  * Séquence : Intro → Ressources → Exercices d'application → Terminé
- * Aucun enseignant requis. Aucun suivi BKT. Vérification locale uniquement.
+ * BKT mis à jour après chaque réponse. Commandes KWS actives.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -10,6 +10,7 @@ import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import Alisha from '../../components/Alisha'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
+import { useKWSModel } from '../../hooks/useKWSModel'
 import { ProgressiveContent } from '../../components/RichContent'
 import api from '../../services/api'
 
@@ -67,12 +68,16 @@ function alishaMsg(phase, step, feedback) {
   return ''
 }
 
-function alishaStateFor(phase, step, feedback) {
+function alishaStateFor(phase, step, feedback, bktNiveau) {
   if (phase === 'loading')  return 'thinking'
   if (phase === 'done')     return 'celebration'
   if (step?.type === 'intro') return 'welcome'
-  if (phase === 'feedback' && feedback?.correct === true)  return 'correct'
-  if (phase === 'feedback' && feedback?.correct === false) return 'wrong'
+  if (phase === 'feedback' && feedback?.correct === true) {
+    return bktNiveau === 'maitrise' ? 'excited' : 'correct'
+  }
+  if (phase === 'feedback' && feedback?.correct === false) {
+    return bktNiveau === 'a_renforcer' ? 'confused' : 'wrong'
+  }
   if (phase === 'feedback' && feedback?.correct === null)  return 'speaking'
   if (step?.type === 'exercice') return 'question'
   return 'speaking'
@@ -180,15 +185,18 @@ export default function TutorielAlisha() {
   const { xs }    = useBreakpoint()
   const { user }  = useSelector(s => s.auth)
 
-  const [ua,         setUa]        = useState(null)
-  const [sequence,   setSequence]  = useState([])
-  const [stepIdx,    setStepIdx]   = useState(0)
-  const [phase,      setPhase]     = useState('loading')
-  const [feedback,   setFeedback]  = useState(null)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [muted,      setMuted]     = useState(false)
+  const [ua,           setUa]          = useState(null)
+  const [sequence,     setSequence]    = useState([])
+  const [stepIdx,      setStepIdx]     = useState(0)
+  const [phase,        setPhase]       = useState('loading')
+  const [feedback,     setFeedback]    = useState(null)
+  const [isSpeaking,   setIsSpeaking]  = useState(false)
+  const [muted,        setMuted]       = useState(() => localStorage.getItem('alisha_muted') === '1')
+  const [bktResult,    setBktResult]   = useState(null)   // résultat BKT du dernier exercice
+  const [audioActive,  setAudioActive] = useState(false)
 
   const { speak, stop, supported } = useAlishaVoice()
+  const { lastKeyword } = useKWSModel(audioActive)
   const prevMessageRef = useRef(null)
 
   useEffect(() => {
@@ -197,8 +205,10 @@ export default function TutorielAlisha() {
         setUa(r.data)
         setSequence(buildSequence(r.data))
         setPhase('step')
+        setAudioActive(true)   // active le KWS dès le début du tutoriel
       })
       .catch(() => navigate('/dashboard'))
+    return () => setAudioActive(false)
   }, [uaId, user.id, navigate])
 
   const currentStep = sequence[stepIdx] ?? null
@@ -219,14 +229,31 @@ export default function TutorielAlisha() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, stepIdx, muted])
 
-  function handleReponse(reponse) {
+  async function handleReponse(reponse) {
     if (!currentStep || currentStep.type !== 'exercice') return
-    setFeedback(checkReponse(currentStep.data, reponse))
+    const result = checkReponse(currentStep.data, reponse)
+    setFeedback(result)
     setPhase('feedback')
+
+    // Mise à jour BKT si la compétence est renseignée
+    const competence = currentStep.data.competence_evaluee
+    if (competence && result.correct !== null) {
+      try {
+        const bkt = await api.post(`/api/bkt/apprenant/${user.id}/update-exercice`, {
+          ua_id:      uaId,
+          competence: competence,
+          correct:    result.correct,
+        })
+        setBktResult(bkt.data)
+      } catch {
+        // BKT non bloquant
+      }
+    }
   }
 
   function advance() {
     setFeedback(null)
+    setBktResult(null)
     const next = stepIdx + 1
     if (next >= sequence.length) {
       setPhase('done')
@@ -236,12 +263,65 @@ export default function TutorielAlisha() {
     }
   }
 
+  // ── Commandes vocales KWS ──────────────────────────────────────
+  useEffect(() => {
+    if (!lastKeyword) return
+    const { keyword } = lastKeyword
+    if (keyword === 'aide' && phase === 'step' && currentStep?.type === 'exercice') {
+      // Révèle l'indice
+      const details = document.querySelector('details')
+      if (details && !details.open) details.open = true
+      speak('Voici un indice pour t\'aider.', {})
+    } else if (keyword === 'repeter' && supported && !muted) {
+      const msg = alishaMsg(phase, currentStep, feedback)
+      if (msg) speak(msg, { onStart: () => setIsSpeaking(true), onEnd: () => setIsSpeaking(false) })
+    } else if (keyword === 'lentement' && supported && !muted) {
+      stop()
+      const msg = alishaMsg(phase, currentStep, feedback)
+      if (msg) {
+        const utt = new SpeechSynthesisUtterance(msg)
+        utt.lang = 'fr-FR'; utt.rate = 0.65; utt.pitch = 1.1
+        utt.onstart = () => setIsSpeaking(true)
+        utt.onend   = () => setIsSpeaking(false)
+        window.speechSynthesis.speak(utt)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastKeyword])
+
+  // ── Raccourcis clavier ────────────────────────────────────────
+  useEffect(() => {
+    function onKey(e) {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return
+      // Entrée → avancer (sauf si exercice en attente de réponse)
+      if (e.key === 'Enter' && phase === 'feedback') advance()
+      if (e.key === 'Enter' && phase === 'step' && currentStep?.type !== 'exercice') {
+        // Déclenche le bouton visible dans ProgressiveContent via focus simulation
+        const btn = document.querySelector('button[data-advance]')
+        btn?.click()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, stepIdx, currentStep])
+
   const totalSteps  = sequence.length
   const progressPct = totalSteps > 0 ? Math.round((stepIdx / totalSteps) * 100) : 0
+  const bktNiveau   = bktResult?.niveau ?? null
   const alishaState = isSpeaking && phase !== 'feedback'
     ? 'speaking'
-    : alishaStateFor(phase, currentStep, feedback)
+    : alishaStateFor(phase, currentStep, feedback, bktNiveau)
   const message     = alishaMsg(phase, currentStep, feedback)
+
+  function toggleMute() {
+    setMuted(m => {
+      const next = !m
+      localStorage.setItem('alisha_muted', next ? '1' : '0')
+      if (next) stop()
+      return next
+    })
+  }
 
   // ── Écran terminé ─────────────────────────────────────────────
   if (phase === 'done') {
@@ -317,7 +397,7 @@ export default function TutorielAlisha() {
           </span>
           {supported && (
             <button
-              onClick={() => setMuted(m => !m)}
+              onClick={toggleMute}
               title={muted ? 'Activer la voix' : 'Couper la voix'}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -492,6 +572,39 @@ export default function TutorielAlisha() {
                     </p>
                   )}
                 </div>
+                {/* Badge BKT après mise à jour */}
+                {bktResult && (
+                  <div style={{
+                    display:    'flex',
+                    alignItems: 'center',
+                    gap:         8,
+                    padding:    '10px 14px',
+                    borderRadius: 12,
+                    background:  `${bktResult.color}18`,
+                    border:      `1.5px solid ${bktResult.color}44`,
+                  }}>
+                    <span style={{ fontSize: 16 }}>🎯</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 12, fontWeight: 800, color: bktResult.color, margin: 0 }}>
+                        {bktResult.competence}
+                      </p>
+                      <p style={{ fontSize: 11, color: C.textSec, margin: '2px 0 0' }}>
+                        Maîtrise : {bktResult.pourcentage}% — {bktResult.label}
+                      </p>
+                    </div>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: `conic-gradient(${bktResult.color} ${bktResult.pourcentage}%, ${C.border} 0)`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: C.surface,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, fontWeight: 900, color: bktResult.color }}>
+                        {bktResult.pourcentage}%
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <button onClick={advance} style={primaryBtn(C)}>
                   {stepIdx + 1 >= sequence.length ? 'Terminer 🎉' : 'Continuer →'}
                 </button>

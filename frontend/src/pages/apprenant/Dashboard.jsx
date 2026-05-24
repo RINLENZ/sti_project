@@ -1,6 +1,7 @@
 import { useSelector } from 'react-redux'
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import api from '../../services/api'
 import { getCache, setCache } from '../../services/cache'
 import toast from 'react-hot-toast'
@@ -16,6 +17,7 @@ import {
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkDashboard } from '../../components/Skeleton'
+const Alisha = lazy(() => import('../../components/Alisha'))
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
 const BKTLevel = (p, C) => {
@@ -54,67 +56,84 @@ const XPRing = ({ pct, size = 72, stroke = 7 }) => {
   )
 }
 
-/* ── Parcours visuel — strip compact ── */
-const PathVisual = ({ modulesFamilles, progression }) => {
+/* ── BKT level → couleur ── */
+function bktLevelColor(score) {
+  if (score == null || score < 0.25) return '#EF4444'
+  if (score < 0.55) return '#F97316'
+  if (score < 0.80) return '#EAB308'
+  return '#22C55E'
+}
+
+/* ── Mini anneau BKT SVG ── */
+const MiniRing = ({ score, size = 40 }) => {
+  const color = bktLevelColor(score)
+  const pct   = score == null ? 0 : Math.round(score * 100)
+  const r     = (size - 5) / 2
+  const circ  = 2 * Math.PI * r
+  const dash  = (pct / 100) * circ
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#E5E7EB" strokeWidth={4}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={4}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+        style={{ transition: 'stroke-dasharray .7s ease' }}/>
+      <text x={size/2} y={size/2 + 1} textAnchor="middle" dominantBaseline="middle"
+        fill={color} fontSize={9} fontWeight={800}>{pct}%</text>
+    </svg>
+  )
+}
+
+/* ── Widget progression BKT compact ── */
+const ProgressionWidget = ({ modulesFamilles, navigate }) => {
   const { C } = useTheme()
   if (!modulesFamilles.length) return null
 
-  const nodes = modulesFamilles.map(({ module, familles }) => {
-    const totalUA = familles.reduce((a, f) => a + (f.unites || []).length, 0)
-    const doneUA  = familles.reduce((a, f) => a + (f.unites || []).filter(ua => {
-      const ex = (progression?.details || []).filter(d => d.correct && String(d.ua_id) === String(ua.id)).length
-      return ua.nb_exercices > 0 && ex >= ua.nb_exercices
-    }).length, 0)
-    const started = familles.some(f => (f.unites || []).some(ua =>
-      (progression?.details || []).some(d => String(d.ua_id) === String(ua.id))
-    ))
-    const done = doneUA === totalUA && totalUA > 0
-    return { module, done, started }
-  })
+  const allUAs = modulesFamilles.flatMap(({ familles }) =>
+    familles.flatMap(f => f.unites || [])
+  )
+  const topUAs = allUAs
+    .filter(ua => (ua.bkt_score ?? 0) < 0.80)
+    .slice(0, 6)
 
-  const doneCount = nodes.filter(n => n.done).length
+  const total    = allUAs.length
+  const mastered = allUAs.filter(ua => (ua.bkt_score ?? 0) >= 0.80).length
+  const pct      = total > 0 ? Math.round((mastered / total) * 100) : 0
 
   return (
     <div style={{ marginBottom: 14, animation: 'fadeUp .48s ease' }}>
-      {/* Ligne titre + barre */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <TrendingUp size={12} color={C.brown} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec }}>Parcours</span>
-        <span style={{ fontSize: 10, color: C.textMuted }}>{doneCount}/{nodes.length}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec }}>Progression BKT</span>
+        <span style={{ fontSize: 10, color: C.textMuted }}>{mastered}/{total} maîtrisées</span>
         <div style={{ flex: 1, height: 2, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${nodes.length > 0 ? (doneCount / nodes.length) * 100 : 0}%`, background: C.brown, transition: 'width .9s ease' }} />
+          <div style={{ height: '100%', width: `${pct}%`, background: '#22C55E', transition: 'width .9s ease' }}/>
         </div>
+        <button
+          onClick={() => navigate('/progression')}
+          style={{
+            fontSize: 10, fontWeight: 700, color: C.brown,
+            background: C.brownPale, border: 'none', borderRadius: 8,
+            padding: '3px 9px', cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          Voir tout →
+        </button>
       </div>
-      {/* Dots de modules */}
-      <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
-        <div style={{ display: 'flex', alignItems: 'center', minWidth: 'max-content' }}>
-          {nodes.map(({ module, done, started }, i) => (
-            <div key={module.id} style={{ display: 'flex', alignItems: 'center' }}>
-              <div
-                title={module.titre || `Module ${module.numero}`}
-                style={{
-                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                  background: done
-                    ? `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`
-                    : started ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
-                    : C.brownGhost,
-                  border: `2px solid ${done ? C.emeraldDark : started ? C.brown : C.border}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: done || started ? 'white' : C.textMuted,
-                  fontSize: done ? 13 : 11, fontWeight: 800,
-                  boxShadow: done ? `0 2px 8px ${C.emerald}40` : started ? `0 2px 8px ${C.brown}30` : 'none',
-                  cursor: 'default', flexShrink: 0,
-                }}
-              >
-                {done ? '✓' : i + 1}
-              </div>
-              {i < nodes.length - 1 && (
-                <div style={{ width: 16, height: 2, background: done ? C.emerald : C.border, flexShrink: 0 }} />
-              )}
+      {topUAs.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+          {topUAs.map(ua => (
+            <div key={ua.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+              <MiniRing score={ua.bkt_score} size={40}/>
+              <span style={{
+                fontSize: 9, color: C.textMuted, fontWeight: 600,
+                maxWidth: 52, textAlign: 'center', overflow: 'hidden',
+                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }} title={ua.titre}>{ua.titre}</span>
             </div>
           ))}
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -942,29 +961,43 @@ export default function Dashboard() {
       {/* ── Bandeau Alisha — tutoriel guidé ── */}
       <div style={{
         background:    C.surface,
-        borderRadius:   16,
+        borderRadius:   20,
         border:        `1.5px solid ${C.brownPale}`,
-        padding:       xs ? '14px 16px' : '16px 20px',
+        padding:       xs ? '14px 16px' : '18px 20px',
         marginBottom:  xs ? 12 : 16,
         display:       'flex',
         alignItems:    'center',
         gap:            14,
         animation:     'fadeUp .42s ease',
-        boxShadow:     `0 4px 16px ${C.brown}10`,
+        boxShadow:     `0 4px 20px ${C.brown}12`,
+        overflow:      'hidden',
+        position:      'relative',
       }}>
-        {/* Mini Alisha inline (SVG petit = pas de lazy load) */}
-        <div style={{
-          width:           44, height: 44, borderRadius: '50%',
-          background:      `linear-gradient(135deg, ${C.brownDark}, ${C.brownMid})`,
-          display:        'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize:        22, flexShrink: 0,
-        }}>🤖</div>
+        {/* Alisha SVG réel */}
+        <div style={{ flexShrink: 0, marginBottom: -8 }}>
+          <Suspense fallback={<div style={{ width: 62, height: 72 }} />}>
+            <Alisha
+              state={
+                stats && stats.p_mastery_moyen >= 80 ? 'excited' :
+                stats && stats.p_mastery_moyen >= 50 ? 'welcome' :
+                recommandee ? 'question' : 'idle'
+              }
+              size={62}
+            />
+          </Suspense>
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: 0 }}>
-            {recommandee ? `Alisha te propose : ${recommandee.titre?.slice(0, 40)}…` : 'Apprends avec Alisha'}
+          <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: 0, lineHeight: 1.4 }}>
+            {stats && stats.p_mastery_moyen >= 80
+              ? `Incroyable ! Tu maîtrises ${stats.nb_maitrisees} compétence${stats.nb_maitrisees > 1 ? 's' : ''} sur ${stats.nb_competences}.`
+              : recommandee
+              ? `Alisha te propose : ${recommandee.titre?.slice(0, 38)}…`
+              : 'Apprends avec Alisha'}
           </p>
-          <p style={{ fontSize: 11, color: C.textSec, margin: '2px 0 0' }}>
-            Tutoriel interactif pas à pas · Sans enseignant requis
+          <p style={{ fontSize: 11, color: C.textSec, margin: '3px 0 0' }}>
+            {stats && stats.nb_sessions > 0
+              ? `${stats.nb_sessions} session${stats.nb_sessions > 1 ? 's' : ''} · ${stats.taux_reussite}% de réussite`
+              : 'Tutoriel interactif pas à pas · Sans enseignant requis'}
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
@@ -1005,14 +1038,30 @@ export default function Dashboard() {
           >
             🔴 Rejoindre live
           </button>
+          <button
+            onClick={() => navigate('/progression')}
+            style={{
+              padding:      '6px 14px',
+              borderRadius:  10,
+              border:       `1.5px solid ${C.border}`,
+              background:    'none',
+              color:         C.textSec,
+              fontWeight:    600,
+              fontSize:      11,
+              cursor:        'pointer',
+              whiteSpace:   'nowrap',
+            }}
+          >
+            📊 Ma progression
+          </button>
         </div>
       </div>
 
       {/* ── Activité recommandée — action immédiate ── */}
       {RecoCard}
 
-      {/* ── Parcours — strip compact ── */}
-      <PathVisual modulesFamilles={modulesFamilles} progression={progression} />
+      {/* ── Parcours BKT — widget compact ── */}
+      <ProgressionWidget modulesFamilles={modulesFamilles} navigate={navigate} />
 
       {/* ── Titre + tabs matière — pleine largeur ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -1021,6 +1070,17 @@ export default function Dashboard() {
         <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
           {modulesFamilles.length} module{modulesFamilles.length > 1 ? 's' : ''}
         </span>
+        <button
+          onClick={() => navigate('/progression')}
+          style={{
+            marginLeft: 'auto', fontSize: 11, fontWeight: 700,
+            color: C.brown, background: C.brownPale, border: 'none',
+            borderRadius: 10, padding: '5px 12px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}
+        >
+          📊 Carte de progression
+        </button>
       </div>
       {matieres.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>

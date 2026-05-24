@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from uuid import UUID
+from datetime import datetime, timezone
 from ..database import get_db
 from ..models.cours import BKTMastery, Exercice, UniteApprentissage
 from ..models.examen import EpreuveReponse, Epreuve
@@ -12,6 +14,61 @@ from ..services.bkt_service import update_knowledge, interpret_mastery, compute_
 from ..services.bulletin_service import generate_bulletin
 
 router = APIRouter(prefix="/api/bkt", tags=["BKT"])
+
+
+class BKTExerciceUpdate(BaseModel):
+    ua_id: UUID
+    competence: str
+    correct: bool
+
+
+@router.post("/apprenant/{user_id}/update-exercice")
+def update_mastery_exercice(
+    user_id: UUID,
+    body: BKTExerciceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Met à jour le BKT d'une compétence après une réponse dans le tutoriel."""
+    if str(current_user.id) != str(user_id):
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    mastery = db.query(BKTMastery).filter(
+        BKTMastery.user_id == user_id,
+        BKTMastery.competence == body.competence,
+    ).first()
+
+    if not mastery:
+        mastery = BKTMastery(
+            user_id=user_id,
+            ua_id=body.ua_id,
+            competence=body.competence,
+            p_mastery=0.1,
+            nb_tentatives=0,
+            nb_correct=0,
+        )
+        db.add(mastery)
+
+    mastery.p_mastery = update_knowledge(mastery.p_mastery, body.correct)
+    mastery.nb_tentatives += 1
+    if body.correct:
+        mastery.nb_correct += 1
+    mastery.last_updated = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(mastery)
+
+    interp = interpret_mastery(mastery.p_mastery)
+    return {
+        "competence":    mastery.competence,
+        "p_mastery":     mastery.p_mastery,
+        "pourcentage":   round(mastery.p_mastery * 100),
+        "niveau":        interp["niveau"],
+        "label":         interp["label"],
+        "color":         interp["color"],
+        "nb_tentatives": mastery.nb_tentatives,
+        "nb_correct":    mastery.nb_correct,
+    }
 
 
 @router.get("/apprenant/{user_id}")

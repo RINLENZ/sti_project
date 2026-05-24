@@ -283,7 +283,13 @@ def get_programme_par_niveau(
                                 break
  
                     statut = "done" if ua_id_str in completed_ua_ids else ("locked" if is_locked else "available")
- 
+
+                    # BKT moyen sur les compétences de l'UA
+                    ua_bkt = None
+                    if user_id and ua.competences:
+                        scores = [mastery_scores.get(c, 0.0) for c in ua.competences]
+                        ua_bkt = round(sum(scores) / len(scores), 3) if scores else 0.0
+
                     unites_result.append({
                         "id":            ua_id_str,
                         "titre":         ua.titre,
@@ -293,6 +299,7 @@ def get_programme_par_niveau(
                         "nb_exercices":  nb_ex,
                         "statut":        statut,
                         "is_locked":     is_locked,
+                        "bkt_score":     ua_bkt,
                     })
  
                 familles_result.append({
