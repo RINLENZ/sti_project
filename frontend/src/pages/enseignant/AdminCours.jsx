@@ -866,6 +866,7 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     })(),
     explication: initial.explication || '', indice_1: initial.indice_1 || '',
     indice_2: initial.indice_2 || '', competence_evaluee: initial.competence_evaluee || '',
+    kcs: initial.kcs || (initial.competence_evaluee ? [initial.competence_evaluee] : []),
     difficulte: initial.difficulte || 1, points: initial.points || 10,
     ua_id: initial.ua_id || uas[0]?.id || '',
     groupe: initial.groupe ?? null,
@@ -899,7 +900,8 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
     return { titre: form.titre, type: apiType, enonce: apiEnonce, options,
       reponse_correcte: rcTrou, explication: form.explication,
       indice_1: form.indice_1, indice_2: form.indice_2,
-      competence_evaluee: form.competence_evaluee,
+      competence_evaluee: form.kcs[0] || form.competence_evaluee || '',
+      kcs: form.kcs,
       difficulte: parseInt(form.difficulte), points: parseInt(form.points),
       groupe: form.groupe,
       groupe_titre: form.groupe > 0 ? (form.groupe_titre || null) : null,
@@ -946,7 +948,24 @@ function FormExercice({ initial = {}, uas = [], onSubmit, onClose }) {
             <FInput label="Titre de l'exercice" value={form.groupe_titre} onChange={e => set('groupe_titre', e.target.value)}
               placeholder={`ex : Définitions, Classification, Calculs…`} />
           )}
-          <FInput label="Compétence APC ciblée" value={form.competence_evaluee} onChange={e => set('competence_evaluee', e.target.value)} placeholder="ex : Résoudre des problèmes" />
+          <div>
+            <FieldLabel>KCs ciblés <span style={{fontWeight:400,fontSize:10,color:C.textMuted}}>(virgule-séparés · 1er = principal pour BKT)</span></FieldLabel>
+            <input
+              value={form.kcs.join(', ')}
+              onChange={e => set('kcs', e.target.value.split(',').map(s => s.trimStart()).filter(Boolean))}
+              placeholder="ex : resolution_equations, manipulation_algebrique"
+              style={{width:'100%',boxSizing:'border-box',padding:'8px 11px',borderRadius:9,border:`1.5px solid ${C.brownPale}`,background:C.bg,color:C.text,fontSize:13,outline:'none',fontFamily:'inherit'}}
+            />
+            {form.kcs.length > 0 && (
+              <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:5}}>
+                {form.kcs.map((kc,i) => (
+                  <span key={i} style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background: i===0 ? C.brown : C.brownPale,color: i===0 ? 'white' : C.brown}}>
+                    {i===0 && '★ '}{kc}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1361,7 +1380,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                             <TypeBadge type={ex.type} options={ex.options} enonce={ex.enonce} />
                             <span style={{ fontSize: 10, color: C.textSec }}>Diff. {ex.difficulte} · {ex.points} pts</span>
-                            {ex.competence_evaluee && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.competence_evaluee}</span>}
+                            {(ex.kcs?.[0] || ex.competence_evaluee) && <span style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>· {ex.kcs?.[0] || ex.competence_evaluee}{ex.kcs?.length > 1 ? ` +${ex.kcs.length-1}` : ''}</span>}
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>

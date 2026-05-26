@@ -5,10 +5,11 @@
 import { useEffect, useRef } from 'react'
 import { EMOTION_MODEL_READY } from '../config/models'
 
-const IMG_SIZE = 224
-const LABELS   = ['engagement_eleve','engagement_faible','confusion','frustration','ennui','neutre']
-const MEAN     = [0.485, 0.456, 0.406]
-const STD      = [0.229, 0.224, 0.225]
+const IMG_SIZE    = 224
+const TEMPERATURE = 0.8915   // T < 1 → affûte la distribution (modèle légèrement sous-confiant, ECE 0.037)
+const LABELS      = ['engagement_eleve','engagement_faible','confusion','frustration','ennui','neutre']
+const MEAN        = [0.485, 0.456, 0.406]
+const STD         = [0.229, 0.224, 0.225]
 
 let _session  = null
 let _loading  = false
@@ -21,13 +22,13 @@ async function getSession() {
   _loading = true
   console.log('[EmotionONNX] Chargement en cours...')
   try {
-    const ort = (await import('onnxruntime-web')).default ?? (await import('onnxruntime-web'))
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/'
+    const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
+    ort.env.wasm.wasmPaths = '/'
     ort.env.wasm.numThreads = 1
 
     // Timeout 30s pour détecter un blocage WASM silencieux
     const sessionPromise = ort.InferenceSession.create(
-      '/models/emotion_africain.onnx',
+      '/models/model_emotions_v4_final.onnx',
       { executionProviders: ['wasm'] }
     )
     const timeoutPromise = new Promise((_, reject) =>
@@ -65,7 +66,7 @@ export function useEmotionOnnx() {
     const session = await getSession()
     if (!session) return null
     try {
-      const ort = (await import('onnxruntime-web')).default ?? (await import('onnxruntime-web'))
+      const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
 
       const canvas = getCanvas()
       canvas.width  = IMG_SIZE
@@ -88,16 +89,12 @@ export function useEmotionOnnx() {
       const out    = await session.run(feeds)
       const logits = Array.from(out[session.outputNames[0]].data)
 
-      // Correction de biais (domain shift : frustration sur-détectée, engagement_eleve sous-détecté)
-      // Ordre : engagement_eleve, engagement_faible, confusion, frustration, ennui, neutre
-      const BIAS = [0.8, 0.1, 0.1, -1.2, -0.3, 0.3]
-      const corrected = logits.map((v, i) => v + BIAS[i])
-
-      // Softmax
-      const maxL  = Math.max(...corrected)
-      const exps  = corrected.map(x => Math.exp(x - maxL))
-      const sumE  = exps.reduce((a, b) => a + b, 0)
-      const probs = exps.map(x => x / sumE)
+      // Temperature scaling puis softmax (T=0.8915, modèle V4 légèrement sous-confiant)
+      const scaled = logits.map(v => v / TEMPERATURE)
+      const maxL   = Math.max(...scaled)
+      const exps   = scaled.map(x => Math.exp(x - maxL))
+      const sumE   = exps.reduce((a, b) => a + b, 0)
+      const probs  = exps.map(x => x / sumE)
 
       let maxIdx = 0
       probs.forEach((p, i) => { if (p > probs[maxIdx]) maxIdx = i })

@@ -1,8 +1,8 @@
-// Emotion V3 (EfficientNet-B0) : 91.95% val accuracy — activé
+// Emotion V4 (EfficientNet-B0) : 93.3% test accuracy, F1-macro 0.933 — activé
 export const EMOTION_MODEL_READY = true
 
-// KWS V3 (CNN+BiLSTM+Attention) : 57% val accuracy
+// KWS V4 (CNN+BiLSTM+Attention) : 68.8% test accuracy, 7 classes — activé
 export const KWS_MODEL_READY = true
 
-// Alias rétrocompatibilité (Session.jsx utilise MODELS_READY pour KWS)
-export const MODELS_READY = false
+// MODELS_READY active l'audio KWS dans Session.jsx
+export const MODELS_READY = true

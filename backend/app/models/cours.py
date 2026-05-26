@@ -110,7 +110,8 @@ class Exercice(Base):
     explication        = Column(Text, nullable=True)
     indice_1           = Column(Text, nullable=True)
     indice_2           = Column(Text, nullable=True)
-    competence_evaluee = Column(String, nullable=True)
+    competence_evaluee = Column(String, nullable=True)   # deprecated — utiliser kcs
+    kcs                = Column(JSON, nullable=True, default=list)  # liste ordonnée de KCs; kcs[0] = KC principal
     difficulte         = Column(Integer, default=1)
     points             = Column(Integer, default=10)
     ordre              = Column(Integer, default=1)

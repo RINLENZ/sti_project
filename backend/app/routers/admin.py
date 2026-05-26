@@ -3,11 +3,12 @@ from ..models.user import User as UserModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from ..database import get_db
 from ..models.user import User
 from ..models.cours import Matiere, Module, FamilleSituation, UniteApprentissage, Exercice, RessourcePedagogique
+from ..utils import get_kcs
 from ..models.referentiel import Cycle, Ordre, Filiere, Niveau
 
 import sqlalchemy as sa
@@ -162,6 +163,7 @@ class ExerciceCreate(BaseModel):
     indice_1:           Optional[str] = None
     indice_2:           Optional[str] = None
     competence_evaluee: Optional[str] = None
+    kcs:                Optional[List[str]] = None
     difficulte:         Optional[int] = 1
     points:             Optional[int] = 10
     ordre:              Optional[int] = 1
@@ -175,6 +177,7 @@ class ExerciceUpdate(BaseModel):
     indice_1:           Optional[str] = None
     indice_2:           Optional[str] = None
     competence_evaluee: Optional[str] = None
+    kcs:                Optional[List[str]] = None
     difficulte:         Optional[int] = None
     points:             Optional[int] = None
 
@@ -435,6 +438,8 @@ def get_exercices(ua_id: UUID, db: Session = Depends(get_db),
         "indice_1":         e.indice_1,
         "indice_2":         e.indice_2,
         "competence_evaluee": e.competence_evaluee,
+        "kcs":                get_kcs(e),
+        "primary_kc":         get_kcs(e)[0] if get_kcs(e) else None,
         "difficulte":       e.difficulte,
         "points":           e.points,
         "ordre":            e.ordre,
@@ -774,7 +779,8 @@ Réponds UNIQUEMENT avec ce JSON :
       "explication": "…",
       "indice_1": "…",
       "indice_2": "…",
-      "competence_evaluee": "…",
+      "competence_evaluee": "KC principal (string)",
+      "kcs": ["KC principal", "KC secondaire optionnel"],
       "difficulte": 1,
       "points": 5,
       "groupe": 1,
@@ -848,6 +854,7 @@ Réponds UNIQUEMENT avec ce JSON :
                 indice_1=ex.get("indice_1"),
                 indice_2=ex.get("indice_2"),
                 competence_evaluee=ex.get("competence_evaluee"),
+                kcs=ex.get("kcs") or ([ex["competence_evaluee"]] if ex.get("competence_evaluee") else []),
                 difficulte=ex.get("difficulte", 1),
                 points=ex.get("points", 5),
                 groupe=ex.get("groupe"),
@@ -1226,7 +1233,8 @@ Instructions pour le type "{type_ex}" :
       "explication": "Explication pédagogique qui cite le cours",
       "indice_1": "Indice vague pour débloquer l'élève",
       "indice_2": "Indice plus précis",
-      "competence_evaluee": "Compétence exacte parmi celles listées",
+      "competence_evaluee": "KC principal (string court, ex: 'resolution_equations')",
+      "kcs": ["KC principal", "KC secondaire optionnel"],
       "points": {diff_cfg["points"]}
     }}
   ]
@@ -1259,6 +1267,7 @@ Instructions pour le type "{type_ex}" :
             indice_1           = ex_data.get("indice_1", ""),
             indice_2           = ex_data.get("indice_2", ""),
             competence_evaluee = ex_data.get("competence_evaluee", ""),
+            kcs                = ex_data.get("kcs") or ([ex_data["competence_evaluee"]] if ex_data.get("competence_evaluee") else []),
             difficulte         = difficulte,
             points             = int(ex_data.get("points") or diff_cfg["points"]),
             groupe             = difficulte,

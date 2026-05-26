@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_enseignant, require_super_admin
+from ..utils import get_kcs
 from ..models.cours import (
     Matiere, Module, FamilleSituation,
     UniteApprentissage, RessourcePedagogique,
@@ -388,6 +389,8 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db), user_id: Optional[
             "indice_1": e.indice_1,
             "indice_2": e.indice_2,
             "competence_evaluee": e.competence_evaluee,
+            "kcs": get_kcs(e),
+            "primary_kc": get_kcs(e)[0] if get_kcs(e) else None,
             "difficulte": e.difficulte,
             "points": e.points,
             "ordre": e.ordre,
@@ -550,16 +553,19 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
     from ..services.bkt_service import update_knowledge, interpret_mastery
 
     bkt_result = None
-    if exercice.competence_evaluee:
+    primary_kc = get_kcs(exercice)[0] if get_kcs(exercice) else None
+    if primary_kc:
+        # Solution B : BKT classique sur le KC principal uniquement.
+        # Les KCs secondaires (kcs[1:]) sont loggés pour le DKT mais ignorés par BKT.
         mastery = db.query(BKTMastery).filter(
             BKTMastery.user_id == body.user_id,
-            BKTMastery.competence == exercice.competence_evaluee
+            BKTMastery.competence == primary_kc
         ).first()
 
         if not mastery:
             mastery = BKTMastery(
                 user_id=body.user_id,
-                competence=exercice.competence_evaluee,
+                competence=primary_kc,
                 ua_id=exercice.ua_id,
                 p_mastery=0.1,
                 nb_tentatives=0,
@@ -576,11 +582,13 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
         p_avant = mastery.p_mastery
         interp = interpret_mastery(mastery.p_mastery)
         bkt_result = {
-            "competence":  exercice.competence_evaluee,
+            "competence":  primary_kc,
+            "all_kcs":     get_kcs(exercice),
             "p_mastery":   mastery.p_mastery,
             "pourcentage": round(mastery.p_mastery * 100),
             "label":       interp["label"],
-            "color":       interp["color"]
+            "color":       interp["color"],
+            "niveau":      interp["niveau"],
         }
 
         try:
@@ -593,11 +601,11 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             pct_old = round(p_old * 100) if p_old >= 0 else 0
 
             if pct >= 95 and pct_old < 95:
-                notif_competence_maitrisee(db, body.user_id, exercice.competence_evaluee)
+                notif_competence_maitrisee(db, body.user_id, primary_kc)
             elif pct >= 70 and pct_old < 70:
-                notif_competence_progres(db, body.user_id, exercice.competence_evaluee, 70)
+                notif_competence_progres(db, body.user_id, primary_kc, 70)
             elif pct >= 40 and pct_old < 40:
-                notif_competence_progres(db, body.user_id, exercice.competence_evaluee, 40)
+                notif_competence_progres(db, body.user_id, primary_kc, 40)
 
             BADGE_TENTATIVES = {1: "premier_pas", 10: "studieux", 50: "assidu", 100: "expert"}
             for seuil, badge_id in BADGE_TENTATIVES.items():
@@ -1139,6 +1147,8 @@ def list_exercices(db: Session = Depends(get_db), _: User = Depends(require_supe
             "indice_1":           ex.indice_1,
             "indice_2":           ex.indice_2,
             "competence_evaluee": ex.competence_evaluee,
+            "kcs":                get_kcs(ex),
+            "primary_kc":         get_kcs(ex)[0] if get_kcs(ex) else None,
             "difficulte":         ex.difficulte,
             "points":             ex.points,
             "groupe":             ex.groupe,
@@ -1160,6 +1170,7 @@ def create_exercice(body: dict, db: Session = Depends(get_db), _: User = Depends
         indice_1=body.get("indice_1", ""),
         indice_2=body.get("indice_2", ""),
         competence_evaluee=body.get("competence_evaluee", ""),
+        kcs=body.get("kcs") or ([body["competence_evaluee"]] if body.get("competence_evaluee") else []),
         difficulte=int(body.get("difficulte", 1)),
         points=int(body.get("points", 10)),
         groupe=int(body["groupe"]) if body.get("groupe") is not None else None,
@@ -1175,7 +1186,7 @@ def update_exercice(exercice_id: UUID, body: dict, db: Session = Depends(get_db)
     if not ex: raise HTTPException(404, "Exercice introuvable")
     for k in ["titre", "type", "enonce", "options", "reponse_correcte",
               "explication", "indice_1", "indice_2", "competence_evaluee",
-              "difficulte", "points"]:
+              "kcs", "difficulte", "points"]:
         if k in body: setattr(ex, k, body[k])
     if "groupe" in body:
         ex.groupe = int(body["groupe"]) if body["groupe"] is not None else None
@@ -1292,17 +1303,18 @@ def evaluer_reponse_libre(
     prog.date_fin               = datetime.utcnow() if body.correct else None
     db.commit()
 
-    # Mise à jour BKT si compétence renseignée
-    if exercice and exercice.competence_evaluee:
+    # Mise à jour BKT sur KC principal uniquement (Solution B)
+    primary_kc_corr = get_kcs(exercice)[0] if exercice and get_kcs(exercice) else None
+    if primary_kc_corr:
         from ..services.bkt_service import update_knowledge, interpret_mastery
         mastery = db.query(BKTMastery).filter(
             BKTMastery.user_id == prog.user_id,
-            BKTMastery.competence == exercice.competence_evaluee
+            BKTMastery.competence == primary_kc_corr
         ).first()
         if not mastery:
             mastery = BKTMastery(
                 user_id=prog.user_id,
-                competence=exercice.competence_evaluee,
+                competence=primary_kc_corr,
                 ua_id=prog.ua_id,
                 p_mastery=0.1, nb_tentatives=0, nb_correct=0
             )

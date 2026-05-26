@@ -22,6 +22,7 @@ from ..models.session import LearningSession, EngagementAnalysis
 from ..models.interaction import Interaction
 from ..services.bkt_calibration import em_bkt
 from ..services.bkt_service import DEFAULT_PARAMS
+from ..utils import get_kcs
 
 router = APIRouter(prefix="/api/training", tags=["training"])
 
@@ -249,6 +250,129 @@ def export_training_data(
             yield json.dumps(record, ensure_ascii=False) + "\n"
 
     filename = f"sessions_training_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.jsonl"
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  4 — Export JSONL exercice-niveau pour entraînement DKT
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/export-dkt")
+def export_dkt_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Exporte les interactions exercice-niveau pour l'entraînement DKT-E.
+    Chaque ligne = une tentative d'exercice par un apprenant.
+
+    Format : {student_id, exercise_id, primary_kc, all_kcs, correct,
+              first_attempt, difficulty, timestamp, engagement}
+    """
+    _check_admin(current_user)
+
+    # Toutes les progressions avec résultat connu et exercice rattaché
+    progs = (
+        db.query(ProgressionApprenant)
+        .filter(
+            ProgressionApprenant.correct.isnot(None),
+            ProgressionApprenant.exercice_id.isnot(None),
+        )
+        .order_by(ProgressionApprenant.user_id, ProgressionApprenant.date_debut)
+        .all()
+    )
+
+    if not progs:
+        raise HTTPException(404, "Aucune donnée de progression à exporter.")
+
+    # Précharge exercices
+    ex_ids = list({p.exercice_id for p in progs if p.exercice_id})
+    exercices_map = {
+        str(e.id): e
+        for e in db.query(Exercice).filter(Exercice.id.in_(ex_ids)).all()
+    }
+
+    # Précharge interactions type="response" pour time_seconds
+    response_ints = (
+        db.query(Interaction)
+        .filter(Interaction.type == "response")
+        .all()
+    )
+    # Index (user_id, exercise_id) → time_seconds (premier enregistrement)
+    time_map: dict[tuple, int | None] = {}
+    for i in response_ints:
+        if i.data and i.data.get("exercice_id"):
+            key = (str(i.user_id), str(i.data["exercice_id"]))
+            if key not in time_map:
+                time_map[key] = i.data.get("time_seconds")
+
+    # Précharge engagement analyses par session
+    all_eng = db.query(EngagementAnalysis).all()
+    eng_by_session: dict[str, list] = {}
+    for e in all_eng:
+        eng_by_session.setdefault(str(e.session_id), []).append(e)
+
+    # Précharge sessions par (user_id, ua_id) pour retrouver l'engagement par exercice
+    all_sessions = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
+    sessions_by_user_ua: dict[tuple, list] = {}
+    for s in all_sessions:
+        key = (str(s.user_id), str(s.cours_id) if s.cours_id else "")
+        sessions_by_user_ua.setdefault(key, []).append(s)
+
+    def _avg_engagement(progs_item, ex) -> dict:
+        ua_id_str = str(ex.ua_id) if ex.ua_id else ""
+        sess_list = sessions_by_user_ua.get((str(progs_item.user_id), ua_id_str), [])
+        if not sess_list:
+            return {"behavioral": None, "facial": None, "fused": None}
+        # Session la plus proche temporellement
+        t_ref = progs_item.date_debut
+        best = min(
+            sess_list,
+            key=lambda s: abs((s.started_at - t_ref).total_seconds()) if t_ref and s.started_at else float("inf"),
+        )
+        engs = eng_by_session.get(str(best.id), [])
+        if not engs:
+            return {"behavioral": None, "facial": None, "fused": None}
+        behavioral = [e.interaction_score for e in engs if e.interaction_score is not None]
+        facial     = [e.facial_score for e in engs if e.facial_score is not None]
+        fused      = [e.engagement_score for e in engs if e.engagement_score is not None]
+        return {
+            "behavioral": round(sum(behavioral) / len(behavioral), 4) if behavioral else None,
+            "facial":     round(sum(facial) / len(facial), 4)     if facial     else None,
+            "fused":      round(sum(fused) / len(fused), 4)       if fused      else None,
+        }
+
+    def generate():
+        seen: set[tuple] = set()
+        for p in progs:
+            ex = exercices_map.get(str(p.exercice_id))
+            if not ex:
+                continue
+
+            key = (str(p.user_id), str(p.exercice_id))
+            first_attempt = key not in seen
+            seen.add(key)
+
+            kcs = get_kcs(ex)
+            record = {
+                "student_id":    str(p.user_id),
+                "exercise_id":   str(p.exercice_id),
+                "primary_kc":    kcs[0] if kcs else None,
+                "all_kcs":       kcs,
+                "correct":       bool(p.correct),
+                "first_attempt": first_attempt,
+                "time_seconds":  time_map.get(key),
+                "difficulty":    ex.difficulte,
+                "timestamp":     p.date_debut.isoformat() if p.date_debut else None,
+                "engagement":    _avg_engagement(p, ex),
+            }
+            yield json.dumps(record, ensure_ascii=False) + "\n"
+
+    filename = f"dkt_interactions_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.jsonl"
     return StreamingResponse(
         generate(),
         media_type="application/x-ndjson",

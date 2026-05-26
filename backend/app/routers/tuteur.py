@@ -13,6 +13,7 @@ from ..models.cours import Exercice, UniteApprentissage
 from ..models.user import User, TuteurSuivi
 from ..models.referentiel import Niveau
 from ..dependencies import get_current_user
+from ..utils import get_kcs
 from ..config import settings
 
 router = APIRouter(prefix="/api/tuteur", tags=["tuteur-ia"])
@@ -57,7 +58,7 @@ EXERCICE : {exercice.titre}
 ÉNONCÉ : {exercice.enonce}
 OPTIONS : {', '.join(exercice.options or [])}
 BONNE RÉPONSE : {exercice.reponse_correcte}
-COMPÉTENCE VISÉE : {exercice.competence_evaluee or ''}
+COMPÉTENCES VISÉES : {', '.join(get_kcs(exercice)) or ''}
 CONTEXTE : {ua.titre if ua else ''}
 
 Tu gardes la mémoire des échanges précédents pour adapter tes explications.

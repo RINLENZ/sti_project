@@ -1,11 +1,35 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
+import path from 'path'
+
+// Sert les fichiers ort-wasm*.mjs depuis /public/ sans passer par le pipeline
+// de transformation Vite (qui bloque les imports de fichiers /public/).
+const ortWasmPlugin = {
+  name: 'ort-wasm-serve',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (/ort-wasm[^/]*\.mjs/.test(req.url || '')) {
+        const filename = (req.url || '').split('?')[0].replace(/^\//, '')
+        const filePath = path.join(process.cwd(), 'public', filename)
+        if (fs.existsSync(filePath)) {
+          res.setHeader('Content-Type', 'text/javascript')
+          res.setHeader('Cache-Control', 'no-cache')
+          fs.createReadStream(filePath).pipe(res)
+          return
+        }
+      }
+      next()
+    })
+  },
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [
+      ortWasmPlugin,
       react(),
       VitePWA({
         registerType: 'autoUpdate',
@@ -74,6 +98,10 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_API_URL': JSON.stringify(
         env.VITE_API_URL || 'http://localhost:8000'
       ),
+    },
+
+    optimizeDeps: {
+      exclude: ['onnxruntime-web'],
     },
 
     build: {

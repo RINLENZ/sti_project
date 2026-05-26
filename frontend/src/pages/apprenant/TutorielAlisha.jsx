@@ -275,7 +275,7 @@ export default function TutorielAlisha() {
     setFeedback(result)
     setPhase('feedback')
 
-    const competence = currentStep.data.competence_evaluee
+    const competence = currentStep.data.kcs?.[0] || currentStep.data.competence_evaluee
     const exerciceId = currentStep.data.id
 
     // Log interaction réponse

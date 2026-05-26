@@ -566,6 +566,7 @@ export default function Session() {
   const earBufferRef     = useRef([])
   const termineeRef      = useRef(false)
   const cnnEmotionRef    = useRef({ emotion: null, probs: null })  // dernière détection CNN (face-api.js ou ONNX)
+  const triedExercices   = useRef(new Set())                       // first_attempt tracking
 
   // ── Modèles ONNX africains ───────────────────────────────────────
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
@@ -746,7 +747,7 @@ export default function Session() {
     }
     if (!window.FaceMesh || !window.Camera) { toast.error('MediaPipe non disponible'); return }
     try {
-      const fm = new window.FaceMesh({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` })
+      const fm = new window.FaceMesh({ locateFile: f => `/mediapipe/face_mesh/${f}` })
       fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 })
       fm.onResults(onFaceResults)
       faceMeshRef.current = fm
@@ -996,7 +997,27 @@ export default function Session() {
       playFeedback(data.correct)
       setAnswerFlash(data.correct ? 'correct' : 'wrong')
       setTimeout(() => setAnswerFlash(null), 750)
-      await sendEvent('response', { exercice_id: ex.id, correct: data.correct, time_seconds: tempsReponse, emotion })
+      const p = cnnEmotionRef.current?.probs || {}
+      const emotion_probs = {
+        engagement:  p.happy    || 0,
+        neutre:      p.neutral  || 0,
+        ennui:       p.sad      || 0,
+        frustration: (p.angry   || 0) + (p.disgusted  || 0),
+        confusion:   (p.fearful || 0) + (p.surprised  || 0),
+      }
+      const first_attempt = !triedExercices.current.has(ex.id)
+      await sendEvent('response', {
+        exercice_id:   ex.id,
+        correct:       data.correct,
+        time_seconds:  tempsReponse,
+        difficulty:    ex.difficulte,
+        kc_ids:        ex.kcs || [ex.competence_evaluee].filter(Boolean),
+        n_hints_used:  indices,
+        first_attempt,
+        emotion,
+        emotion_probs,
+      })
+      triedExercices.current.add(ex.id)
       if (data.correct) {
         setStreak(s => s + 1)
         if (data.points_gagnes > 0) {
@@ -1639,7 +1660,7 @@ export default function Session() {
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:11, color:C.textSec, fontWeight:600, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   Question {current + 1} sur {exercices.length}
-                  {ex.competence_evaluee && ` · ${ex.competence_evaluee}`}
+                  {(ex.kcs?.[0] || ex.competence_evaluee) && ` · ${ex.kcs?.[0] || ex.competence_evaluee}`}
                 </p>
               </div>
               <span style={{ backgroundColor:ds.bg, color:ds.color, padding:'3px 10px', borderRadius:20, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>

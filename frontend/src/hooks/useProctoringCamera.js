@@ -140,7 +140,7 @@ export default function useProctoringCamera() {
 
     try {
       const fm = new window.FaceMesh({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+        locateFile: f => `/mediapipe/face_mesh/${f}`
       })
       fm.setOptions({
         maxNumFaces: 1, refineLandmarks: true,

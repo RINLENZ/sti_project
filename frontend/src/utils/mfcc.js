@@ -102,7 +102,104 @@ function powerToDb(melSpec) {
   return out
 }
 
-export const MAX_FRAMES_V3 = 100  // longueur fixe pour le modèle V3
+export const MAX_FRAMES_V3 = 100  // longueur fixe pour le modèle V3 KWS (MFCC)
+
+// ══════════════════════════════════════════════════════════════════════════
+//  log-Mel V4 — AudioResNet (n_mels=80, max_len=150, hop_length=160)
+// ══════════════════════════════════════════════════════════════════════════
+
+export const MAX_FRAMES_V4  = 150
+const N_MELS_V4  = 80
+const HOP_V4     = 160
+const FMIN_V4    = 50    // Hz — filtrage des basses fréquences (idem notebook)
+const FMAX_V4    = 8000  // Hz
+
+// Mel filterbank 80 bandes avec fmin=50, fmax=8000 (paramètres du notebook)
+function buildMelFilterbankV4() {
+  const hzToMel = hz => 2595 * Math.log10(1 + hz / 700)
+  const melToHz = mel => 700 * (10 ** (mel / 2595) - 1)
+  const melMin  = hzToMel(FMIN_V4)
+  const melMax  = hzToMel(FMAX_V4)
+  const pts = new Float32Array(N_MELS_V4 + 2)
+  for (let i = 0; i <= N_MELS_V4 + 1; i++)
+    pts[i] = melToHz(melMin + (melMax - melMin) * i / (N_MELS_V4 + 1))
+  const bins = pts.map(f => Math.floor((N_FFT + 1) * f / SR))
+  const fb = Array.from({ length: N_MELS_V4 }, () => new Float32Array(N_FFT / 2 + 1))
+  for (let m = 1; m <= N_MELS_V4; m++) {
+    for (let k = bins[m - 1]; k <= bins[m]; k++)
+      fb[m - 1][k] = (k - bins[m - 1]) / Math.max(1, bins[m] - bins[m - 1])
+    for (let k = bins[m]; k <= bins[m + 1]; k++)
+      fb[m - 1][k] = (bins[m + 1] - k) / Math.max(1, bins[m + 1] - bins[m])
+  }
+  return fb
+}
+const MEL_FB_V4 = buildMelFilterbankV4()
+
+/**
+ * Extrait log-Mel + Δ + ΔΔ — format AudioResNet V2.
+ * Input  : Float32Array PCM mono 16 kHz
+ * Output : Float32Array shape (3, 80, 150) row-major = 36 000 valeurs
+ *          canal 0 = log-mel, canal 1 = Δ, canal 2 = ΔΔ
+ */
+export function computeLogMelFull(pcm) {
+  // Pad/tronque à 1 500 ms (24 000 samples) → ~149 frames, complété à 150
+  const TARGET = Math.round(SR * 1.5)
+  const audio  = new Float32Array(TARGET)
+  audio.set(pcm.slice(0, Math.min(pcm.length, TARGET)))
+
+  // Normalisation amplitude
+  let maxAmp = 0
+  for (let i = 0; i < audio.length; i++) if (Math.abs(audio[i]) > maxAmp) maxAmp = Math.abs(audio[i])
+  if (maxAmp > 0) for (let i = 0; i < audio.length; i++) audio[i] /= maxAmp
+
+  const nFramesRaw = Math.floor((audio.length - N_FFT) / HOP_V4) + 1
+  const nFrames    = Math.min(MAX_FRAMES_V4, nFramesRaw)
+
+  const re  = new Float32Array(N_FFT)
+  const im  = new Float32Array(N_FFT)
+  // Passe 1 : collecter le spectrogramme mel brut (puissance)
+  const melMatrix = new Float32Array(N_MELS_V4 * MAX_FRAMES_V4)
+
+  for (let t = 0; t < nFrames; t++) {
+    const start = t * HOP_V4
+    re.fill(0); im.fill(0)
+    for (let i = 0; i < N_FFT && start + i < audio.length; i++)
+      re[i] = audio[start + i] * HANN[i]
+
+    fftInPlace(re, im)
+
+    const power = new Float32Array(N_FFT / 2 + 1)
+    for (let i = 0; i <= N_FFT / 2; i++)
+      power[i] = (re[i] ** 2 + im[i] ** 2) / N_FFT
+
+    for (let m = 0; m < N_MELS_V4; m++) {
+      let s = 0
+      for (let k = 0; k <= N_FFT / 2; k++) s += MEL_FB_V4[m][k] * power[k]
+      melMatrix[m * MAX_FRAMES_V4 + t] = s
+    }
+  }
+
+  // Passe 2 : power_to_db(ref=global_max, top_db=80) — identique à librosa
+  let globalMax = 0
+  for (let i = 0; i < melMatrix.length; i++) if (melMatrix[i] > globalMax) globalMax = melMatrix[i]
+  const refVal = Math.max(globalMax, 1e-10)
+  const logMel = new Float32Array(N_MELS_V4 * MAX_FRAMES_V4)
+  for (let i = 0; i < melMatrix.length; i++) {
+    const db = 10 * Math.log10(Math.max(melMatrix[i], 1e-10) / refVal)
+    logMel[i] = Math.max(db, -80)  // top_db = 80, plage [-80, 0] dB
+  }
+
+  // Δ et ΔΔ sur les 80 bandes (width=9, même paramètre que V3)
+  const delta1 = computeDelta(logMel, N_MELS_V4, MAX_FRAMES_V4)
+  const delta2 = computeDelta(delta1,  N_MELS_V4, MAX_FRAMES_V4)
+
+  // Empiler 3 canaux : (3, 80, 150) row-major
+  const out = new Float32Array(3 * N_MELS_V4 * MAX_FRAMES_V4)
+  out.set(logMel,  0)
+  out.set(delta1,  N_MELS_V4 * MAX_FRAMES_V4)
+  out.set(delta2,  2 * N_MELS_V4 * MAX_FRAMES_V4)
+  return out  // 36 000 éléments
+}
 
 /**
  * Différentiel MFCC (équivalent librosa.feature.delta, width=9).
