@@ -7,30 +7,64 @@
  * Déployer sur : https://workers.cloudflare.com (plan gratuit)
  */
 
-const BACKEND = 'sti-backend-a2d1.onrender.com'
+const BACKEND        = 'sti-backend-a2d1.onrender.com'
+const ALLOWED_ORIGIN = 'https://sti-projects.netlify.app'
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin':      ALLOWED_ORIGIN,
+  'Access-Control-Allow-Methods':     'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers':     'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Max-Age':           '86400',
+}
+
+function corsResponse(body, init = {}) {
+  const res = new Response(body, init)
+  for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v)
+  return res
+}
+
+function withCors(response) {
+  const cloned = new Response(response.body, {
+    status:     response.status,
+    statusText: response.statusText,
+    headers:    response.headers,
+  })
+  for (const [k, v] of Object.entries(CORS_HEADERS)) cloned.headers.set(k, v)
+  return cloned
+}
 
 export default {
   async fetch(request) {
     const url = new URL(request.url)
+
+    // ── Preflight OPTIONS ────────────────────────────────────────
+    if (request.method === 'OPTIONS') {
+      return corsResponse(null, { status: 204 })
+    }
+
     url.hostname = BACKEND
 
     // ── WebSocket (notifications, chat) ─────────────────────────
     if (request.headers.get('Upgrade') === 'websocket') {
       url.protocol = 'wss:'
 
-      // WebSocketPair : tunnel bidirectionnel persistant
-      const backendResp = await fetch(url.toString(), {
-        headers: {
-          'Upgrade':    'websocket',
-          'Connection': 'Upgrade',
-          'Sec-WebSocket-Version': request.headers.get('Sec-WebSocket-Version') || '13',
-          'Sec-WebSocket-Key':     request.headers.get('Sec-WebSocket-Key') || '',
-          // Transmet le token dans la query string (déjà dans l'URL)
-        },
-      })
+      let backendResp
+      try {
+        backendResp = await fetch(url.toString(), {
+          headers: {
+            'Upgrade':               'websocket',
+            'Connection':            'Upgrade',
+            'Sec-WebSocket-Version': request.headers.get('Sec-WebSocket-Version') || '13',
+            'Sec-WebSocket-Key':     request.headers.get('Sec-WebSocket-Key') || '',
+          },
+        })
+      } catch (e) {
+        return corsResponse(`WebSocket fetch error: ${e.message}`, { status: 502 })
+      }
 
       if (backendResp.status !== 101) {
-        return new Response('WebSocket backend unavailable', { status: 502 })
+        return corsResponse('WebSocket backend unavailable', { status: 502 })
       }
 
       const backendWs = backendResp.webSocket
@@ -39,7 +73,6 @@ export default {
       const [clientWs, serverWs] = Object.values(new WebSocketPair())
       serverWs.accept()
 
-      // Frontend → Backend
       serverWs.addEventListener('message', ({ data }) => {
         try { backendWs.send(data) } catch {}
       })
@@ -47,7 +80,6 @@ export default {
         try { backendWs.close(code, reason) } catch {}
       })
 
-      // Backend → Frontend
       backendWs.addEventListener('message', ({ data }) => {
         try { serverWs.send(data) } catch {}
       })
@@ -62,18 +94,22 @@ export default {
     url.protocol = 'https:'
 
     const proxied = new Request(url.toString(), {
-      method:  request.method,
-      headers: request.headers,
-      body:    ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      method:   request.method,
+      headers:  request.headers,
+      body:     ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       redirect: 'follow',
     })
 
-    const response = await fetch(proxied)
+    let response
+    try {
+      response = await fetch(proxied)
+    } catch (e) {
+      return corsResponse(JSON.stringify({ detail: `Proxy fetch error: ${e.message}` }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
-    return new Response(response.body, {
-      status:     response.status,
-      statusText: response.statusText,
-      headers:    response.headers,
-    })
+    return withCors(response)
   },
 }
