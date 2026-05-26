@@ -51,14 +51,7 @@ export default {
 
       let backendResp
       try {
-        backendResp = await fetch(url.toString(), {
-          headers: {
-            'Upgrade':               'websocket',
-            'Connection':            'Upgrade',
-            'Sec-WebSocket-Version': request.headers.get('Sec-WebSocket-Version') || '13',
-            'Sec-WebSocket-Key':     request.headers.get('Sec-WebSocket-Key') || '',
-          },
-        })
+        backendResp = await fetch(url.toString(), { headers: request.headers })
       } catch (e) {
         return corsResponse(`WebSocket fetch error: ${e.message}`, { status: 502 })
       }
