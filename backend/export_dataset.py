@@ -17,7 +17,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.database import SessionLocal
 from app.models.session import LearningSession
 from app.models.interaction import Interaction
-from app.models.cours import ProgressionApprenant
+from app.models.cours import ProgressionApprenant, Exercice, BKTMastery
+from app.models.session import EngagementAnalysis
+from app.utils import get_kcs
+from datetime import datetime
 
 db_url = os.environ.get("DATABASE_URL", "")
 host = db_url.split("@")[-1].split("/")[0] if "@" in db_url else db_url
@@ -98,4 +101,82 @@ with open("dataset_visuel.csv", "w", newline="") as f:
 
 print("✓ dataset_comportemental.csv créé")
 print("✓ dataset_visuel.csv créé")
+
+# ── Dataset DKT (pour entraînement DKT-E) ────────────────────────
+progs = (
+    db.query(ProgressionApprenant)
+    .filter(
+        ProgressionApprenant.correct.isnot(None),
+        ProgressionApprenant.exercice_id.isnot(None),
+    )
+    .order_by(ProgressionApprenant.user_id, ProgressionApprenant.date_debut)
+    .all()
+)
+
+ex_ids = list({p.exercice_id for p in progs if p.exercice_id})
+exercices_map = {str(e.id): e for e in db.query(Exercice).filter(Exercice.id.in_(ex_ids)).all()}
+
+response_ints = db.query(Interaction).filter(Interaction.type == "response").all()
+time_map = {}
+for i in response_ints:
+    if i.data and i.data.get("exercice_id"):
+        key = (str(i.user_id), str(i.data["exercice_id"]))
+        if key not in time_map:
+            time_map[key] = i.data.get("time_seconds")
+
+all_eng = db.query(EngagementAnalysis).all()
+eng_by_session = {}
+for e in all_eng:
+    eng_by_session.setdefault(str(e.session_id), []).append(e)
+
+all_sess = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
+sessions_by_user_ua = {}
+for s in all_sess:
+    k = (str(s.user_id), str(s.cours_id) if s.cours_id else "")
+    sessions_by_user_ua.setdefault(k, []).append(s)
+
+dkt_count = 0
+with open("dataset_dkt.jsonl", "w") as f:
+    seen = set()
+    for p in progs:
+        ex = exercices_map.get(str(p.exercice_id))
+        if not ex:
+            continue
+        key = (str(p.user_id), str(p.exercice_id))
+        first_attempt = key not in seen
+        seen.add(key)
+
+        ua_id_str = str(ex.ua_id) if ex.ua_id else ""
+        sess_list = sessions_by_user_ua.get((str(p.user_id), ua_id_str), [])
+        engagement = {"behavioral": None, "facial": None, "fused": None}
+        if sess_list and p.date_debut:
+            best = min(sess_list, key=lambda s: abs((s.started_at - p.date_debut).total_seconds()) if s.started_at else float("inf"))
+            engs = eng_by_session.get(str(best.id), [])
+            if engs:
+                b = [e.interaction_score for e in engs if e.interaction_score is not None]
+                fc = [e.facial_score for e in engs if e.facial_score is not None]
+                fu = [e.engagement_score for e in engs if e.engagement_score is not None]
+                engagement = {
+                    "behavioral": round(sum(b)/len(b), 4) if b else None,
+                    "facial":     round(sum(fc)/len(fc), 4) if fc else None,
+                    "fused":      round(sum(fu)/len(fu), 4) if fu else None,
+                }
+
+        kcs = get_kcs(ex)
+        record = {
+            "student_id":    str(p.user_id),
+            "exercise_id":   str(p.exercice_id),
+            "primary_kc":    kcs[0] if kcs else None,
+            "all_kcs":       kcs,
+            "correct":       bool(p.correct),
+            "first_attempt": first_attempt,
+            "time_seconds":  time_map.get(key),
+            "difficulty":    ex.difficulte,
+            "timestamp":     p.date_debut.isoformat() if p.date_debut else None,
+            "engagement":    engagement,
+        }
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        dkt_count += 1
+
+print(f"✓ dataset_dkt.jsonl créé ({dkt_count} interactions)")
 db.close()
