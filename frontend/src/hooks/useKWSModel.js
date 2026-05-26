@@ -29,7 +29,9 @@ async function getKWSSession() {
   _loading = true
   try {
     const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
-    ort.env.wasm.wasmPaths = '/'
+    ort.env.wasm.wasmPaths = import.meta.env.PROD
+      ? 'https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/ort/'
+      : '/'
     ort.env.wasm.numThreads = 1
     _session = await ort.InferenceSession.create(
       '/models/model_audio_v2_final.onnx',

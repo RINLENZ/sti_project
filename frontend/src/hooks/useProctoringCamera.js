@@ -140,7 +140,9 @@ export default function useProctoringCamera() {
 
     try {
       const fm = new window.FaceMesh({
-        locateFile: f => `/mediapipe/face_mesh/${f}`
+        locateFile: f => import.meta.env.PROD
+          ? `https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/mediapipe/${f}`
+          : `/mediapipe/face_mesh/${f}`
       })
       fm.setOptions({
         maxNumFaces: 1, refineLandmarks: true,

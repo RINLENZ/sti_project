@@ -23,7 +23,9 @@ async function getSession() {
   console.log('[EmotionONNX] Chargement en cours...')
   try {
     const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
-    ort.env.wasm.wasmPaths = '/'
+    ort.env.wasm.wasmPaths = import.meta.env.PROD
+      ? 'https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/ort/'
+      : '/'
     ort.env.wasm.numThreads = 1
 
     // Timeout 30s pour détecter un blocage WASM silencieux
