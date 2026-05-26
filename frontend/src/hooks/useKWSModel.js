@@ -87,8 +87,6 @@ async function inferKWS(pcmFloat32, nativeSR) {
     if (LABELS[maxIdx] === 'bruit_silence') return null
     if (probs[maxIdx] < CONFIDENCE_THRESHOLD) return null
 
-    console.log('[KWS-V4]', LABELS[maxIdx], `${(probs[maxIdx]*100).toFixed(1)}%`,
-                `entropie=${entropy.toFixed(3)}`)
     return { keyword: LABELS[maxIdx], confidence: probs[maxIdx] }
   } catch (e) {
     console.warn('[KWS-V4] Inférence échouée :', e.message)

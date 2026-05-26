@@ -84,7 +84,7 @@ function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncide
             <div style={{ height: 5, background: C.brownPale, borderRadius: 5, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: scoreColor, borderRadius: 5, transition: 'width .5s' }}/>
             </div>
-            {(nbIncidents > 0 || tabCountRef.current > 0) && (
+            {(nbIncidents > 0 || tabCount > 0) && (
               <div style={{ margin: '8px 0 0' }}>
                 {nbIncidents > 0 && (
                   <p style={{ margin: '0 0 2px', fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
@@ -92,10 +92,10 @@ function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncide
                     {nbIncidents} absence{nbIncidents > 1 ? 's' : ''} caméra
                   </p>
                 )}
-                {tabCountRef.current > 0 && (
+                {tabCount > 0 && (
                   <p style={{ margin: 0, fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
                     <ShieldAlert size={10} style={{ verticalAlign: 'middle', marginRight: 3 }}/>
-                    {tabCountRef.current} sortie{tabCountRef.current > 1 ? 's' : ''} détectée{tabCountRef.current > 1 ? 's' : ''}
+                    {tabCount} sortie{tabCount > 1 ? 's' : ''} détectée{tabCount > 1 ? 's' : ''}
                   </p>
                 )}
               </div>
@@ -345,7 +345,8 @@ export default function EpreuveSession() {
   const paperInputRef = useRef(null)
 
   const timerRef    = useRef(null)
-  const tabCountRef  = useRef(0)   // nombre de sorties détectées
+  const tabCountRef  = useRef(0)
+  const [tabCount,   setTabCount]   = useState(0)
   const tabLogRef    = useRef([])  // log détaillé [{type:'tab_switch', debut, fin, duree_s}]
   const tabHiddenRef = useRef(null)
 
@@ -406,6 +407,7 @@ export default function EpreuveSession() {
           duree_s,
         })
         tabCountRef.current += 1
+        setTabCount(tabCountRef.current)
         toast('🚨 Sortie détectée — ne quittez pas l\'épreuve !', { duration: 5000 })
       }
     }

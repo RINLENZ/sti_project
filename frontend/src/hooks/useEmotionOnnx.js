@@ -98,7 +98,6 @@ export function useEmotionOnnx() {
 
       let maxIdx = 0
       probs.forEach((p, i) => { if (p > probs[maxIdx]) maxIdx = i })
-      console.log('[ONNX probs]', Object.fromEntries(LABELS.map((l, i) => [l, probs[i].toFixed(3)])))
 
       return {
         emotion:    LABELS[maxIdx],

@@ -18,6 +18,7 @@ import RichText, { RichTextInline } from '../../components/RichText'
 import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
+import { clearCache } from '../../services/cache'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = (s, C) =>
@@ -1046,6 +1047,7 @@ export default function Session() {
         termineeRef.current = true
         api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
       }
+      clearCache('dashboard_' + user.id)
       setTermine(true)
     } else {
       setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)

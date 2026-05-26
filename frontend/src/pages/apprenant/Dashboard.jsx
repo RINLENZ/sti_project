@@ -671,17 +671,18 @@ export default function Dashboard() {
   const [copied,          setCopied]          = useState(false)
 
   const loadModulesPourMatiere = useCallback(async (mat) => {
-    const grouped = []
-    for (const mod of (mat.modules || [])) {
-      const famList = []
-      try {
-        const { data: fam } = await api.get(
-          `/api/cours/modules/${mod.id}/familles?user_id=${user.id}`
-        )
-        famList.push(...fam)
-      } catch {}
-      grouped.push({ module: mod, familles: famList })
-    }
+    const grouped = await Promise.all(
+      (mat.modules || []).map(async (mod) => {
+        try {
+          const { data: fam } = await api.get(
+            `/api/cours/modules/${mod.id}/familles?user_id=${user.id}`
+          )
+          return { module: mod, familles: fam }
+        } catch {
+          return { module: mod, familles: [] }
+        }
+      })
+    )
     setModulesFamilles(grouped)
     return grouped
   }, [user.id])

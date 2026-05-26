@@ -81,7 +81,12 @@ export default class ErrorBoundary extends Component {
             Recharger la page
           </button>
           <button
-            onClick={() => { localStorage.clear(); window.location.href = '/login' }}
+            onClick={() => {
+              Object.keys(localStorage)
+                .filter(k => k.startsWith('sti_'))
+                .forEach(k => localStorage.removeItem(k))
+              window.location.href = '/login'
+            }}
             style={{
               padding: '10px 22px', borderRadius: 10, cursor: 'pointer',
               background: 'none', border: '1.5px solid #C4865A',
