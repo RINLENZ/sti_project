@@ -7,7 +7,7 @@ import { getCache, setCache } from '../../services/cache'
 import toast from 'react-hot-toast'
 import {
   BookOpen, Clock, Target, Award, Flame, Copy, CheckCircle,
-  ChevronRight, Brain, Star, ChevronDown, Lock, PlayCircle,
+  ChevronRight, Brain, ChevronDown, Lock, PlayCircle,
   CheckCircle2, Zap, BarChart2, TrendingUp
 } from 'lucide-react'
 import {
@@ -54,6 +54,14 @@ const XPRing = ({ pct, size = 72, stroke = 7 }) => {
       </div>
     </div>
   )
+}
+
+/* ── Rang apprenant basé sur p_mastery_moyen ── */
+function getRang(pMasteryMoyen) {
+  if (pMasteryMoyen >= 80) return { label: 'Expert',    emoji: '🏆', color: '#F59E0B' }
+  if (pMasteryMoyen >= 50) return { label: 'Avancé',    emoji: '⭐', color: '#10B981' }
+  if (pMasteryMoyen >= 20) return { label: 'Apprenti',  emoji: '📘', color: '#3B82F6' }
+  return                          { label: 'Débutant',   emoji: '🌱', color: '#8B5CF6' }
 }
 
 /* ── BKT level → couleur ── */
@@ -149,36 +157,6 @@ const ProgressBar = ({ value, color, h = 5, bg }) => {
         backgroundColor: col, borderRadius: h, transition: 'width .7s cubic-bezier(.4,0,.2,1)'
       }} />
     </div>
-  )
-}
-
-const StatCard = ({ label, value, subtitle, color, Icon, xs }) => {
-  const { C } = useTheme()
-  return (
-  <div style={{
-    backgroundColor: C.surface, borderRadius: xs ? 12 : 14,
-    padding: xs ? '12px 13px' : '15px 17px',
-    boxShadow: '0 1px 8px rgba(107,58,42,0.07)',
-    border: `1px solid ${C.border}`,
-    display: 'flex', flexDirection: 'column', gap: 3,
-    position: 'relative', overflow: 'hidden',
-  }}>
-    <div style={{
-      position: 'absolute', bottom: -16, right: -16,
-      width: 64, height: 64, borderRadius: '50%',
-      backgroundColor: `${color}10`, pointerEvents: 'none'
-    }} />
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 9, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5 }}>{label}</span>
-      {Icon && (
-        <div style={{ width: 26, height: 26, borderRadius: 7, backgroundColor: `${color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={13} color={color} />
-        </div>
-      )}
-    </div>
-    <span style={{ fontSize: xs ? 19 : 23, fontWeight: 900, color: C.text, lineHeight: 1, letterSpacing: -.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
-    {subtitle && <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</span>}
-  </div>
   )
 }
 
@@ -418,47 +396,76 @@ const buildBadges = stats => [
   { id: 'perseverant',       emoji: '💪', label: 'Persévérant',        unlocked: stats?.nb_sessions >= 20 },
 ]
 
-/* ── Sidebar BKT top 3 ── */
-const SidebarBKT = ({ bktData }) => {
+/* ── Défi du jour (sidebar) ── */
+const DailyChallenge = ({ recommandee, stats, navigate }) => {
   const { C } = useTheme()
-  if (!bktData || !Object.keys(bktData.competences).length) return null
-  const top3 = Object.entries(bktData.competences)
-    .sort((a, b) => b[1].pourcentage - a[1].pourcentage)
-    .slice(0, 3)
+  if (!recommandee) return null
+  const today = new Date().toDateString()
+  const done  = localStorage.getItem(`sti_defi_${today}`) === 'done'
+  const pct   = recommandee.score_bkt != null ? Math.round(recommandee.score_bkt * 100) : 0
+
+  if (done) return (
+    <div style={{ background: C.emeraldPale, borderRadius: 14, padding: '12px 14px', marginBottom: 14, border: `1px solid ${C.emerald}30`, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 20 }}>✅</span>
+      <div>
+        <p style={{ fontSize: 11, fontWeight: 800, color: C.emerald, margin: 0 }}>Défi du jour réussi !</p>
+        <p style={{ fontSize: 10, color: C.textMuted, margin: '2px 0 0' }}>Reviens demain pour un nouveau défi.</p>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{
-      backgroundColor: C.surface, borderRadius: 14,
-      padding: '16px 18px', marginBottom: 14,
-      boxShadow: '0 2px 10px rgba(107,58,42,0.07)',
-      border: `1px solid ${C.border}`
+      background: `linear-gradient(135deg, ${C.brownPale}, ${C.goldPale})`,
+      borderRadius: 14, padding: '13px 14px', marginBottom: 14,
+      border: `1px solid ${C.gold}40`, boxShadow: '0 2px 12px rgba(212,168,83,0.12)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
-        <BarChart2 size={14} color={C.brown} />
-        <h3 style={{ fontSize: 12, fontWeight: 800, color: C.brown, margin: 0 }}>Top compétences</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 14 }}>🎯</span>
+        <h3 style={{ fontSize: 11, fontWeight: 800, color: C.brownMid, margin: 0 }}>Défi du jour</h3>
+        {stats?.streak_jours > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: '#F97316' }}>🔥 ×{stats.streak_jours}</span>
+        )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {top3.map(([comp, val], i) => {
-          const lvl = BKTLevel(val.pourcentage, C)
-          return (
-            <div key={comp}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                  <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 800, flexShrink: 0 }}>#{i + 1}</span>
-                  <span style={{ fontSize: 10, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{comp}</span>
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 800, color: lvl.color, flexShrink: 0 }}>{val.pourcentage}%</span>
-              </div>
-              <ProgressBar value={val.pourcentage} color={lvl.color} h={3} />
-            </div>
-          )
-        })}
+      <p style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: '0 0 3px', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{recommandee.titre}</p>
+      <p style={{ fontSize: 10, color: C.textMuted, margin: '0 0 8px' }}>Maîtrise BKT : {pct}%</p>
+      <button
+        onClick={() => navigate(`/tutoriel/${recommandee.ua_id}`)}
+        style={{
+          width: '100%', padding: '8px', background: `linear-gradient(135deg, ${C.gold}, #D97706)`,
+          color: 'white', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 800, cursor: 'pointer',
+        }}
+      >Relever le défi →</button>
+    </div>
+  )
+}
+
+/* ── Barre progression vers prochain rang ── */
+const RangProgress = ({ stats }) => {
+  const { C } = useTheme()
+  if (!stats) return null
+  const p = stats.p_mastery_moyen
+  const rangs = [
+    { label: 'Débutant', emoji: '🌱', min: 0,  max: 20  },
+    { label: 'Apprenti', emoji: '📘', min: 20, max: 50  },
+    { label: 'Avancé',   emoji: '⭐', min: 50, max: 80  },
+    { label: 'Expert',   emoji: '🏆', min: 80, max: 100 },
+  ]
+  const current  = rangs.find(r => p >= r.min && p < r.max) || rangs[3]
+  const nextRang = rangs[rangs.indexOf(current) + 1]
+  if (!nextRang) return null
+  const pctInRang = Math.round(((p - current.min) / (current.max - current.min)) * 100)
+
+  return (
+    <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: '13px 14px', marginBottom: 14, border: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: C.text }}>{current.emoji} {current.label}</span>
+        <span style={{ fontSize: 10, color: C.textMuted }}>→ {nextRang.emoji} {nextRang.label}</span>
       </div>
-      {bktData.nb_competences_maitrisees > 0 && (
-        <p style={{ fontSize: 10, color: C.emerald, fontWeight: 700, marginTop: 10, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <CheckCircle2 size={11} /> {bktData.nb_competences_maitrisees} compétence(s) maîtrisée(s)
-        </p>
-      )}
+      <ProgressBar value={pctInRang} color={C.brown} h={5} />
+      <p style={{ fontSize: 9, color: C.textMuted, marginTop: 4, marginBottom: 0 }}>
+        {pctInRang}% — encore {current.max - p}% de maîtrise
+      </p>
     </div>
   )
 }
@@ -729,6 +736,25 @@ export default function Dashboard() {
           const { data: st } = await api.get(`/api/bkt/apprenant/${user.id}/stats`)
           statsData = st
           setStats(st)
+          // Détection unlock badge (compare avec localStorage)
+          const storageKey = `sti_badges_${user.id}`
+          const prevUnlocked = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'))
+          const nowUnlocked  = buildBadges(st).filter(b => b.unlocked).map(b => b.id)
+          nowUnlocked.forEach(id => {
+            if (!prevUnlocked.has(id)) {
+              const badge = buildBadges(st).find(b => b.id === id)
+              if (badge) toast(`${badge.emoji} Badge débloqué : ${badge.label} !`, { duration: 4000, icon: '🎉' })
+            }
+          })
+          localStorage.setItem(storageKey, JSON.stringify(nowUnlocked))
+          // Milestone streak
+          const s = st.streak_jours
+          const milestoneKey = `sti_streak_milestone_${user.id}_${s}`
+          if ([3, 7, 14, 30].includes(s) && !localStorage.getItem(milestoneKey)) {
+            const msgs = { 3: '3 jours de suite ! Belle régularité 🔥', 7: '1 semaine consécutive ! Tu es en feu 🔥🔥', 14: '2 semaines ! Tu es inarrêtable 🔥🔥🔥', 30: 'Un mois entier ! Légendaire 🏆' }
+            toast(msgs[s], { duration: 5000, icon: '🔥' })
+            localStorage.setItem(milestoneKey, '1')
+          }
         } catch {}
         try {
           const { data: se } = await api.get(`/api/bkt/apprenant/${user.id}/sessions?limit=8`)
@@ -799,6 +825,16 @@ export default function Dashboard() {
             <span style={{ background: 'rgba(255,255,255,0.18)', padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 700 }}>
               🎓 {user?.niveau_label || 'Niveau non défini'}
             </span>
+            {stats && (() => { const r = getRang(stats.p_mastery_moyen); return (
+              <span style={{ background: 'rgba(255,255,255,0.18)', padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 700 }}>
+                {r.emoji} {r.label}
+              </span>
+            )})()}
+            {stats?.streak_jours > 0 && (
+              <span style={{ background: 'rgba(255,165,0,0.3)', padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 800, color: '#FFD580' }}>
+                🔥 {stats.streak_jours} jour{stats.streak_jours > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
         </div>
 
@@ -849,11 +885,12 @@ export default function Dashboard() {
               { Icon: Target,   val: progression.exercices_reussis,              unit: 'réussis'   },
               { Icon: Brain,    val: bktData?.nb_competences_maitrisees ?? 0,    unit: 'maîtrisés' },
               { Icon: BookOpen, val: totalUA,                                    unit: 'cours'     },
-            ].map(({ Icon, val, unit }) => (
-              <div key={unit} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.13)', borderRadius: 20, padding: '4px 11px' }}>
-                <Icon size={11} color="rgba(255,255,255,0.7)" />
-                <span style={{ fontSize: 12, fontWeight: 800, color: 'white', lineHeight: 1 }}>{val}</span>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{unit}</span>
+              ...(stats?.streak_jours > 1 ? [{ emoji: '🔥', val: stats.streak_jours, unit: 'jours' }] : []),
+            ].map((item) => (
+              <div key={item.unit} style={{ display: 'flex', alignItems: 'center', gap: 5, background: item.emoji ? 'rgba(255,165,0,0.25)' : 'rgba(255,255,255,0.13)', borderRadius: 20, padding: '4px 11px' }}>
+                {item.Icon ? <item.Icon size={11} color="rgba(255,255,255,0.7)" /> : <span style={{ fontSize: 11 }}>{item.emoji}</span>}
+                <span style={{ fontSize: 12, fontWeight: 800, color: 'white', lineHeight: 1 }}>{item.val}</span>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{item.unit}</span>
               </div>
             ))}
           </div>
@@ -862,61 +899,6 @@ export default function Dashboard() {
     </div>
   )
 
-  /* ── STAT CARDS ── */
-  const StatCards = progression && (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: xs ? 'repeat(2, 1fr)' : mobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-      gap: xs ? 7 : mobile ? 9 : 11,
-      marginBottom: xs ? 12 : 18,
-      animation: 'fadeUp .45s ease',
-    }}>
-      <StatCard label="Score"    value={`${progression.score_total}pts`}         subtitle="Points cumulés"                    color={C.brown}      Icon={Award}    xs={xs} />
-      <StatCard label="Réussis"  value={progression.exercices_reussis}            subtitle={`/ ${progression.total_exercices}`} color={C.emerald}   Icon={Target}   xs={xs} />
-      <StatCard label="Maîtrisé" value={bktData?.nb_competences_maitrisees || 0} subtitle="compétences ≥95%"                  color={C.gold}       Icon={Brain}    xs={xs} />
-      <StatCard label="Cours"    value={totalUA}                                  subtitle="unités disponibles"                color={C.brownLight} Icon={BookOpen} xs={xs} />
-    </div>
-  )
-
-  /* ── UA RECOMMANDÉE ── */
-  const RecoCard = recommandee && (
-    <div style={{
-      background: `linear-gradient(135deg, ${C.emeraldPale}, #F0FBF7)`,
-      borderRadius: 13, padding: xs ? '13px' : '14px 18px',
-      marginBottom: xs ? 10 : 14,
-      border: `1.5px solid ${C.emerald}30`,
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-      flexWrap: xs ? 'wrap' : 'nowrap',
-      animation: 'fadeUp .5s ease',
-      boxShadow: `0 4px 16px ${C.emerald}15`,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 12px ${C.emerald}40` }}>
-          <Star size={16} color="white" fill="white" />
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <p style={{ fontSize: 9, fontWeight: 700, color: C.emerald, textTransform: 'uppercase', letterSpacing: .8, marginBottom: 1 }}>Recommandé par l'IA</p>
-          <p style={{ fontSize: xs ? 12 : 13, fontWeight: 800, color: C.text, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {recommandee.titre}
-          </p>
-          <p style={{ fontSize: 10, color: C.textMuted }}>Maîtrise BKT : {Math.round(recommandee.score_bkt * 100)}%</p>
-        </div>
-      </div>
-      <button
-        onClick={() => navigate(`/cours/${recommandee.ua_id}`)}
-        style={{
-          padding: xs ? '8px 14px' : '9px 16px',
-          background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`,
-          color: 'white', border: 'none', borderRadius: 9, fontSize: 11, fontWeight: 800,
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-          boxShadow: `0 4px 14px ${C.emerald}45`,
-          width: xs ? '100%' : 'auto', justifyContent: 'center', flexShrink: 0,
-        }}
-      >
-        Commencer maintenant <ChevronRight size={12} />
-      </button>
-    </div>
-  )
 
   /* ── LISTE MODULES ── */
   const CoursList = (
@@ -943,7 +925,8 @@ export default function Dashboard() {
   /* ── SIDEBAR DESKTOP ── */
   const Sidebar = !mobile && (
     <div style={{ width: 240, flexShrink: 0, minWidth: 0, animation: 'fadeUp .5s ease' }}>
-      <SidebarBKT bktData={bktData} />
+      <DailyChallenge recommandee={recommandee} stats={stats} navigate={navigate} />
+      <RangProgress stats={stats} />
       <NextBadge bktData={bktData} />
       <SidebarBadges stats={stats} />
       <SidebarSessions sessions={sessions} />
@@ -1057,9 +1040,6 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
-
-      {/* ── Activité recommandée — action immédiate ── */}
-      {RecoCard}
 
       {/* ── Parcours BKT — widget compact ── */}
       <ProgressionWidget modulesFamilles={modulesFamilles} navigate={navigate} />

@@ -143,37 +143,51 @@ def get_familles_par_module(
         except (ValueError, AttributeError):
             pass
  
+    # Load all UAs for this module's familles in one query, then pre-load ex counts
+    fam_ids = [fam.id for fam in familles]
+    all_uas = db.query(UniteApprentissage).filter(
+        UniteApprentissage.famille_id.in_(fam_ids),
+        UniteApprentissage.actif == True,
+    ).order_by(UniteApprentissage.famille_id, UniteApprentissage.ordre).all()
+
+    ex_counts_raw = db.query(Exercice.ua_id, sa.func.count(Exercice.id)).filter(
+        Exercice.ua_id.in_([ua.id for ua in all_uas])
+    ).group_by(Exercice.ua_id).all() if all_uas else []
+    ex_counts = {str(uid): cnt for uid, cnt in ex_counts_raw}
+
+    uas_by_fam = {}
+    for ua in all_uas:
+        uas_by_fam.setdefault(str(ua.famille_id), []).append(ua)
+
     result = []
     for i, famille in enumerate(familles):
-        uas = db.query(UniteApprentissage).filter(
-            UniteApprentissage.famille_id == famille.id,
-            UniteApprentissage.actif == True
-        ).order_by(UniteApprentissage.ordre).all()
- 
+        uas = uas_by_fam.get(str(famille.id), [])
+
         unites_data = []
         for j, ua in enumerate(uas):
             ua_id_str = str(ua.id)
- 
-            # ── Logique de prérequis ──────────────────────────────
-            # UA verrouillée si ses prérequis ne sont pas maîtrisés
+
             is_locked = False
             if user_id and ua.prerequis:
-                # prerequis = liste de titres de compétences
                 for prereq in (ua.prerequis or []):
                     score = mastery_scores.get(prereq, 0.0)
-                    if score < 0.4:  # seuil BKT minimum
+                    if score < 0.4:
                         is_locked = True
                         break
- 
-            # Calcul du statut
-            nb_ex = db.query(Exercice).filter(Exercice.ua_id == ua.id).count()
+
+            nb_ex = ex_counts.get(ua_id_str, 0)
             if ua_id_str in completed_ua_ids:
                 statut = "done"
             elif is_locked:
                 statut = "locked"
             else:
                 statut = "available"
- 
+
+            ua_bkt = None
+            if user_id and ua.competences:
+                scores = [mastery_scores.get(c, 0.0) for c in ua.competences]
+                ua_bkt = round(sum(scores) / len(scores), 3) if scores else 0.0
+
             unites_data.append({
                 "id":                 ua_id_str,
                 "titre":              ua.titre,
@@ -185,6 +199,7 @@ def get_familles_par_module(
                 "nb_exercices":       nb_ex,
                 "statut":             statut,
                 "is_locked":          is_locked,
+                "bkt_score":          ua_bkt,
             })
  
         result.append({
@@ -255,6 +270,14 @@ def get_programme_par_niveau(
         except (ValueError, AttributeError):
             pass
  
+    # Pré-charger le nb d'exercices par UA en une seule requête (évite N+1)
+    mod_ids = [mod.id for mat_data in matieres_map.values() for mod in mat_data["modules"]]
+    fam_ids_all = [f.id for f in db.query(FamilleSituation.id).filter(FamilleSituation.module_id.in_(mod_ids)).all()]
+    ex_counts_raw = db.query(Exercice.ua_id, sa.func.count(Exercice.id)).filter(
+        Exercice.ua_id.isnot(None)
+    ).group_by(Exercice.ua_id).all()
+    ex_counts = {str(ua_id): cnt for ua_id, cnt in ex_counts_raw}
+
     result = []
     for mat_id, mat_data in matieres_map.items():
         modules_result = []
@@ -262,18 +285,18 @@ def get_programme_par_niveau(
             familles = db.query(FamilleSituation).filter(
                 FamilleSituation.module_id == mod.id
             ).order_by(FamilleSituation.ordre).all()
- 
+
             familles_result = []
             for fam in familles:
                 uas = db.query(UniteApprentissage).filter(
                     UniteApprentissage.famille_id == fam.id,
                     UniteApprentissage.actif == True
                 ).order_by(UniteApprentissage.ordre).all()
- 
+
                 unites_result = []
                 for ua in uas:
                     ua_id_str = str(ua.id)
-                    nb_ex = db.query(Exercice).filter(Exercice.ua_id == ua.id).count()
+                    nb_ex = ex_counts.get(ua_id_str, 0)
  
                     # Prérequis check
                     is_locked = False

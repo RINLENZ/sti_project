@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import NavRail   from './NavRail'
 import MobileNav from './MobileNav'
 import ParcoursPage from './ParcoursPage'
@@ -9,6 +10,7 @@ export default function AppLayout({ children }) {
   const [activeView, setActiveView] = useState('main') // 'main' | 'parcours'
   const { mobile } = useBreakpoint()
   const { C } = useTheme()
+  const location = useLocation()
 
   return (
     <div style={{
@@ -27,13 +29,17 @@ export default function AppLayout({ children }) {
       )}
 
       {/* ── Zone principale ── */}
-      <main style={{
-        flex:          1,
-        overflowX:     'hidden',
-        minWidth:       0,
-        // Espace pour la barre mobile en bas
-        paddingBottom:  mobile ? 68 : 0,
-      }}>
+      <main
+        key={location.pathname}
+        style={{
+          flex:          1,
+          overflowX:     'hidden',
+          minWidth:       0,
+          paddingBottom:  mobile ? 68 : 0,
+          animation:     'pageFadeIn .22s ease',
+        }}
+      >
+        <style>{`@keyframes pageFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}`}</style>
         {activeView === 'parcours'
           ? <ParcoursPage onBack={() => setActiveView('main')} />
           : children

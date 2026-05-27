@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
+import { getNotifUrl } from '../../utils/notifUrl'
 import SensiaLogo from '../SensiaLogo'
 import { useNotifications } from '../../contexts/NotificationsContext'
 import { getAvatarEmoji } from '../../utils/avatars'
@@ -289,20 +290,6 @@ function Avatar({ user, roleColor, size = 34 }) {
 }
 
 // ─── URL de destination par type de notification ──────────────────────────────
-function getNotifUrl(notif) {
-  switch (notif.type) {
-    case 'badge_debloque':       return '/profil'
-    case 'competence_maitrisee': return '/dashboard'
-    case 'competence_progres':   return '/dashboard'
-    case 'session_terminee':     return '/dashboard'
-    case 'enseignant_lie':       return '/profil'
-    case 'apprenant_lie':        return '/prof'
-    case 'apprenant_session':    return '/prof'
-    case 'apprenant_decrocheur': return '/prof'
-    default:                     return null
-  }
-}
-
 // ─── Panel notifications ───────────────────────────────────────────────────────
 function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, anchorRect }) {
   const { C } = useTheme()
@@ -494,7 +481,6 @@ export default function NavRail({ activeView, onViewChange }) {
         { path: '/prof/examens', label: 'Épreuves IA',          icon: FileText       },
         { path: '/chat',         label: 'Messages',             icon: MessageCircle  },
         { path: '/profil',       label: 'Mon profil',            icon: UserCircle     },
-        { path: '/contribuer',   label: "Contribuer à l'IA",    icon: FlaskConical   },
       ],
     },
     apprenant: {
@@ -503,7 +489,6 @@ export default function NavRail({ activeView, onViewChange }) {
         { path: '/epreuves',   label: 'Mes épreuves',      icon: ClipboardList   },
         { path: '/chat',       label: 'Messages',          icon: MessageCircle   },
         { path: '/profil',     label: 'Mon profil',         icon: UserCircle      },
-        { path: '/contribuer', label: "Contribuer à l'IA", icon: FlaskConical    },
       ],
     },
   }

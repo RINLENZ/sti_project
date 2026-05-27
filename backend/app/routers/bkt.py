@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from ..database import get_db
 from ..models.cours import BKTMastery, Exercice, UniteApprentissage, ProgressionApprenant
 from ..models.examen import EpreuveReponse, Epreuve
@@ -187,6 +187,20 @@ def get_stats_apprenant(
     scores_valides = [s.score_final for s in sessions if s.score_final is not None]
     score_moyen    = (sum(scores_valides) / len(scores_valides)) if scores_valides else 0
 
+    # Streak : jours consécutifs avec au moins une session (jusqu'à aujourd'hui)
+    session_dates = sorted({
+        s.ended_at.date() if s.ended_at.tzinfo is None else s.ended_at.astimezone().date()
+        for s in sessions if s.ended_at
+    }, reverse=True)
+    streak = 0
+    expected = date.today()
+    for d in session_dates:
+        if d == expected:
+            streak += 1
+            expected -= timedelta(days=1)
+        elif d < expected:
+            break
+
     return {
         "nb_competences":       nb_competences,
         "nb_maitrisees":        nb_maitrisees,
@@ -197,6 +211,7 @@ def get_stats_apprenant(
         "nb_sessions":          nb_sessions,
         "duree_totale_minutes": round(duree_totale / 60),
         "score_moyen":          round(score_moyen * 100),
+        "streak_jours":         streak,
     }
 
 
@@ -233,8 +248,8 @@ def get_sessions_apprenant(
     return [
         {
             "id":              str(s.id),
-            "cours_id":        s.cours_id,
-            "cours_titre":     uas.get(s.cours_id, "Cours inconnu"),
+            "cours_id":        str(s.cours_id) if s.cours_id else None,
+            "cours_titre":     uas.get(str(s.cours_id), "Cours inconnu") if s.cours_id else "Cours inconnu",
             "started_at":      s.started_at.isoformat() if s.started_at else None,
             "ended_at":        s.ended_at.isoformat()   if s.ended_at   else None,
             "duree_secondes":  s.duree_secondes,

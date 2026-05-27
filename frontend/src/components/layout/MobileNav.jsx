@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { radius, shadow, motion, space, type, weight, z } from '../../design-system/tokens'
+import { getNotifUrl } from '../../utils/notifUrl'
 import SensiaLogo from '../SensiaLogo'
 import { useNotifications } from '../../contexts/NotificationsContext'
 import { getAvatarEmoji } from '../../utils/avatars'
@@ -158,20 +159,6 @@ function SheetLink({ icon: Icon, label, active, badge, onClick }) {
 }
 
 // ─── URL de destination par type de notification (dupliqué de NavRail) ─────────
-function getNotifUrl(notif) {
-  switch (notif.type) {
-    case 'badge_debloque':       return '/profil'
-    case 'competence_maitrisee': return '/dashboard'
-    case 'competence_progres':   return '/dashboard'
-    case 'session_terminee':     return '/dashboard'
-    case 'enseignant_lie':       return '/profil'
-    case 'apprenant_lie':        return '/prof'
-    case 'apprenant_session':    return '/prof'
-    case 'apprenant_decrocheur': return '/prof'
-    default:                     return null
-  }
-}
-
 // ─── Bottom Sheet ──────────────────────────────────────────────────────────────
 function BottomSheet({ open, onClose, user, activeView, onViewChange, epBadge, nbNonLues, notifications, onMarkRead, onMarkAllRead }) {
   const { C, isDark, toggleTheme } = useTheme()

@@ -142,7 +142,7 @@ export default function ProgressionMap() {
   useEffect(() => {
     if (!user?.id) return
     api.get(`/api/cours/ua/recommandee/${user.id}`)
-      .then(r => setRecommandee(r.data || null))
+      .then(r => setRecommandee(r.data?.recommandee || null))
       .catch(() => {})
   }, [user?.id])
 

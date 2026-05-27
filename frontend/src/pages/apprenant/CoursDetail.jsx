@@ -229,19 +229,29 @@ export default function CoursDetail() {
             </div>
 
             {/* CTA hero */}
-            <button onClick={() => navigate(`/session/${uaId}`)} style={{
-              background: 'white', border: 'none', borderRadius: 14,
-              padding: isMobile ? '13px 20px' : '14px 28px',
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: isMobile ? 14 : 15, fontWeight: 800, color: C.brown,
-              boxShadow: '0 4px 20px rgba(0,0,0,.2)',
-              width: isMobile ? '100%' : 'auto',
-              justifyContent: isMobile ? 'center' : 'flex-start',
-              minHeight: 44
-            }}>
-              <Play size={15} fill={C.brown}/> Commencer les exercices
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: isMobile ? '100%' : 'auto' }}>
+              <button onClick={() => { navigator.vibrate?.(30); navigate(`/tutoriel/${uaId}`) }} style={{
+                background: 'white', border: 'none', borderRadius: 14,
+                padding: isMobile ? '13px 20px' : '14px 28px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: isMobile ? 14 : 15, fontWeight: 800, color: C.brown,
+                boxShadow: '0 4px 20px rgba(0,0,0,.2)',
+                width: '100%', justifyContent: 'center', minHeight: 44,
+              }}>
+                🤖 Démarrer avec Alisha
+              </button>
+              <button onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}`) }} style={{
+                background: 'rgba(255,255,255,.15)', border: '1.5px solid rgba(255,255,255,.4)',
+                borderRadius: 12, padding: '9px 20px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.9)',
+                width: '100%', justifyContent: 'center', minHeight: 40,
+              }}>
+                <Play size={12} fill="rgba(255,255,255,.9)"/> Exercices seuls
+              </button>
+            </div>
           </div>
         </div>
       </div>

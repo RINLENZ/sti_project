@@ -104,7 +104,7 @@ function ExerciceStep({ exercice, onReponse, C }) {
         {choix.map((opt, i) => (
           <button
             key={i}
-            onClick={() => { setSelected(opt); onReponse(opt) }}
+            onClick={() => { navigator.vibrate?.(25); setSelected(opt); onReponse(opt) }}
             style={{
               padding:      '15px 20px',
               borderRadius:  14,
@@ -198,6 +198,7 @@ export default function TutorielAlisha() {
   const [isSpeaking,     setIsSpeaking]   = useState(false)
   const [muted,          setMuted]        = useState(() => localStorage.getItem('alisha_muted') === '1')
   const [bktResult,      setBktResult]    = useState(null)
+  const [finalBktResult, setFinalBktResult] = useState(null)
   const [audioActive,    setAudioActive]  = useState(false)
   const [ressourceAide,  setRessourceAide] = useState(null)
   const [badgeNotif,     setBadgeNotif]   = useState(null)  // { titre, message, emoji }
@@ -336,13 +337,16 @@ export default function TutorielAlisha() {
   }
 
   function advance() {
+    navigator.vibrate?.(20)
     setFeedback(null)
+    if (bktResult) setFinalBktResult(bktResult)
     setBktResult(null)
     setRessourceAide(null)
     stepStartRef.current = Date.now()
     const next = stepIdx + 1
     if (next >= sequence.length) {
       setPhase('done')
+      localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
       // Clôture la session avec le score final
       if (sessionIdRef.current) {
         const nbEx = sequence.filter(s => s.type === 'exercice').length
@@ -457,6 +461,26 @@ export default function TutorielAlisha() {
           </h1>
           <p style={{ fontSize: 15, color: C.textSec, margin: 0 }}>{ua?.titre}</p>
         </div>
+
+        {/* ── Score résumé ── */}
+        {nbExercices > 0 && (
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 14, padding: '12px 20px', textAlign: 'center', minWidth: 100 }}>
+              <p style={{ fontSize: 24, fontWeight: 900, color: C.emerald, margin: '0 0 2px' }}>
+                {scoreCorrects}/{nbExercices}
+              </p>
+              <p style={{ fontSize: 11, color: C.textMuted, margin: 0, fontWeight: 600 }}>bonnes réponses</p>
+            </div>
+            {finalBktResult && (
+              <div style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 14, padding: '12px 20px', textAlign: 'center', minWidth: 100 }}>
+                <p style={{ fontSize: 24, fontWeight: 900, color: C.brown, margin: '0 0 2px' }}>
+                  {finalBktResult.pourcentage}%
+                </p>
+                <p style={{ fontSize: 11, color: C.textMuted, margin: 0, fontWeight: 600 }}>maîtrise BKT</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Choix : session complète ou arrêter ── */}
         <div style={{

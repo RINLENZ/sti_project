@@ -19,6 +19,7 @@ import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 import { clearCache } from '../../services/cache'
+import useAlishaVoice from '../../hooks/useAlishaVoice'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = (s, C) =>
@@ -195,109 +196,32 @@ const Confetti = () => (
 )
 
 /* ── Bottom sheet caméra/micro mobile ────────────────────────── */
-const CameraBanner = ({ onActivateBoth, onActivateCamera, onActivateAudio, onDismiss }) => {
+const CameraChip = ({ onActivate, onDismiss }) => {
   const { C } = useTheme()
   return (
-    <>
-      {/* Overlay */}
-      <div onClick={onDismiss} style={{
-        position: 'fixed', inset: 0, zIndex: 299,
-        background: 'rgba(0,0,0,0.35)', animation: 'fadeIn .25s ease'
-      }}/>
-
-      {/* Sheet */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 300,
-        backgroundColor: C.surface,
-        borderRadius: '22px 22px 0 0',
-        boxShadow: '0 -8px 40px rgba(107,58,42,0.20)',
-        padding: '12px 20px 28px',
-        animation: 'slideUp .38s cubic-bezier(.22,1,.36,1)'
-      }}>
-        {/* Handle */}
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: C.brownPale, margin: '0 auto 18px' }}/>
-
-        {/* En-tête */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-          <div style={{
-            width: 50, height: 50, borderRadius: 14, flexShrink: 0,
-            background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: `0 4px 16px ${C.brown}40`
-          }}>
-            <Camera size={22} color="white"/>
-          </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 15, fontWeight: 900, color: C.text, margin: '0 0 5px' }}>
-              Analyse IA en temps réel
-            </p>
-            <p style={{ fontSize: 12, color: C.textSec, margin: 0, lineHeight: 1.55 }}>
-              SenSia adapte les exercices à ton niveau d'attention grâce à la caméra et au micro.
-            </p>
-          </div>
-          <button onClick={onDismiss} style={{
-            width: 32, height: 32, borderRadius: 10, background: C.brownPale,
-            border: 'none', cursor: 'pointer', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0
-          }}>
-            <X size={14} color={C.textSec}/>
-          </button>
-        </div>
-
-        {/* Badge confidentialité */}
-        <div style={{
-          background: C.emeraldPale, borderRadius: 10, padding: '9px 13px',
-          marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8,
-          border: `1px solid ${C.emerald}20`
-        }}>
-          <span style={{ fontSize: 14, flexShrink: 0 }}>🔒</span>
-          <p style={{ fontSize: 11, color: C.emerald, fontWeight: 700, margin: 0, lineHeight: 1.4 }}>
-            Analyse locale — aucune image ni voix envoyée sur internet
-          </p>
-        </div>
-
-        {/* CTA principal */}
-        <button onClick={onActivateBoth} style={{
-          width: '100%', padding: '14px',
-          background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-          color: 'white', border: 'none', borderRadius: 14,
-          fontSize: 14, fontWeight: 800, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          marginBottom: 10, boxShadow: `0 4px 18px ${C.brown}35`, minHeight: 52
-        }}>
-          <Camera size={15}/><Mic size={15}/> Caméra + micro — recommandé
-        </button>
-
-        {/* Options secondaires */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          <button onClick={onActivateCamera} style={{
-            padding: '11px 8px', background: C.brownPale,
-            color: C.brown, border: `1.5px solid ${C.brownLight}40`,
-            borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44
-          }}>
-            <Camera size={13}/> Caméra seule
-          </button>
-          <button onClick={onActivateAudio} style={{
-            padding: '11px 8px', background: C.brownPale,
-            color: C.brown, border: `1.5px solid ${C.brownLight}40`,
-            borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44
-          }}>
-            <Mic size={13}/> Micro seul
-          </button>
-        </div>
-
-        {/* Lien skip */}
-        <button onClick={onDismiss} style={{
-          width: '100%', padding: '8px', background: 'none',
-          border: 'none', cursor: 'pointer', fontSize: 12,
-          color: C.textSec, fontWeight: 600
-        }}>
-          Continuer sans analyse IA
-        </button>
-      </div>
-    </>
+    <div style={{
+      position: 'fixed', bottom: 76, left: 12, right: 12, zIndex: 200,
+      background: C.surface, borderRadius: 14,
+      padding: '10px 12px',
+      boxShadow: '0 4px 20px rgba(107,58,42,0.18)',
+      border: `1px solid ${C.brownPale}`,
+      display: 'flex', alignItems: 'center', gap: 8,
+      animation: 'slideUp .3s ease'
+    }}>
+      <Camera size={15} color={C.brown} style={{ flexShrink: 0 }}/>
+      <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: C.text }}>
+        Activer l'analyse IA ?
+      </span>
+      <button onClick={onActivate} style={{
+        padding: '6px 12px', background: C.brown, color: 'white',
+        border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+      }}>Oui</button>
+      <button onClick={onDismiss} style={{
+        width: 26, height: 26, background: C.brownPale, border: 'none',
+        borderRadius: 7, cursor: 'pointer', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', flexShrink: 0
+      }}><X size={12} color={C.textSec}/></button>
+    </div>
   )
 }
 
@@ -425,7 +349,7 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
             </button>
           ) : (
             <button onClick={() => { logAndGo(idx); onStart() }} style={{ flex: 1, padding: '14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 20px ${C.emerald}40` }}>
-              ✅ J'ai compris — Commencer les exercices !
+              Commencer →
             </button>
           )}
         </div>
@@ -572,6 +496,7 @@ export default function Session() {
   // ── Modèles ONNX africains ───────────────────────────────────────
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
   const { lastKeyword }                 = useKWSModel(audioActive)
+  const { speak: alishaSpeak }          = useAlishaVoice()
   const faceApiIntervalRef = useRef(null)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
@@ -724,10 +649,15 @@ export default function Session() {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [sendEvent])
 
-  // Score count-up animation when session ends
+  // Score count-up animation + Alisha speech when session ends
   useEffect(() => {
     if (!termine) return
     const pct = scores.length > 0 ? Math.round(scores.filter(s => s > 0).length / scores.length * 100) : 0
+    const finMsg = pct >= 90 ? 'Incroyable ! Tu as presque tout réussi !'
+      : pct >= 70 ? 'Très bien joué ! Tu progresses vraiment.'
+      : pct >= 50 ? 'Bien essayé. Continue, tu vas y arriver !'
+      : 'Chaque tentative te rapproche du succès !'
+    setTimeout(() => alishaSpeak(finMsg), 600)
     let startTs = null
     const anim = (ts) => {
       if (!startTs) startTs = ts
@@ -748,7 +678,9 @@ export default function Session() {
     }
     if (!window.FaceMesh || !window.Camera) { toast.error('MediaPipe non disponible'); return }
     try {
-      const fm = new window.FaceMesh({ locateFile: f => `/mediapipe/face_mesh/${f}` })
+      const fm = new window.FaceMesh({ locateFile: f => import.meta.env.PROD
+        ? `https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/mediapipe/${f}`
+        : `/mediapipe/face_mesh/${f}` })
       fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 })
       fm.onResults(onFaceResults)
       faceMeshRef.current = fm
@@ -997,6 +929,7 @@ export default function Session() {
       setScores(prev => [...prev, data.points_gagnes])
       playFeedback(data.correct)
       setAnswerFlash(data.correct ? 'correct' : 'wrong')
+      alishaSpeak(data.correct ? 'Excellent ! Continue comme ça !' : 'Pas tout à fait — tu vas y arriver !')
       setTimeout(() => setAnswerFlash(null), 750)
       const p = cnnEmotionRef.current?.probs || {}
       const emotion_probs = {
@@ -1040,6 +973,7 @@ export default function Session() {
   }
 
   function suivant() {
+    navigator.vibrate?.(30)
     if (current + 1 >= exercices.length) {
       const r = scores.filter(s => s > 0).length
       if (exercices.length > 0 && Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
@@ -1048,6 +982,8 @@ export default function Session() {
         api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
       }
       clearCache('dashboard_' + user.id)
+      // Marque le défi du jour comme accompli
+      localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
       setTermine(true)
     } else {
       setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
@@ -1126,6 +1062,13 @@ export default function Session() {
 
           {/* ── Carte principale ── */}
           <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? '24px 20px' : '36px 40px', boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, textAlign: 'center', marginBottom: 14 }}>
+
+            {/* Alisha fin de session */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, animation: 'trophyPop .6s ease .1s both' }}>
+              <Suspense fallback={<div style={{ width: 60, height: 70 }} />}>
+                <Alisha state={pct >= 70 ? 'excited' : pct >= 50 ? 'welcome' : 'idle'} size={60} />
+              </Suspense>
+            </div>
 
             {/* Trophée animé */}
             <div style={{ marginBottom: 12 }}>
@@ -1557,12 +1500,10 @@ export default function Session() {
         </div>
       )}
 
-      {/* ── Bannière caméra mobile ── */}
+      {/* ── Chip caméra mobile ── */}
       {isMobile && showCameraBanner && !cameraActive && (
-        <CameraBanner
-          onActivateBoth={startBoth}
-          onActivateCamera={startCamera}
-          onActivateAudio={async () => { setShowCameraBanner(false); await startAudio() }}
+        <CameraChip
+          onActivate={startBoth}
           onDismiss={() => setShowCameraBanner(false)}
         />
       )}
@@ -2211,7 +2152,7 @@ export default function Session() {
               }}>
                 {submitting
                   ? <><Spinner size={14} color={C.textSec}/> Vérification…</>
-                  : <>{reponse ? '✅ Valider ma réponse' : 'Choisir une réponse…'}</>}
+                  : <>{reponse ? 'Valider' : 'Choisir…'}</>}
               </button>
             ) : (
               <button onClick={suivant} style={{
@@ -2223,7 +2164,7 @@ export default function Session() {
                 boxShadow: `0 6px 22px ${C.emerald}40`, minHeight: 54,
                 animation: 'popIn .3s ease',
               }}>
-                {current + 1 >= exercices.length ? '🏁 Terminer la session' : 'Question suivante'}
+                {current + 1 >= exercices.length ? 'Terminer' : 'Suivant'}
                 <ChevronRight size={16}/>
               </button>
             )}

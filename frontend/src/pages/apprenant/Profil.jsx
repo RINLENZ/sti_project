@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginSuccess } from '../../store/authSlice'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users, ChevronDown, FileDown } from 'lucide-react'
+import { Copy, CheckCircle, Edit3, Save, X, User, Mail, Globe, GraduationCap, ShieldCheck, Sparkles, Camera, RefreshCw, BookOpen, Clock, Target, TrendingUp, Award, Zap, Hash, Users, ChevronDown, FileDown, FlaskConical } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 
@@ -645,7 +645,7 @@ export default function Profil() {
                       ))}
                     </div>
                     {/* Compétences maîtrisées */}
-                    <div style={{ background: C.brownGhost, borderRadius: 12, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ background: C.brownGhost, borderRadius: 12, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Sparkles size={13} color={C.gold}/>
                         <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Compétences maîtrisées</span>
@@ -653,6 +653,34 @@ export default function Profil() {
                       <span style={{ fontSize: 15, fontWeight: 900, color: C.brown }}>
                         {stats.nb_maitrisees} <span style={{ fontSize: 11, fontWeight: 600, color: C.textSec }}>/ {stats.nb_competences}</span>
                       </span>
+                    </div>
+                    {/* Streak + Rang */}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {stats.streak_jours > 0 && (
+                        <div style={{ flex: 1, background: '#FFF7ED', borderRadius: 12, padding: '10px 12px', border: '1px solid #FED7AA', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 16 }}>🔥</span>
+                          <div>
+                            <p style={{ fontSize: 16, fontWeight: 900, color: '#EA580C', margin: 0, lineHeight: 1 }}>{stats.streak_jours}</p>
+                            <p style={{ fontSize: 9, color: '#9A3412', fontWeight: 700, margin: 0 }}>jour{stats.streak_jours > 1 ? 's' : ''} de suite</p>
+                          </div>
+                        </div>
+                      )}
+                      {(() => {
+                        const p = stats.p_mastery_moyen
+                        const r = p >= 80 ? { label:'Expert', emoji:'🏆', c:'#F59E0B', bg:'#FEF3C7' }
+                                : p >= 50 ? { label:'Avancé',  emoji:'⭐', c:'#10B981', bg:'#D1FAE5' }
+                                : p >= 20 ? { label:'Apprenti',emoji:'📘', c:'#3B82F6', bg:'#DBEAFE' }
+                                :           { label:'Débutant', emoji:'🌱', c:'#8B5CF6', bg:'#EDE9FE' }
+                        return (
+                          <div style={{ flex: 1, background: r.bg, borderRadius: 12, padding: '10px 12px', border: `1px solid ${r.c}30`, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 16 }}>{r.emoji}</span>
+                            <div>
+                              <p style={{ fontSize: 13, fontWeight: 900, color: r.c, margin: 0, lineHeight: 1 }}>{r.label}</p>
+                              <p style={{ fontSize: 9, color: r.c, fontWeight: 700, margin: 0, opacity: .7 }}>Rang actuel</p>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                     {stats.nb_sessions === 0 && (
                       <p style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', marginTop: 12 }}>
@@ -792,6 +820,28 @@ export default function Profil() {
                 )}
               </div>
             </div>
+
+            {/* ── Contribuer à l'IA ── */}
+            {user?.role === 'apprenant' && (
+              <button
+                onClick={() => navigate('/contribuer')}
+                style={{
+                  width: '100%', padding: '13px 16px',
+                  background: C.surface, border: `1.5px dashed ${C.brownLight}60`,
+                  borderRadius: 14, cursor: 'pointer', color: C.brownMid,
+                  display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700,
+                  transition: 'background .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = C.brownPale}
+                onMouseLeave={e => e.currentTarget.style.background = C.surface}
+              >
+                <FlaskConical size={16} color={C.brown}/>
+                <div style={{ textAlign: 'left' }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: C.brown }}>Contribuer à l'IA</p>
+                  <p style={{ margin: 0, fontSize: 10, color: C.textMuted }}>Améliore la détection pour tous</p>
+                </div>
+              </button>
+            )}
 
           </div>
 

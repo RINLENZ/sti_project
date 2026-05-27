@@ -19,7 +19,7 @@ export const C_LIGHT = {
 
   text:         '#1A1207',
   textSec:      '#6B5744',
-  textMuted:    '#9C7E6A',
+  textMuted:    '#7A5E4E',
 
   red:          '#DC2626',
   redPale:      '#FEF2F2',
