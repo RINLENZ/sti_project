@@ -141,6 +141,8 @@ class ProgressionApprenant(Base):
     commentaire_enseignant = Column(Text, nullable=True)
     date_debut             = Column(DateTime(timezone=True), nullable=True)
     date_fin               = Column(DateTime(timezone=True), nullable=True)
+    # FK vers la session d'apprentissage active — permet la jointure directe avec EngagementAnalysis
+    session_id             = Column(UUID(as_uuid=True), ForeignKey("learning_sessions.id"), nullable=True)
 
 
 class BKTMastery(Base):

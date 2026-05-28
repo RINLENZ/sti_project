@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from uuid import UUID
 from typing import Optional
+from datetime import datetime
 
 from ..database import get_db
 from ..dependencies import get_current_user
@@ -127,22 +128,39 @@ def create_room(
 def get_messages(
     room_id: UUID,
     limit: int = Query(50, le=200),
+    before: Optional[str] = Query(None),   # Bug 7 — curseur ISO datetime pour pagination
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Historique des messages (les plus récents en dernier)."""
+    """
+    Historique des messages, ordre chronologique.
+
+    Pagination par curseur :
+      - sans `before`  → 50 derniers messages
+      - avec `before`  → 50 messages antérieurs à cet instant (ISO 8601)
+
+    Retourne : { messages: [...], has_more: bool }
+    """
     room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
     if not room or str(current_user.id) not in (room.membres or []):
         raise HTTPException(404, "Salle introuvable ou accès refusé")
 
-    messages = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.room_id == room_id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    messages.reverse()
+    q = db.query(ChatMessage).filter(ChatMessage.room_id == room_id)
+
+    # Cursor : messages strictement antérieurs au timestamp `before`
+    if before:
+        try:
+            before_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+            q = q.filter(ChatMessage.created_at < before_dt)
+        except ValueError:
+            pass  # before invalide → ignoré, charge les derniers
+
+    # Requête limit+1 : si on récupère plus que `limit`, il y a d'autres messages.
+    # Évite le faux positif de `len == limit` quand le total est exactement divisible par limit.
+    rows     = q.order_by(ChatMessage.created_at.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    messages = rows[:limit]   # on ne retourne que les `limit` demandés
+    messages.reverse()        # ordre chronologique croissant
 
     # Marquer comme lus (filtrage Python)
     user_id_str = str(current_user.id)
@@ -152,7 +170,7 @@ def get_messages(
             msg.lu_par = lus + [user_id_str]
     db.commit()
 
-    # B1 — Pré-charge les noms des membres pour éviter N+1 requêtes
+    # Pré-charge les noms des membres (évite N+1)
     member_ids = room.membres or []
     sender_map: dict[str, str] = {}
     for uid in member_ids:
@@ -163,16 +181,23 @@ def get_messages(
         except Exception:
             pass
 
-    return [
-        {
-            "id":         str(m.id),
-            "contenu":    m.contenu,
-            "sender_id":  str(m.sender_id),
-            "sender_nom": sender_map.get(str(m.sender_id), "?"),
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-        }
-        for m in messages
-    ]
+    return {
+        "messages": [
+            {
+                "id":             str(m.id),
+                "contenu":        m.contenu,
+                "sender_id":      str(m.sender_id),
+                "sender_nom":     sender_map.get(str(m.sender_id), "?"),
+                "created_at":     m.created_at.isoformat() if m.created_at else None,
+                # Bug 6 — lu par quelqu'un d'autre que l'expéditeur ?
+                "read_by_others": any(
+                    uid != str(m.sender_id) for uid in (m.lu_par or [])
+                ),
+            }
+            for m in messages
+        ],
+        "has_more": has_more,
+    }
 
 
 @router.post("/rooms/{room_id}/messages")

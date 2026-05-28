@@ -22,7 +22,7 @@ from ..models.session import LearningSession, EngagementAnalysis
 from ..models.interaction import Interaction
 from ..services.bkt_calibration import em_bkt
 from ..services.bkt_service import DEFAULT_PARAMS
-from ..utils import get_kcs
+from ..utils import get_kcs, get_macro_kc
 
 router = APIRouter(prefix="/api/training", tags=["training"])
 
@@ -316,34 +316,24 @@ def export_dkt_data(
     for e in all_eng:
         eng_by_session.setdefault(str(e.session_id), []).append(e)
 
-    # Précharge sessions par (user_id, ua_id) pour retrouver l'engagement par exercice
-    all_sessions = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
-    sessions_by_user_ua: dict[tuple, list] = {}
-    for s in all_sessions:
-        key = (str(s.user_id), str(s.cours_id) if s.cours_id else "")
-        sessions_by_user_ua.setdefault(key, []).append(s)
-
-    def _avg_engagement(progs_item, ex) -> dict:
-        ua_id_str = str(ex.ua_id) if ex.ua_id else ""
-        sess_list = sessions_by_user_ua.get((str(progs_item.user_id), ua_id_str), [])
-        if not sess_list:
+    def _avg_engagement(session_id_val) -> dict:
+        """
+        Jointure directe via session_id (colonne ajoutée à progressions).
+        Retourne {"behavioral", "facial", "fused"} moyennés sur la session.
+        Si session_id est NULL (anciennes progressions), retourne tous None.
+        """
+        if not session_id_val:
             return {"behavioral": None, "facial": None, "fused": None}
-        # Session la plus proche temporellement
-        t_ref = progs_item.date_debut
-        best = min(
-            sess_list,
-            key=lambda s: abs((s.started_at - t_ref).total_seconds()) if t_ref and s.started_at else float("inf"),
-        )
-        engs = eng_by_session.get(str(best.id), [])
+        engs = eng_by_session.get(str(session_id_val), [])
         if not engs:
             return {"behavioral": None, "facial": None, "fused": None}
         behavioral = [e.interaction_score for e in engs if e.interaction_score is not None]
-        facial     = [e.facial_score for e in engs if e.facial_score is not None]
+        facial     = [e.facial_score     for e in engs if e.facial_score     is not None]
         fused      = [e.engagement_score for e in engs if e.engagement_score is not None]
         return {
             "behavioral": round(sum(behavioral) / len(behavioral), 4) if behavioral else None,
-            "facial":     round(sum(facial) / len(facial), 4)     if facial     else None,
-            "fused":      round(sum(fused) / len(fused), 4)       if fused      else None,
+            "facial":     round(sum(facial)     / len(facial),     4) if facial     else None,
+            "fused":      round(sum(fused)       / len(fused),     4) if fused       else None,
         }
 
     def generate():
@@ -357,18 +347,21 @@ def export_dkt_data(
             first_attempt = key not in seen
             seen.add(key)
 
-            kcs = get_kcs(ex)
+            kcs      = get_kcs(ex)
+            primary  = kcs[0] if kcs else None
             record = {
                 "student_id":    str(p.user_id),
+                "session_id":    str(p.session_id) if p.session_id else None,
                 "exercise_id":   str(p.exercice_id),
-                "primary_kc":    kcs[0] if kcs else None,
+                "primary_kc":    primary,
+                "macro_kc":      get_macro_kc(primary),
                 "all_kcs":       kcs,
                 "correct":       bool(p.correct),
                 "first_attempt": first_attempt,
                 "time_seconds":  time_map.get(key),
                 "difficulty":    ex.difficulte,
                 "timestamp":     p.date_debut.isoformat() if p.date_debut else None,
-                "engagement":    _avg_engagement(p, ex),
+                "engagement":    _avg_engagement(p.session_id),
             }
             yield json.dumps(record, ensure_ascii=False) + "\n"
 

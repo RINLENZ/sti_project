@@ -492,6 +492,7 @@ class ReponseSubmit(BaseModel):
     exercice_id: UUID
     user_id: UUID
     reponse: str
+    session_id: Optional[UUID] = None   # session active → jointure directe engagement DKT
 
 @router.post("/exercice/verifier")
 def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -520,11 +521,14 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             prog.correct         = None
             prog.statut          = "en_attente_correction"
             prog.score           = 0
+            if body.session_id and not prog.session_id:
+                prog.session_id  = body.session_id
         else:
             prog = ProgressionApprenant(
                 user_id=body.user_id,
                 exercice_id=body.exercice_id,
                 ua_id=exercice.ua_id,
+                session_id=body.session_id,
                 reponse_donnee=body.reponse,
                 correct=None,
                 statut="en_attente_correction",
@@ -573,11 +577,14 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             prog.statut = "termine"
             prog.score = exercice.points
             prog.date_fin = datetime.utcnow()
+        if body.session_id and not prog.session_id:
+            prog.session_id = body.session_id
     else:
         prog = ProgressionApprenant(
             user_id=body.user_id,
             exercice_id=body.exercice_id,
             ua_id=exercice.ua_id,
+            session_id=body.session_id,
             reponse_donnee=body.reponse,
             correct=correct,
             statut="termine" if correct else "en_cours",

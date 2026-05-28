@@ -90,6 +90,14 @@ def create_missing_tables():
         conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS image_copie_url TEXT"))
         conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS vision_corrections JSON"))
         conn.execute(sa.text("ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS dataset_valide BOOLEAN DEFAULT FALSE"))
+        # session_id dans progressions — jointure directe pour l'export DKT
+        conn.execute(sa.text(
+            "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS session_id UUID "
+            "REFERENCES learning_sessions(id) ON DELETE SET NULL"
+        ))
+        conn.execute(sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_progressions_session_id ON progressions(session_id)"
+        ))
         conn.execute(sa.text("COMMIT"))
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────

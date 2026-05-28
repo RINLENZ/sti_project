@@ -25,14 +25,19 @@ export default function Chat() {
   const [roomsLoading, setRoomsLoading] = useState(true)
   const [msgLoading, setMsgLoading]   = useState(false)
   const [msgError, setMsgError]       = useState(false)
+  const [hasMore, setHasMore]         = useState(false)   // Bug 7 — pagination
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showNewRoom, setShowNewRoom] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [typingUsers,  setTypingUsers]  = useState({})
 
-  const bottomRef      = useRef(null)
-  const inputRef       = useRef(null)
-  const typingTimers   = useRef({})
-  const lastTypingSent = useRef(0)
+  const bottomRef          = useRef(null)
+  const inputRef           = useRef(null)
+  const scrollContainerRef  = useRef(null)   // Bug 2 — conteneur messages
+  const isAtBottom          = useRef(true)   // Bug 2 — suit la position de scroll
+  const oldestTimestampRef  = useRef(null)   // Bug 7 — curseur pour loadMore (évite dep sur `messages`)
+  const typingTimers        = useRef({})
+  const lastTypingSent      = useRef(0)
 
   // ── Chargement des salles ──────────────────────────────────────
   const loadRooms = useCallback(() => {
@@ -72,23 +77,76 @@ export default function Chat() {
   // ── Chargement messages ───────────────────────────────────────
   const loadMessages = useCallback((roomId) => {
     setMessages([])
+    setHasMore(false)
     setMsgLoading(true)
     setMsgError(false)
+    isAtBottom.current = true  // Bug 2 — reset scroll position on room change
     api.get(`/api/chat/rooms/${roomId}/messages`)
-      .then(({ data }) => setMessages(data))
+      .then(({ data }) => {
+        // Bug 7 — API renvoie maintenant {messages, has_more}
+        const msgs   = Array.isArray(data) ? data : (data.messages ?? [])
+        const more   = Array.isArray(data) ? false : (data.has_more ?? false)
+        setMessages(msgs)
+        setHasMore(more)
+        oldestTimestampRef.current = msgs[0]?.created_at ?? null
+      })
       .catch(() => setMsgError(true))
       .finally(() => setMsgLoading(false))
   }, [])
+
+  // Bug 7 — Charger les messages plus anciens (avant le plus ancien connu)
+  // Utilise oldestTimestampRef pour ne pas dépendre du tableau `messages` entier
+  const loadMore = useCallback(async () => {
+    if (!activeRoom || loadingMore || !hasMore) return
+    const oldest = oldestTimestampRef.current
+    if (!oldest) return
+    setLoadingMore(true)
+    const container = scrollContainerRef.current
+    const prevHeight = container?.scrollHeight ?? 0
+    try {
+      const { data } = await api.get(
+        `/api/chat/rooms/${activeRoom.id}/messages?before=${encodeURIComponent(oldest)}&limit=50`
+      )
+      const newMsgs = Array.isArray(data) ? data : (data.messages ?? [])
+      const more    = Array.isArray(data) ? false : (data.has_more ?? false)
+      // Met à jour le curseur vers le nouveau plus ancien message
+      if (newMsgs.length > 0) oldestTimestampRef.current = newMsgs[0].created_at
+      setMessages(prev => [...newMsgs, ...prev])
+      setHasMore(more)
+      // Restaure la position de scroll pour éviter le saut visuel
+      requestAnimationFrame(() => {
+        if (container) container.scrollTop = container.scrollHeight - prevHeight
+      })
+    } catch {
+      toast.error('Impossible de charger les messages précédents')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [activeRoom, loadingMore, hasMore])  // plus de dépendance sur `messages`
 
   useEffect(() => {
     if (!activeRoom) return
     loadMessages(activeRoom.id)
   }, [activeRoom?.id, loadMessages])
 
-  // ── Scroll bas automatique ─────────────────────────────────────
+  // ── Scroll bas — Bug 2 : seulement si déjà en bas ────────────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (isAtBottom.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  // Bug 2 — Écoute le scroll pour détecter si l'utilisateur est en bas
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      isAtBottom.current = scrollHeight - scrollTop - clientHeight < 60
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [activeRoom?.id])
 
   // ── WebSocket — réception ─────────────────────────────────────
   const activeRoomIdRef = useRef(null)
@@ -99,14 +157,34 @@ export default function Chat() {
       if (data.room_id === activeRoomIdRef.current) {
         setMessages(prev => {
           if (prev.some(m => m.id === data.message.id)) return prev
+          // Bug 3 — remplace le message optimiste temporaire si même expéditeur + contenu
+          const tempIdx = prev.findIndex(
+            m => m._temp &&
+                 String(m.sender_id) === String(data.message.sender_id) &&
+                 m.contenu === data.message.contenu
+          )
+          if (tempIdx !== -1) {
+            const next = [...prev]
+            next[tempIdx] = data.message
+            return next
+          }
           return [...prev, data.message]
         })
       }
-      setRooms(prev => prev.map(r =>
-        r.id === data.room_id
-          ? { ...r, last_message: { contenu: data.message.contenu, sender_id: data.message.sender_id, created_at: data.message.created_at } }
-          : r
-      ))
+      // Bug 1 — incrémente unread si la salle n'est pas active
+      setRooms(prev => prev.map(r => {
+        if (r.id !== data.room_id) return r
+        const active = r.id === activeRoomIdRef.current
+        return {
+          ...r,
+          last_message: {
+            contenu:    data.message.contenu,
+            sender_id:  data.message.sender_id,
+            created_at: data.message.created_at,
+          },
+          unread: active ? 0 : (r.unread || 0) + 1,
+        }
+      }))
     }
     if (data.type === 'new_room') {
       setRooms(prev => [data.room, ...prev.filter(r => r.id !== data.room.id)])
@@ -133,18 +211,39 @@ export default function Chat() {
     setTypingUsers({})
   }, [activeRoom?.id])
 
-  // ── Envoi message REST ────────────────────────────────────────
+  // ── Envoi message — Bug 3 : optimiste (visible immédiatement) ──
   const sendMessage = async () => {
     const contenu = input.trim()
     if (!contenu || sending || !activeRoom) return
+
+    // Crée un message temporaire affiché aussitôt
+    const tempId  = 'temp_' + Date.now()
+    const tempMsg = {
+      id:             tempId,
+      contenu,
+      sender_id:      String(user.id),
+      sender_nom:     `${user.prenom || ''} ${user.nom || ''}`.trim(),
+      created_at:     new Date().toISOString(),
+      read_by_others: false,
+      _temp:          true,
+    }
     setInput('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
+    setMessages(prev => [...prev, tempMsg])
+    // Toujours scroller quand C'est notre message — Bug 2
+    isAtBottom.current = true
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }))
+
     setSending(true)
     try {
       await api.post(`/api/chat/rooms/${activeRoom.id}/messages`, { contenu })
+      // Si le WS est connecté, il va remplacer le temp dans handleWsMessage
+      // Si le WS est déconnecté, marque le temp comme envoyé (pas de _temp)
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _temp: false } : m))
     } catch {
       toast.error('Message non envoyé — réessaie')
       setInput(contenu)
+      setMessages(prev => prev.filter(m => m.id !== tempId))
     } finally {
       setSending(false)
       inputRef.current?.focus()
@@ -170,11 +269,13 @@ export default function Chat() {
 
   const showList = !mobile || !activeRoom
 
-  // ── Nom affiché d'une salle ───────────────────────────────────
+  // ── Nom affiché d'une salle — Bug 4 : prénom + nom complet ──
   function roomDisplayName(room) {
     if (room.type === 'classe') return room.nom || 'Ma classe'
     const other = room.membres?.find(m => String(m.id) !== String(user.id))
-    return other?.nom || room.nom || 'Conversation'
+    if (!other) return room.nom || 'Conversation'
+    // Le backend renvoie .nom = "Prénom Nom" (combiné) ; si jamais les champs sont séparés, les combine
+    return other.prenom ? `${other.prenom} ${other.nom}` : (other.nom || room.nom || 'Conversation')
   }
 
   return (
@@ -215,7 +316,11 @@ export default function Chat() {
                   displayNom={roomDisplayName(room)}
                   user={user}
                   C={C}
-                  onClick={() => setActiveRoom(room)}
+                  onClick={() => {
+                    setActiveRoom(room)
+                    // Bug 1 — remet à zéro le badge non-lu
+                    setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread: 0 } : r))
+                  }}
                   onDelete={() => setConfirmDelete(room)}
                 />
               ))
@@ -263,7 +368,20 @@ export default function Chat() {
               </div>
 
               {/* Messages */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, scrollbarWidth: 'thin', scrollbarColor: `${C.brownPale} transparent` }}>
+              <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, scrollbarWidth: 'thin', scrollbarColor: `${C.brownPale} transparent` }}>
+
+                {/* Bug 7 — bouton charger messages précédents */}
+                {hasMore && !msgLoading && !msgError && (
+                  <div style={{ textAlign: 'center', marginBottom: 4 }}>
+                    <button
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                      style={{ padding: '6px 18px', background: C.brownPale, border: `1px solid ${C.border}`, borderRadius: 10, cursor: loadingMore ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, color: C.brown }}
+                    >
+                      {loadingMore ? 'Chargement…' : '⬆ Messages précédents'}
+                    </button>
+                  </div>
+                )}
 
                 {msgLoading && (
                   <div style={{ textAlign: 'center', padding: 32, color: C.textSec, fontSize: 13 }}>Chargement des messages…</div>
@@ -314,10 +432,12 @@ export default function Chat() {
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.contenu}</p>
                           <p style={{ margin: '4px 0 0', fontSize: 9, color: isMe ? 'rgba(255,255,255,.6)' : C.textSec, textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
                             {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                            {/* Double-coche : envoyé = 1 coche, lu = 2 coches */}
-                            {isMe && (msg.lu_par?.length > 1
-                              ? <CheckCheck size={10} style={{ color: 'rgba(255,255,255,.9)' }}/>
-                              : <Check size={10}/>
+                            {/* Bug 6 — read_by_others vient du backend (lu par ≥1 personne autre que l'expéditeur) */}
+                            {isMe && (msg._temp
+                              ? <Check size={10} style={{ color: 'rgba(255,255,255,.35)', opacity: 0.6 }}/>
+                              : msg.read_by_others
+                              ? <CheckCheck size={10} style={{ color: 'rgba(255,255,255,.95)' }}/>
+                              : <Check size={10} style={{ color: 'rgba(255,255,255,.55)' }}/>
                             )}
                           </p>
                         </div>
@@ -354,6 +474,7 @@ export default function Chat() {
                     const now = Date.now()
                     if (now - lastTypingSent.current > 2000) {
                       lastTypingSent.current = now
+                      // Bug 5 — wsSend() vérifie readyState === OPEN en interne (useWebSocket.js)
                       wsSend({ type: 'typing' })
                     }
                   }}

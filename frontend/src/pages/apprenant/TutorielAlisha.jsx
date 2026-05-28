@@ -702,6 +702,7 @@ export default function TutorielAlisha() {
     try {
       const res = await api.post('/api/cours/exercice/verifier', {
         exercice_id: exerciceId, user_id: user.id, reponse: String(reponse),
+        session_id: sessionIdRef.current ?? undefined,  // lie la progression → jointure engagement DKT
       })
       result = {
         correct:          res.data.correct,

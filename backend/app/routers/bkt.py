@@ -23,6 +23,7 @@ class BKTExerciceUpdate(BaseModel):
     correct:        bool
     exercice_id:    Optional[UUID] = None
     reponse_donnee: Optional[str]  = None
+    session_id:     Optional[UUID] = None   # session active → jointure directe engagement DKT
 
 
 @router.post("/apprenant/{user_id}/update-exercice")
@@ -74,12 +75,15 @@ def update_mastery_exercice(
             prog = ProgressionApprenant(
                 user_id=user_id, ua_id=body.ua_id,
                 exercice_id=body.exercice_id,
+                session_id=body.session_id,
                 date_debut=datetime.now(timezone.utc),
             )
             db.add(prog)
         prog.tentatives     = (prog.tentatives or 0) + 1
         prog.correct        = body.correct
         prog.reponse_donnee = body.reponse_donnee
+        if body.session_id and not prog.session_id:
+            prog.session_id = body.session_id
         prog.score          = points if body.correct else 0
         prog.statut         = "termine" if body.correct else "en_cours"
         if body.correct:

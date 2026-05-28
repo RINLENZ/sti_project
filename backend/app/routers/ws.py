@@ -134,11 +134,13 @@ async def ws_chat(
                 "type": "chat_message",
                 "room_id": room_id,
                 "message": {
-                    "id":          str(msg.id),
-                    "contenu":     msg.contenu,
-                    "sender_id":   str(user.id),
-                    "sender_nom":  f"{user.prenom} {user.nom}",
-                    "created_at":  msg.created_at.isoformat() if msg.created_at else None,
+                    "id":             str(msg.id),
+                    "contenu":        msg.contenu,
+                    "sender_id":      str(user.id),
+                    "sender_nom":     f"{user.prenom} {user.nom}",
+                    "created_at":     msg.created_at.isoformat() if msg.created_at else None,
+                    # Bug 6 — nouveau message : pas encore lu par quelqu'un d'autre
+                    "read_by_others": False,
                 },
             }
             # Diffuse à tous les membres de la salle

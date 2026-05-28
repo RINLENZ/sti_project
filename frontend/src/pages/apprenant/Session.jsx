@@ -970,7 +970,10 @@ export default function Session() {
     const tempsReponse = Math.round((Date.now() - questionTime) / 1000)
     setSubmitting(true)
     try {
-      const { data } = await api.post('/api/cours/exercice/verifier', { exercice_id: ex.id, user_id: user.id, reponse })
+      const { data } = await api.post('/api/cours/exercice/verifier', {
+        exercice_id: ex.id, user_id: user.id, reponse,
+        session_id: sid,   // lie la progression à la session → jointure directe engagement DKT
+      })
       const msg = pickRandom(data.correct ? MSG_CORRECT : MSG_WRONG)
       setResultat({ ...data, msg })
       // Accumule la progression BKT par compétence pour l'affichage fin de session

@@ -19,7 +19,7 @@ from app.models.session import LearningSession
 from app.models.interaction import Interaction
 from app.models.cours import ProgressionApprenant, Exercice, BKTMastery
 from app.models.session import EngagementAnalysis
-from app.utils import get_kcs
+from app.utils import get_kcs, get_macro_kc
 from datetime import datetime
 
 db_url = os.environ.get("DATABASE_URL", "")
@@ -129,13 +129,25 @@ eng_by_session = {}
 for e in all_eng:
     eng_by_session.setdefault(str(e.session_id), []).append(e)
 
-all_sess = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
-sessions_by_user_ua = {}
-for s in all_sess:
-    k = (str(s.user_id), str(s.cours_id) if s.cours_id else "")
-    sessions_by_user_ua.setdefault(k, []).append(s)
+# ── Engagement via jointure directe session_id ────────────────────────────────
+def _avg_engagement_direct(session_id_val) -> dict:
+    """Jointure directe session_id → EngagementAnalysis (pas de proximité temporelle)."""
+    if not session_id_val:
+        return {"behavioral": None, "facial": None, "fused": None}
+    engs = eng_by_session.get(str(session_id_val), [])
+    if not engs:
+        return {"behavioral": None, "facial": None, "fused": None}
+    b  = [e.interaction_score for e in engs if e.interaction_score is not None]
+    fc = [e.facial_score      for e in engs if e.facial_score      is not None]
+    fu = [e.engagement_score  for e in engs if e.engagement_score  is not None]
+    return {
+        "behavioral": round(sum(b) /len(b),  4) if b  else None,
+        "facial":     round(sum(fc)/len(fc), 4) if fc else None,
+        "fused":      round(sum(fu)/len(fu), 4) if fu else None,
+    }
 
 dkt_count = 0
+null_session_count = 0
 with open("dataset_dkt.jsonl", "w") as f:
     seen = set()
     for p in progs:
@@ -146,37 +158,30 @@ with open("dataset_dkt.jsonl", "w") as f:
         first_attempt = key not in seen
         seen.add(key)
 
-        ua_id_str = str(ex.ua_id) if ex.ua_id else ""
-        sess_list = sessions_by_user_ua.get((str(p.user_id), ua_id_str), [])
-        engagement = {"behavioral": None, "facial": None, "fused": None}
-        if sess_list and p.date_debut:
-            best = min(sess_list, key=lambda s: abs((s.started_at - p.date_debut).total_seconds()) if s.started_at else float("inf"))
-            engs = eng_by_session.get(str(best.id), [])
-            if engs:
-                b = [e.interaction_score for e in engs if e.interaction_score is not None]
-                fc = [e.facial_score for e in engs if e.facial_score is not None]
-                fu = [e.engagement_score for e in engs if e.engagement_score is not None]
-                engagement = {
-                    "behavioral": round(sum(b)/len(b), 4) if b else None,
-                    "facial":     round(sum(fc)/len(fc), 4) if fc else None,
-                    "fused":      round(sum(fu)/len(fu), 4) if fu else None,
-                }
+        if not p.session_id:
+            null_session_count += 1
 
-        kcs = get_kcs(ex)
+        kcs     = get_kcs(ex)
+        primary = kcs[0] if kcs else None
         record = {
             "student_id":    str(p.user_id),
+            "session_id":    str(p.session_id) if p.session_id else None,
             "exercise_id":   str(p.exercice_id),
-            "primary_kc":    kcs[0] if kcs else None,
+            "primary_kc":    primary,
+            "macro_kc":      get_macro_kc(primary),
             "all_kcs":       kcs,
             "correct":       bool(p.correct),
             "first_attempt": first_attempt,
             "time_seconds":  time_map.get(key),
             "difficulty":    ex.difficulte,
             "timestamp":     p.date_debut.isoformat() if p.date_debut else None,
-            "engagement":    engagement,
+            "engagement":    _avg_engagement_direct(p.session_id),
         }
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
         dkt_count += 1
+
+if null_session_count:
+    print(f"  ⚠ {null_session_count} progressions sans session_id (antérieures à la migration) → engagement=null")
 
 print(f"✓ dataset_dkt.jsonl créé ({dkt_count} interactions)")
 db.close()
