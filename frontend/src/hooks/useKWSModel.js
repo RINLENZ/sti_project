@@ -29,9 +29,9 @@ async function getKWSSession() {
   _loading = true
   try {
     const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
-    ort.env.wasm.wasmPaths = import.meta.env.PROD
-      ? 'https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/ort/'
-      : '/'
+    // Les fichiers ort-wasm-* sont dans public/ → servis depuis '/' (Netlify, dev, partout)
+    // Ne JAMAIS pointer vers le proxy CF qui ne les héberge pas.
+    ort.env.wasm.wasmPaths = '/'
     ort.env.wasm.numThreads = 1
     _session = await ort.InferenceSession.create(
       '/models/model_audio_v2_final.onnx',
@@ -119,7 +119,14 @@ export function useKWSModel(audioActive) {
       const proc   = ctx.createScriptProcessor(4096, 1, 1)
       procRef.current = proc
       source.connect(proc)
-      proc.connect(ctx.destination)
+      // CRITIQUE : ne pas connecter proc directement à ctx.destination —
+      // cela routerait le micro vers les haut-parleurs et perturberait le TTS d'Alisha.
+      // ScriptProcessorNode a besoin d'être dans le graphe audio pour déclencher
+      // onaudioprocess, donc on utilise un GainNode silencieux.
+      const silencer = ctx.createGain()
+      silencer.gain.value = 0
+      proc.connect(silencer)
+      silencer.connect(ctx.destination)
 
       // Buffer glissant : évalue toutes les 500ms sur la dernière fenêtre de 1500ms
       // → garantit que chaque mot est capturé dans au moins une fenêtre

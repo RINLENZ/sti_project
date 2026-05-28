@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import useAlishaVoice from '../../hooks/useAlishaVoice'
+import { parseBlocks } from '../../components/RichContent'
+import { blocksToSpeech } from '../../utils/latexToSpeech'
 import { useSelector } from 'react-redux'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -218,6 +221,8 @@ export default function CoursDetail() {
 
   const user = useSelector(s => s.auth.user)
 
+  const { speak, stop, readAloud, isReading, supported } = useAlishaVoice()
+
   const [ua,           setUA]           = useState(null)
   const [tab,          setTab]          = useState('lecon')
   const [loading,      setLoading]      = useState(true)
@@ -372,6 +377,31 @@ export default function CoursDetail() {
 
                 {lecon ? (
                   <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: isMobile ? '18px 16px' : '24px 28px', boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`, marginBottom: 16 }}>
+                    {/* Bouton lecture Alisha */}
+                    {supported && (
+                      <button
+                        onClick={() => {
+                          if (isReading) {
+                            stop()
+                          } else {
+                            const blocks = parseBlocks(lecon?.contenu)
+                            const text   = blocksToSpeech(blocks)
+                            if (text) readAloud(text)
+                          }
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '7px 14px', borderRadius: 20,
+                          border: `1.5px solid ${isReading ? C.accent + '80' : C.purple + '50'}`,
+                          background: isReading ? `${C.accent}10` : `${C.purple}08`,
+                          color: isReading ? C.accent : C.purple,
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                          marginBottom: 14, transition: 'all .2s',
+                        }}
+                      >
+                        {isReading ? '⏹ Arrêter la lecture' : '📖 Alisha lit le cours'}
+                      </button>
+                    )}
                     {/* StaticContent gère JSON structuré ET Markdown brut */}
                     <StaticContent data={lecon} C={C} xs={xs} />
                   </div>

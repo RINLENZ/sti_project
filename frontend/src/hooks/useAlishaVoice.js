@@ -14,7 +14,8 @@
  * - Fallback sur voix fr non-locale uniquement si aucune locale n'existe.
  * - Stop automatique au démontage.
  */
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { splitSpeechChunks } from '../utils/latexToSpeech'
 
 const STORAGE_KEY = 'alisha_voice_name'
 
@@ -39,6 +40,8 @@ export default function useAlishaVoice() {
   const voiceRef    = useRef(null)
   const lockedRef   = useRef(false)   // true dès qu'on a une voix locale fr-FR stable
   const mountedRef  = useRef(true)
+  const readingRef  = useRef(false)   // true pendant une lecture longue
+  const [isReading, setIsReading] = useState(false)
 
   useEffect(() => {
     mountedRef.current = true
@@ -97,8 +100,52 @@ export default function useAlishaVoice() {
   }, [])
 
   const stop = useCallback(() => {
+    readingRef.current = false
+    setIsReading(false)
     window.speechSynthesis?.cancel()
   }, [])
 
-  return { speak, stop, supported: !!window.speechSynthesis }
+  /**
+   * Lit un texte long (contenu de cours) phrase par phrase.
+   * Gère les formules LaTeX converties via blocksToSpeech/latexToFrench avant appel.
+   * @param {string} fullText   - texte déjà converti en français lisible
+   * @param {object} opts
+   * @param {function} opts.onDone     - callback quand lecture terminée
+   * @param {function} opts.onChunk    - callback(index, total) à chaque phrase
+   */
+  const readAloud = useCallback((fullText, { onDone, onChunk } = {}) => {
+    if (!window.speechSynthesis || !fullText) return
+    window.speechSynthesis.cancel()
+
+    const chunks  = splitSpeechChunks(fullText, 180)
+    if (!chunks.length) return
+
+    readingRef.current = true
+    setIsReading(true)
+
+    let idx = 0
+
+    function readNext() {
+      if (!readingRef.current || idx >= chunks.length) {
+        readingRef.current = false
+        setIsReading(false)
+        onDone?.()
+        return
+      }
+
+      const utt   = new SpeechSynthesisUtterance(chunks[idx])
+      utt.lang    = 'fr-FR'
+      utt.rate    = 0.9    // légèrement plus lent pour la lecture de cours
+      utt.pitch   = 1.1
+      if (voiceRef.current) utt.voice = voiceRef.current
+      utt.onend   = () => { onChunk?.(idx, chunks.length); idx++; readNext() }
+      utt.onerror = () => { idx++; readNext() }
+
+      window.speechSynthesis.speak(utt)
+    }
+
+    readNext()
+  }, [])
+
+  return { speak, stop, readAloud, isReading, supported: !!window.speechSynthesis }
 }

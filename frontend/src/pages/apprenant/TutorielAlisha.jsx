@@ -24,7 +24,8 @@ import Alisha from '../../components/Alisha'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { useWebSocket } from '../../hooks/useWebSocket'
-import { ProgressiveContent } from '../../components/RichContent'
+import { ProgressiveContent, parseBlocks } from '../../components/RichContent'
+import { blocksToSpeech } from '../../utils/latexToSpeech'
 import api from '../../services/api'
 
 // ── P2 / P10 — Sons Web Audio API ────────────────────────────────
@@ -569,7 +570,7 @@ export default function TutorielAlisha() {
   const transitioningRef       = useRef(false)
   const touchStartYRef         = useRef(null)   // L7 — swipe-up
 
-  const { speak, stop, supported } = useAlishaVoice()
+  const { speak, stop, readAloud, isReading, supported } = useAlishaVoice()
   const { lastKeyword } = useKWSModel(audioActive)
   const prevMessageRef = useRef(null)
 
@@ -1226,13 +1227,51 @@ export default function TutorielAlisha() {
 
                   {/* ── Ressource complète ── */}
                   {currentStep.type === 'ressource' && (
-                    <ProgressiveContent
-                      key={currentStep.data.id || stepIdx}
-                      data={currentStep.data}
-                      onDone={advance}
-                      C={C}
-                      xs={xs}
-                    />
+                    <div>
+                      {/* Bouton "Alisha lit le cours" — visible si audioMode actif */}
+                      {audioMode !== 'silent' && supported && (
+                        <button
+                          onClick={() => {
+                            if (isReading) {
+                              stop()
+                            } else {
+                              const blocks = parseBlocks(currentStep.data?.contenu)
+                              const text   = blocksToSpeech(blocks)
+                              if (text) readAloud(text, {
+                                onDone: () => {},
+                              })
+                            }
+                          }}
+                          style={{
+                            display:        'flex',
+                            alignItems:     'center',
+                            gap:             6,
+                            padding:        '8px 14px',
+                            borderRadius:    20,
+                            border:         `1.5px solid ${isReading ? C.accent + '80' : C.purple + '60'}`,
+                            background:      isReading ? `${C.accent}12` : `${C.purple}10`,
+                            color:           isReading ? C.accent : C.purple,
+                            fontSize:        12,
+                            fontWeight:      700,
+                            cursor:         'pointer',
+                            marginBottom:    12,
+                            transition:     'all .2s',
+                          }}
+                        >
+                          {isReading
+                            ? <><span style={{ animation: 'blink 1s ease infinite' }}>🔊</span> Arrêter la lecture</>
+                            : <>📖 Alisha lit le cours</>
+                          }
+                        </button>
+                      )}
+                      <ProgressiveContent
+                        key={currentStep.data.id || stepIdx}
+                        data={currentStep.data}
+                        onDone={advance}
+                        C={C}
+                        xs={xs}
+                      />
+                    </div>
                   )}
 
                   {/* ── L2 Ressource abrégée (niveau 2) — points clés seulement ── */}

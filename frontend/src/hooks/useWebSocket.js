@@ -3,8 +3,12 @@ import { useEffect, useRef, useCallback } from 'react'
 const WS_BASE = (import.meta.env.VITE_API_URL || 'https://sti-backend-a2d1.onrender.com')
   .replace(/^http/, 'ws')
 
+// Tentatives max avant abandon (évite le flood de logs si le backend est down)
+// Backoff : 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s = ~2 min de tentatives
+const MAX_RETRIES = 8
+
 /**
- * Hook WebSocket avec reconnexion automatique (backoff exponentiel).
+ * Hook WebSocket avec reconnexion automatique (backoff exponentiel, max 8 tentatives).
  *
  * @param {string} path  - ex: '/ws/notifications' ou '/ws/chat/ROOM_ID'
  * @param {object} opts
@@ -51,7 +55,12 @@ export function useWebSocket(path, { onMessage, enabled = true } = {}) {
     ws.onclose = () => {
       clearInterval(pingRef.current)
       if (!enabled) return
-      // Backoff : 1s, 2s, 4s, 8s, 16s, max 30s
+      // Abandon après MAX_RETRIES pour éviter le flood console quand le backend est down
+      if (retryRef.current >= MAX_RETRIES) {
+        console.info(`[WS] ${path} : abandon après ${MAX_RETRIES} tentatives`)
+        return
+      }
+      // Backoff exponentiel : 1s, 2s, 4s, 8s, 16s, 30s (plafonné)
       const delay = Math.min(1000 * 2 ** retryRef.current, 30000)
       retryRef.current++
       timerRef.current = setTimeout(connect, delay)
