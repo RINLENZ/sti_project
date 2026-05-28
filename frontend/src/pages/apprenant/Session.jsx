@@ -1154,7 +1154,7 @@ export default function Session() {
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <button onClick={() => navigate(`/cours/${uaId}`)} style={{
+                <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'session' } })} style={{
                   padding: '13px', background: C.brownPale,
                   color: C.brown, border: `1.5px solid ${C.brownLight}40`,
                   borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
@@ -1419,7 +1419,7 @@ export default function Session() {
         boxShadow: '0 2px 12px rgba(107,58,42,0.07)'
       }}>
         {/* Bouton retour */}
-        <button onClick={() => navigate(`/cours/${uaId}`)} style={{
+        <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'session' } })} style={{
           background: C.brownPale, border: 'none', borderRadius: 9,
           padding: isMobile ? '8px 10px' : '7px 14px', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 5,

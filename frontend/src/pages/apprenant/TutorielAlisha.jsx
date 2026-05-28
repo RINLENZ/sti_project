@@ -1015,7 +1015,7 @@ export default function TutorielAlisha() {
           }}>
             🏠 Retourner au tableau de bord
           </button>
-          <button onClick={() => navigate(`/cours/${uaId}`)} style={{
+          <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'tutoriel' } })} style={{
             background: 'none', border: 'none', color: C.textMuted,
             fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '4px 0',
           }}>
@@ -1057,7 +1057,7 @@ export default function TutorielAlisha() {
         padding: '12px 20px', position: 'sticky', top: 0, zIndex: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 720, margin: '0 auto' }}>
-          <button onClick={() => navigate(`/cours/${uaId}`)}
+          <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'tutoriel' } })}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, fontSize: 20, lineHeight: 1, flexShrink: 0 }}>✕</button>
 
           <SegmentedBar

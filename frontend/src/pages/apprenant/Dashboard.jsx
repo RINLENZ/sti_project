@@ -21,10 +21,10 @@ const Alisha = lazy(() => import('../../components/Alisha'))
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
 const BKTLevel = (p, C) => {
-  if (p >= 95) return { label: 'Maîtrisé',      color: C.emerald,  bg: C.emeraldPale }
-  if (p >= 70) return { label: 'En bonne voie', color: '#2563eb',  bg: '#EFF6FF'     }
-  if (p >= 40) return { label: 'En progrès',    color: C.orange,   bg: '#FFFBEB'     }
-  return              { label: 'À renforcer',    color: C.red,      bg: '#FEF2F2'     }
+  if (p >= 95) return { label: 'Maîtrisé',      color: C.emerald, bg: C.emeraldPale }
+  if (p >= 70) return { label: 'En bonne voie', color: C.blue,    bg: C.bluePale    }
+  if (p >= 40) return { label: 'En progrès',    color: C.orange,  bg: C.goldPale    }
+  return              { label: 'À renforcer',    color: C.red,     bg: C.redPale     }
 }
 
 const UAStatus = (pct, C) => {
@@ -57,31 +57,32 @@ const XPRing = ({ pct, size = 72, stroke = 7 }) => {
 }
 
 /* ── Rang apprenant basé sur p_mastery_moyen ── */
-function getRang(pMasteryMoyen) {
-  if (pMasteryMoyen >= 80) return { label: 'Expert',    emoji: '🏆', color: '#F59E0B' }
-  if (pMasteryMoyen >= 50) return { label: 'Avancé',    emoji: '⭐', color: '#10B981' }
-  if (pMasteryMoyen >= 20) return { label: 'Apprenti',  emoji: '📘', color: '#3B82F6' }
-  return                          { label: 'Débutant',   emoji: '🌱', color: '#8B5CF6' }
+function getRang(pMasteryMoyen, C) {
+  if (pMasteryMoyen >= 80) return { label: 'Expert',   emoji: '🏆', color: C?.gold    || '#D4A853' }
+  if (pMasteryMoyen >= 50) return { label: 'Avancé',   emoji: '⭐', color: C?.emerald || '#0D9373' }
+  if (pMasteryMoyen >= 20) return { label: 'Apprenti', emoji: '📘', color: C?.blue    || '#2563EB' }
+  return                          { label: 'Débutant',  emoji: '🌱', color: C?.purple  || '#8B5CF6' }
 }
 
-/* ── BKT level → couleur ── */
-function bktLevelColor(score) {
-  if (score == null || score < 0.25) return '#EF4444'
-  if (score < 0.55) return '#F97316'
-  if (score < 0.80) return '#EAB308'
-  return '#22C55E'
+/* ── BKT level → couleur (traffic-light) ── */
+function bktLevelColor(score, C) {
+  if (score == null || score < 0.25) return C?.red    || '#EF4444'
+  if (score < 0.55)                  return C?.accent || '#F97316'
+  if (score < 0.80)                  return C?.gold   || '#EAB308'
+  return                                    C?.emerald|| '#22C55E'
 }
 
 /* ── Mini anneau BKT SVG ── */
 const MiniRing = ({ score, size = 40 }) => {
-  const color = bktLevelColor(score)
+  const { C } = useTheme()
+  const color = bktLevelColor(score, C)
   const pct   = score == null ? 0 : Math.round(score * 100)
   const r     = (size - 5) / 2
   const circ  = 2 * Math.PI * r
   const dash  = (pct / 100) * circ
   return (
     <svg width={size} height={size} style={{ flexShrink: 0 }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#E5E7EB" strokeWidth={4}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.border} strokeWidth={4}/>
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={4}
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         transform={`rotate(-90 ${size/2} ${size/2})`}
@@ -115,7 +116,7 @@ const ProgressionWidget = ({ modulesFamilles, navigate }) => {
         <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec }}>Progression BKT</span>
         <span style={{ fontSize: 10, color: C.textMuted }}>{mastered}/{total} maîtrisées</span>
         <div style={{ flex: 1, height: 2, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: '#22C55E', transition: 'width .9s ease' }}/>
+          <div style={{ height: '100%', width: `${pct}%`, background: C.emerald, transition: 'width .9s ease' }}/>
         </div>
         <button
           onClick={() => navigate('/progression')}
@@ -424,7 +425,7 @@ const DailyChallenge = ({ recommandee, stats, navigate }) => {
         <span style={{ fontSize: 14 }}>🎯</span>
         <h3 style={{ fontSize: 11, fontWeight: 800, color: C.brownMid, margin: 0 }}>Défi du jour</h3>
         {stats?.streak_jours > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: '#F97316' }}>🔥 ×{stats.streak_jours}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: C.accent }}>🔥 ×{stats.streak_jours}</span>
         )}
       </div>
       <p style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: '0 0 3px', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{recommandee.titre}</p>
@@ -432,7 +433,7 @@ const DailyChallenge = ({ recommandee, stats, navigate }) => {
       <button
         onClick={() => navigate(`/tutoriel/${recommandee.ua_id}`)}
         style={{
-          width: '100%', padding: '8px', background: `linear-gradient(135deg, ${C.gold}, #D97706)`,
+          width: '100%', padding: '8px', background: `linear-gradient(135deg, ${C.gold}, ${C.brownMid})`,
           color: 'white', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 800, cursor: 'pointer',
         }}
       >Relever le défi →</button>
@@ -516,10 +517,10 @@ const SidebarBadges = ({ stats }) => {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Award size={13} color="#D97706" />
+          <Award size={13} color={C.brownMid} />
           <h3 style={{ fontSize: 12, fontWeight: 800, color: C.brown, margin: 0 }}>Mes badges</h3>
         </div>
-        <span style={{ fontSize: 10, fontWeight: 800, color: unlocked.length > 0 ? '#D97706' : C.textMuted }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: unlocked.length > 0 ? C.brownMid : C.textMuted }}>
           {unlocked.length}/{total}
         </span>
       </div>
@@ -541,7 +542,7 @@ const SidebarBadges = ({ stats }) => {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
               {unlocked.map(b => (
                 <div key={b.id} title={b.label}
-                  style={{ width: 34, height: 34, borderRadius: 8, background: '#FFF7ED', border: '1.5px solid #F59E0B40', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, transition: 'transform .15s' }}
+                  style={{ width: 34, height: 34, borderRadius: 8, background: C.goldPale, border: `1.5px solid ${C.gold}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, transition: 'transform .15s' }}
                   onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
                   onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 >{b.emoji}</div>
@@ -561,13 +562,13 @@ const SidebarBadges = ({ stats }) => {
                 <div key={b.id} style={{
                   display: 'flex', alignItems: 'center', gap: 9,
                   padding: '6px 9px', borderRadius: 9,
-                  background: b.unlocked ? '#FFF7ED' : C.brownGhost,
-                  border: `1.5px solid ${b.unlocked ? '#F59E0B35' : C.border}`,
+                  background: b.unlocked ? C.goldPale : C.brownGhost,
+                  border: `1.5px solid ${b.unlocked ? `${C.gold}35` : C.border}`,
                   opacity: b.unlocked ? 1 : 0.55,
                 }}>
                   <span style={{ fontSize: 20, filter: b.unlocked ? 'none' : 'grayscale(1)', flexShrink: 0 }}>{b.emoji}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: b.unlocked ? '#92400E' : C.textMuted }}>{b.label}</p>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: b.unlocked ? C.brownDark : C.textMuted }}>{b.label}</p>
                   </div>
                   {b.unlocked && <CheckCircle2 size={12} color="#D97706" style={{ flexShrink: 0 }} />}
                 </div>
@@ -622,8 +623,8 @@ const SidebarSessions = ({ sessions }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {visible.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 9, background: C.brownGhost, border: `1px solid ${C.border}` }}>
-                <div style={{ width: 28, height: 28, borderRadius: 7, background: '#DBEAFE', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BookOpen size={12} color="#2563EB" />
+                <div style={{ width: 28, height: 28, borderRadius: 7, background: C.bluePale, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={12} color={C.blue} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.cours_titre}</p>
@@ -631,7 +632,7 @@ const SidebarSessions = ({ sessions }) => {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
                   {s.score_final !== null && (
-                    <span style={{ fontSize: 11, fontWeight: 900, color: s.score_final >= 70 ? C.emerald : s.score_final >= 50 ? '#D97706' : '#DC2626' }}>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: s.score_final >= 70 ? C.emerald : s.score_final >= 50 ? C.orange : C.red }}>
                       {s.score_final}%
                     </span>
                   )}
@@ -825,13 +826,13 @@ export default function Dashboard() {
             <span style={{ background: 'rgba(255,255,255,0.18)', padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 700 }}>
               🎓 {user?.niveau_label || 'Niveau non défini'}
             </span>
-            {stats && (() => { const r = getRang(stats.p_mastery_moyen); return (
+            {stats && (() => { const r = getRang(stats.p_mastery_moyen, C); return (
               <span style={{ background: 'rgba(255,255,255,0.18)', padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 700 }}>
                 {r.emoji} {r.label}
               </span>
             )})()}
             {stats?.streak_jours > 0 && (
-              <span style={{ background: 'rgba(255,165,0,0.3)', padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 800, color: '#FFD580' }}>
+              <span style={{ background: `${C.gold}4D`, padding: '3px 10px', borderRadius: 20, fontSize: xs ? 10 : 11, fontWeight: 800, color: C.gold }}>
                 🔥 {stats.streak_jours} jour{stats.streak_jours > 1 ? 's' : ''}
               </span>
             )}
@@ -1104,7 +1105,7 @@ export default function Dashboard() {
                   subject: comp.length > 14 ? comp.substring(0, 14) + '…' : comp,
                   A: val.pourcentage, fullName: comp,
                 }))} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-                  <PolarGrid stroke="#E5E7EB" />
+                  <PolarGrid stroke={C.border} />
                   <PolarAngleAxis dataKey="subject" tick={{ fill: C.textSec, fontSize: mobile ? 9 : 11, fontWeight: 700 }} />
                   <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
                   <Radar dataKey="A" stroke={C.brown} fill={C.brown} fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: C.brown }} />

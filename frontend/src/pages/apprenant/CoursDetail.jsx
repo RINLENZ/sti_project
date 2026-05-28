@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -203,7 +203,18 @@ export default function CoursDetail() {
   const { C }     = useTheme()
   const { uaId }  = useParams()
   const navigate  = useNavigate()
+  const location  = useLocation()
   const { xs, mobile: isMobile, tablet: isTablet } = useBreakpoint()
+
+  // Retour intelligent : si on vient d'une session/tutoriel terminé(e), on va au dashboard
+  // plutôt que de re-déclencher la session avec navigate(-1).
+  const handleBack = () => {
+    const from = location.state?.from
+    if (from === 'session' || from === 'tutoriel') return navigate('/dashboard')
+    // Si on a un historique réel ET qu'on ne vient pas d'une session → go back
+    if (window.history.length > 2) return navigate(-1)
+    navigate('/dashboard')
+  }
 
   const user = useSelector(s => s.auth.user)
 
@@ -259,7 +270,7 @@ export default function CoursDetail() {
         </svg>
 
         <div style={{ position: 'relative' }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', borderRadius: 8, padding: isMobile ? '8px 12px' : '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, marginBottom: isMobile ? 16 : 20, minHeight: isMobile ? 44 : 'auto' }}>
+          <button onClick={handleBack} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', borderRadius: 8, padding: isMobile ? '8px 12px' : '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, marginBottom: isMobile ? 16 : 20, minHeight: isMobile ? 44 : 'auto' }}>
             <ArrowLeft size={14}/> Retour
           </button>
 
