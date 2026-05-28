@@ -1,38 +1,71 @@
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import api from '../../services/api'
 import {
   Map, BookOpen, ChevronLeft, CheckCircle2,
-  ClipboardList, FileText, Award, ShieldAlert, Clock, Star, Lock,
+  ClipboardList, FileText, Award, ShieldAlert, Clock, Lock,
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { Spinner } from '../Skeleton'
 import { getCache, setCache } from '../../services/cache'
 
-// ── Helpers ──────────────────────────────────────────────────────
-
-function uaStatus(ua, progression) {
-  if (ua.statut === 'done') return 'done'
+// ── Métrique unifiée BKT — source de vérité pour tous les statuts ────────────
+//
+// Remplace l'ancienne logique exercices_faits/total (ParcoursPage) et la logique
+// bkt_score >= 0.80 (ProgressionMap). Les deux pages montraient des états
+// contradictoires pour le même apprenant. Règle unique :
+//   bkt_score >= 0.80  → done        (Maîtrisé)
+//   bkt_score  > 0.0   → inprogress  (En cours)
+//   bkt_score == null  → todo        (Non commencé / pas de compétences)
+//   bkt_score == 0.0   → todo        (Non commencé)
+//   is_locked          → locked      (Prérequis non atteints)
+//
+function uaStatus(ua) {
   if (ua.is_locked) return 'locked'
-  const details = progression?.details || []
-  const done = details.filter(d => d.ua_id === ua.id && d.correct).length
-  const pct  = ua.nb_exercices > 0 ? Math.round(done / ua.nb_exercices * 100) : 0
-  if (pct === 100) return 'done'
-  if (pct > 0)     return 'inprogress'
+  const bkt = ua.bkt_score
+  if (bkt == null)   return 'todo'
+  if (bkt >= 0.80)   return 'done'
+  if (bkt > 0.0)     return 'inprogress'
   return 'todo'
 }
 
-function uaStars(ua, progression) {
-  const details = progression?.details || []
-  const done = details.filter(d => d.ua_id === ua.id && d.correct).length
-  const pct  = ua.nb_exercices > 0 ? Math.round(done / ua.nb_exercices * 100) : 0
-  if (pct >= 90) return 3
-  if (pct >= 60) return 2
-  if (pct >= 30) return 1
-  return 0
+// ── Niveaux BKT → couleur + libellé (via thème — dark mode compatible) ───────
+function bktLevel(score, C) {
+  if (score == null || score === 0)
+    return { color: C.textMuted, bg: C.bg,         label: 'Non commencé', pct: 0 }
+  if (score < 0.25)
+    return { color: C.red,       bg: C.redPale,     label: 'À démarrer',   pct: Math.round(score * 100) }
+  if (score < 0.55)
+    return { color: C.orange,    bg: C.goldPale,    label: 'En cours',     pct: Math.round(score * 100) }
+  if (score < 0.80)
+    return { color: C.gold,      bg: C.goldPale,    label: 'Bien engagé',  pct: Math.round(score * 100) }
+  return   { color: C.emerald,   bg: C.emeraldPale, label: 'Maîtrisé',     pct: Math.round(score * 100) }
 }
 
+// ── Anneau BKT SVG (emprunté de ProgressionMap, couleurs via thème) ──────────
+function MasteryRing({ score, size = 38, C }) {
+  const { color, pct } = bktLevel(score, C)
+  const r    = (size - 6) / 2
+  const circ = 2 * Math.PI * r
+  const dash = (pct / 100) * circ
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.border} strokeWidth={4.5}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={4.5}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+        style={{ transition: 'stroke-dasharray .7s ease' }}
+      />
+      <text x={size/2} y={size/2 + 1} textAnchor="middle" dominantBaseline="middle"
+        fill={color} fontSize={size < 40 ? 9 : 11} fontWeight={800}>
+        {pct}%
+      </text>
+    </svg>
+  )
+}
+
+// ── Barre de progression ──────────────────────────────────────────────────────
 const ProgressBar = ({ value, color, h = 5 }) => {
   const { C } = useTheme()
   return (
@@ -45,15 +78,15 @@ const ProgressBar = ({ value, color, h = 5 }) => {
   )
 }
 
-// ── Bandeau Module ───────────────────────────────────────────────
-function ModuleBanner({ module, progression, allFamilles }) {
+// ── Bandeau Module (BKT-based) ────────────────────────────────────────────────
+function ModuleBanner({ module, allFamilles }) {
   const { C } = useTheme()
-  const allUnits  = allFamilles.flatMap(f => f.unites || [])
-  const done      = allUnits.filter(u => uaStatus(u, progression) === 'done').length
-  const total     = allUnits.length
-  const pct       = total > 0 ? Math.round(done / total * 100) : 0
-  const allDone   = done === total && total > 0
-  const hasActive = allUnits.some(u => uaStatus(u, progression) === 'inprogress')
+  const allUnits = allFamilles.flatMap(f => f.unites || [])
+  const done     = allUnits.filter(u => uaStatus(u) === 'done').length
+  const total    = allUnits.length
+  const pct      = total > 0 ? Math.round(done / total * 100) : 0
+  const allDone  = done === total && total > 0
+  const hasActiv = allUnits.some(u => uaStatus(u) === 'inprogress')
 
   return (
     <div style={{
@@ -61,7 +94,7 @@ function ModuleBanner({ module, progression, allFamilles }) {
         ? `linear-gradient(135deg, ${C.emerald}22, ${C.emeraldPale})`
         : `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`,
       borderRadius: 18, padding: '18px 20px',
-      border: `1.5px solid ${allDone ? `${C.emerald}55` : hasActive ? `${C.gold}40` : 'transparent'}`,
+      border: `1.5px solid ${allDone ? `${C.emerald}55` : hasActiv ? `${C.gold}40` : 'transparent'}`,
       boxShadow: `0 6px 24px ${C.brown}22`,
       animation: 'fadeIn .35s ease',
     }}>
@@ -69,7 +102,7 @@ function ModuleBanner({ module, progression, allFamilles }) {
         <div style={{
           width: 52, height: 52, borderRadius: 16, flexShrink: 0,
           background: allDone
-            ? `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`
+            ? `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`
             : 'rgba(255,255,255,.15)',
           border: allDone ? 'none' : '2px solid rgba(255,255,255,.25)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -94,12 +127,8 @@ function ModuleBanner({ module, progression, allFamilles }) {
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-          {allDone && (
-            <span style={{ fontSize: 9, fontWeight: 800, color: C.emerald, background: `${C.emerald}18`, padding: '3px 9px', borderRadius: 10 }}>✓ Terminé</span>
-          )}
-          {hasActive && !allDone && (
-            <span style={{ fontSize: 9, fontWeight: 800, color: C.gold, background: `${C.gold}25`, padding: '3px 9px', borderRadius: 10 }}>▶ En cours</span>
-          )}
+          {allDone && <span style={{ fontSize: 9, fontWeight: 800, color: C.emerald, background: `${C.emerald}18`, padding: '3px 9px', borderRadius: 10 }}>✓ Terminé</span>}
+          {hasActiv && !allDone && <span style={{ fontSize: 9, fontWeight: 800, color: C.gold, background: `${C.gold}25`, padding: '3px 9px', borderRadius: 10 }}>▶ En cours</span>}
           <span style={{ fontSize: 22, fontWeight: 900, color: allDone ? C.emerald : 'white' }}>{pct}%</span>
         </div>
       </div>
@@ -107,11 +136,11 @@ function ModuleBanner({ module, progression, allFamilles }) {
   )
 }
 
-// ── Label Famille ────────────────────────────────────────────────
-function FamilleLabel({ famille, progression }) {
+// ── Label Famille ─────────────────────────────────────────────────────────────
+function FamilleLabel({ famille }) {
   const { C } = useTheme()
   const units   = famille.unites || []
-  const done    = units.filter(u => uaStatus(u, progression) === 'done').length
+  const done    = units.filter(u => uaStatus(u) === 'done').length
   const total   = units.length
   const allDone = done === total && total > 0
 
@@ -132,12 +161,11 @@ function FamilleLabel({ famille, progression }) {
   )
 }
 
-// ── Noeud UA (timeline verticale) ───────────────────────────────
-function UANode({ ua, nodeIndex, globalIndex, progression, recommandeeId, isLast }) {
+// ── Noeud UA (timeline verticale, BKT ring à la place des étoiles) ────────────
+function UANode({ ua, nodeIndex, globalIndex, recommandeeId, isLast }) {
   const { C }    = useTheme()
   const navigate = useNavigate()
-  const status = uaStatus(ua, progression)
-  const stars  = uaStars(ua, progression)
+  const status = uaStatus(ua)
   const [hovered, setHovered] = useState(false)
 
   const isDone       = status === 'done'
@@ -146,11 +174,9 @@ function UANode({ ua, nodeIndex, globalIndex, progression, recommandeeId, isLast
   const canClick     = !isLocked
   const isReco       = recommandeeId === ua.id && !isDone && !isLocked
 
-  const doneCnt   = (progression?.details || []).filter(d => d.ua_id === ua.id && d.correct).length
-  const inProgPct = ua.nb_exercices > 0 ? Math.round(doneCnt / ua.nb_exercices * 100) : 0
-
-  const nodeGrad   = isDone
-    ? `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`
+  const bktPct   = ua.bkt_score != null ? Math.round(ua.bkt_score * 100) : 0
+  const nodeGrad = isDone
+    ? `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`
     : isInProgress
       ? `linear-gradient(135deg, ${C.gold}, ${C.orange})`
       : 'none'
@@ -170,8 +196,7 @@ function UANode({ ua, nodeIndex, globalIndex, progression, recommandeeId, isLast
           boxShadow: isInProgress
             ? `0 0 0 6px ${C.gold}20, 0 2px 12px ${C.gold}35`
             : isDone ? `0 2px 10px ${C.emerald}30` : 'none',
-          zIndex: 1, position: 'relative',
-          transition: 'box-shadow .2s',
+          zIndex: 1, position: 'relative', transition: 'box-shadow .2s',
         }}>
           {isDone ? '✓' : isLocked ? <Lock size={12}/> : isInProgress ? '▶' : nodeIndex + 1}
         </div>
@@ -186,7 +211,7 @@ function UANode({ ua, nodeIndex, globalIndex, progression, recommandeeId, isLast
         )}
       </div>
 
-      {/* Carte */}
+      {/* Carte UA */}
       <div style={{ flex: 1, marginLeft: 12, marginBottom: isLast ? 0 : 10 }}>
         <button
           onClick={() => canClick && navigate(`/cours/${ua.id}`)}
@@ -226,44 +251,42 @@ function UANode({ ua, nodeIndex, globalIndex, progression, recommandeeId, isLast
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: isLocked ? C.textMuted : C.text, margin: '0 0 4px', lineHeight: 1.35 }}>
                 {ua.titre}
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                {ua.reference_ue && <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>{ua.reference_ue}</span>}
+                {ua.reference_ue    && <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>{ua.reference_ue}</span>}
                 {ua.nb_exercices > 0 && <span style={{ fontSize: 10, color: C.textSec }}>📝 {ua.nb_exercices} exo{ua.nb_exercices > 1 ? 's' : ''}</span>}
                 {ua.duree_estimee > 0 && <span style={{ fontSize: 10, color: C.textSec }}>⏱ {ua.duree_estimee} min</span>}
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
-              {stars > 0 && (
-                <div style={{ display: 'flex', gap: 1 }}>
-                  {[1,2,3].map(s => <Star key={s} size={11} fill={s <= stars ? C.gold : 'none'} color={s <= stars ? C.gold : C.border}/>)}
-                </div>
-              )}
-              {canClick && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-                  color: isDone ? C.brown : isInProgress ? 'white' : C.gold,
-                  background: isDone ? C.brownPale : isInProgress ? `linear-gradient(135deg, ${C.gold}, ${C.orange})` : `${C.gold}18`,
-                  boxShadow: isInProgress ? `0 2px 8px ${C.gold}35` : 'none',
-                }}>
-                  {isDone ? 'Revoir' : isInProgress ? 'Continuer →' : 'Commencer →'}
-                </span>
-              )}
-            </div>
+            {/* Anneau BKT — remplace les étoiles */}
+            {ua.bkt_score != null && (
+              <MasteryRing score={ua.bkt_score} size={38} C={C}/>
+            )}
+            {ua.bkt_score == null && canClick && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, flexShrink: 0,
+                color: isDone ? C.brown : isInProgress ? 'white' : C.gold,
+                background: isDone ? C.brownPale : isInProgress ? `linear-gradient(135deg, ${C.gold}, ${C.orange})` : `${C.gold}18`,
+                boxShadow: isInProgress ? `0 2px 8px ${C.gold}35` : 'none',
+              }}>
+                {isDone ? 'Revoir' : isInProgress ? 'Continuer →' : 'Commencer →'}
+              </span>
+            )}
           </div>
 
-          {isInProgress && ua.nb_exercices > 0 && (
+          {/* Barre BKT si en cours */}
+          {isInProgress && ua.bkt_score != null && (
             <div style={{ marginTop: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                <span style={{ fontSize: 9, color: C.textSec }}>Progression</span>
-                <span style={{ fontSize: 9, fontWeight: 700, color: C.gold }}>{inProgPct}%</span>
+                <span style={{ fontSize: 9, color: C.textSec }}>Maîtrise BKT</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: C.gold }}>{bktPct}%</span>
               </div>
-              <ProgressBar value={inProgPct} color={C.gold} h={4}/>
+              <ProgressBar value={bktPct} color={C.gold} h={4}/>
             </div>
           )}
         </button>
@@ -272,32 +295,27 @@ function UANode({ ua, nodeIndex, globalIndex, progression, recommandeeId, isLast
   )
 }
 
-// ── Section Module (timeline linéaire) ──────────────────────────
-function ModuleSection({ module, familles, progression, recommandeeId, isLast, globalOffset }) {
+// ── Section Module (timeline linéaire) ────────────────────────────────────────
+function ModuleSection({ module, familles, recommandeeId, isLast, globalOffset }) {
   const { C } = useTheme()
   let nodeCounter = 0
 
   return (
     <div style={{ marginBottom: isLast ? 0 : 24 }}>
-      <ModuleBanner module={module} progression={progression} allFamilles={familles}/>
-
+      <ModuleBanner module={module} allFamilles={familles}/>
       <div style={{ marginTop: 16 }}>
         {familles.map((famille) => {
           const units = famille.unites || []
           return (
             <div key={famille.id}>
-              <FamilleLabel famille={famille} progression={progression}/>
+              <FamilleLabel famille={famille}/>
               <div style={{ marginTop: 10, marginBottom: 4 }}>
                 {units.map((ua, ui) => {
                   const gi = globalOffset + nodeCounter
                   nodeCounter++
                   return (
-                    <UANode
-                      key={ua.id} ua={ua}
-                      nodeIndex={ui} globalIndex={gi}
-                      progression={progression} recommandeeId={recommandeeId}
-                      isLast={ui === units.length - 1}
-                    />
+                    <UANode key={ua.id} ua={ua} nodeIndex={ui} globalIndex={gi}
+                      recommandeeId={recommandeeId} isLast={ui === units.length - 1}/>
                   )
                 })}
               </div>
@@ -305,7 +323,6 @@ function ModuleSection({ module, familles, progression, recommandeeId, isLast, g
           )
         })}
       </div>
-
       {!isLast && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 0', paddingLeft: 40 }}>
           <div style={{ height: 1, flex: 1, background: C.border }}/>
@@ -319,104 +336,103 @@ function ModuleSection({ module, familles, progression, recommandeeId, isLast, g
   )
 }
 
-// ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 // PAGE PARCOURS
-// ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 export default function ParcoursPage({ onBack }) {
   const { C } = useTheme()
   const { user } = useSelector(s => s.auth)
   const navigate = useNavigate()
 
-  const [matieres,    setMatieres]    = useState([])
-  const [pathData,    setPathData]    = useState([])   // [{module, familles}]
-  const [progression, setProgression] = useState(null)
+  // programme = résultat complet du endpoint /programme (matières → modules → familles → UAs)
+  // Une seule requête remplace les N appels /modules/:id/familles de l'ancienne version.
+  const [programme,   setProgramme]   = useState([])
   const [recommandee, setRecommandee] = useState(null)
   const [selectedMat, setSelectedMat] = useState(null)
   const [loading,     setLoading]     = useState(true)
-  const [loadingPath, setLoadingPath] = useState(false)
   const [activeTab,   setActiveTab]   = useState('cours')
   const [epreuves,    setEpreuves]    = useState([])
+  const [filtre,      setFiltre]      = useState('all')  // all | todo | progress | done
 
-  const loadPathForMatiere = useCallback(async (mat) => {
-    if (!mat) return
-    const cacheKey = `parcours_v2_path_${mat.id}_${user.id}`
-    const cached   = getCache(cacheKey)
-    if (cached) { setPathData(cached); return }
-    setLoadingPath(true)
-    try {
-      const mods    = mat.modules || []
-      const results = await Promise.all(
-        mods.map(mod =>
-          api.get(`/api/cours/modules/${mod.id}/familles?user_id=${user.id}`)
-            .then(({ data }) => ({ module: mod, familles: data }))
-            .catch(() => ({ module: mod, familles: [] }))
-        )
-      )
-      setPathData(results)
-      setCache(cacheKey, results, 2 * 60 * 1000)
-    } catch {
-      setPathData([])
-    } finally {
-      setLoadingPath(false)
-    }
-  }, [user.id])
-
+  // ── Chargement — 1 seule requête pour tout le programme ─────────────────────
   useEffect(() => {
     if (!user?.id) return
+    const cacheKey = `parcours_v3_${user.niveau_id}_${user.id}`
+    const hit = getCache(cacheKey)
+    if (hit) {
+      setProgramme(hit.programme); setRecommandee(hit.recommandee)
+      setEpreuves(hit.epreuves);   setSelectedMat(hit.selectedMat)
+      setLoading(false)
+    }
+
     async function init() {
-      const cacheKey = `parcours_v2_${user.id}`
-      const hit = getCache(cacheKey)
-      if (hit) {
-        setMatieres(hit.matieres)
-        setProgression(hit.progression)
-        setRecommandee(hit.recommandee)
-        setEpreuves(hit.epreuves)
-        setSelectedMat(hit.selectedMat)
-        setPathData(hit.pathData || [])
-        setLoading(false)
-      }
       try {
-        const [{ data: mat }, { data: prog }] = await Promise.all([
-          api.get(`/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`),
-          api.get(`/api/cours/progression/${user.id}`),
+        const [progRes] = await Promise.all([
+          user.niveau_id
+            ? api.get(`/api/cours/programme/${user.niveau_id}?user_id=${user.id}`)
+            : Promise.resolve({ data: [] }),
         ])
-        setMatieres(mat)
-        setProgression(prog)
-        let firstMat = null
-        if (mat.length > 0) {
-          firstMat = mat[0]
-          setSelectedMat(firstMat)
-          await loadPathForMatiere(firstMat)
-        }
+        const prog = progRes.data || []
+        setProgramme(prog)
+        const firstMat = prog[0] ?? null
+        if (!selectedMat && firstMat) setSelectedMat(firstMat)
+
         let reco = null, ep = []
         try { const { data: r } = await api.get(`/api/cours/ua/recommandee/${user.id}`); reco = r?.recommandee || null } catch {}
         try { const { data: e } = await api.get('/api/examens/disponibles'); ep = e } catch {}
-        setRecommandee(reco)
-        setEpreuves(ep)
-        setCache(cacheKey, {
-          matieres: mat, progression: prog, recommandee: reco, epreuves: ep,
-          selectedMat: firstMat,
-          pathData: getCache(`parcours_v2_path_${firstMat?.id}_${user.id}`) || [],
-        }, 2 * 60 * 1000)
+        setRecommandee(reco); setEpreuves(ep)
+
+        setCache(cacheKey, { programme: prog, recommandee: reco, epreuves: ep, selectedMat: firstMat }, 2 * 60 * 1000)
       } catch {}
       finally { setLoading(false) }
     }
     init()
-  }, [user?.id, loadPathForMatiere])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.niveau_id])
 
-  async function handleSelectMatiere(mat) {
-    setSelectedMat(mat)
-    setPathData([])
-    await loadPathForMatiere(mat)
-  }
+  // ── Données de la matière sélectionnée ─────────────────────────────────────
+  const currentMatData = programme.find(m => m.id === selectedMat?.id) ?? null
+  const pathData = useMemo(() =>
+    currentMatData?.modules.map(mod => ({
+      module:   mod,
+      familles: mod.familles || [],
+    })) ?? []
+  , [currentMatData])
 
-  const allUnits   = pathData.flatMap(p => (p.familles || []).flatMap(f => f.unites || []))
-  const totalDone  = allUnits.filter(u => uaStatus(u, progression) === 'done').length
-  const totalUnits = allUnits.length
-  const overallPct = totalUnits > 0 ? Math.round(totalDone / totalUnits * 100) : 0
+  // ── Stats globales (matière courante) ───────────────────────────────────────
+  const allUAsForMat = useMemo(() =>
+    pathData.flatMap(p => p.familles.flatMap(f => f.unites || []))
+  , [pathData])
+
+  const stats = useMemo(() => ({
+    done:     allUAsForMat.filter(u => uaStatus(u) === 'done').length,
+    progress: allUAsForMat.filter(u => uaStatus(u) === 'inprogress').length,
+    todo:     allUAsForMat.filter(u => uaStatus(u) === 'todo').length,
+    total:    allUAsForMat.length,
+  }), [allUAsForMat])
+
+  const overallPct = stats.total > 0 ? Math.round(stats.done / stats.total * 100) : 0
   const epBadge    = epreuves.filter(e => !e.soumis).length
 
-  // Anneau SVG circulaire
+  // ── Filtrage des UAs ────────────────────────────────────────────────────────
+  const filteredPathData = useMemo(() => {
+    if (filtre === 'all') return pathData
+    return pathData.map(section => ({
+      ...section,
+      familles: section.familles.map(f => ({
+        ...f,
+        unites: (f.unites || []).filter(ua => {
+          const s = uaStatus(ua)
+          if (filtre === 'done')     return s === 'done'
+          if (filtre === 'progress') return s === 'inprogress'
+          if (filtre === 'todo')     return s === 'todo'
+          return true
+        }),
+      })).filter(f => (f.unites?.length ?? 0) > 0),
+    })).filter(s => s.familles.length > 0)
+  }, [pathData, filtre])
+
+  // ── Anneau hero ─────────────────────────────────────────────────────────────
   const R    = 26
   const CIRC = 2 * Math.PI * R
   const dash = CIRC * (1 - overallPct / 100)
@@ -464,17 +480,21 @@ export default function ParcoursPage({ onBack }) {
                   </span>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 14 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)' }}>
-                  {totalDone} terminée{totalDone > 1 ? 's' : ''}
-                </span>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>
-                  {totalUnits - totalDone} restante{totalUnits - totalDone > 1 ? 's' : ''}
-                </span>
+              {/* Chips stats globales — Maîtrisé / En cours / À démarrer */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {[
+                  { label: `${stats.done} maîtrisée${stats.done > 1 ? 's' : ''}`,   color: C.emerald },
+                  { label: `${stats.progress} en cours`,                              color: C.orange  },
+                  { label: `${stats.todo} à démarrer`,                               color: C.textMuted },
+                ].map(c => (
+                  <span key={c.label} style={{ fontSize: 11, fontWeight: 700, padding: '3px 11px', borderRadius: 20, background: 'rgba(255,255,255,.13)', border: `1.5px solid ${c.color}88`, color: 'white' }}>
+                    <span style={{ color: c.color }}>●</span> {c.label}
+                  </span>
+                ))}
               </div>
             </div>
 
-            {/* Anneau progression */}
+            {/* Anneau progression global */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <svg width={72} height={72} style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx={36} cy={36} r={R} fill="none" stroke="rgba(255,255,255,.18)" strokeWidth={5}/>
@@ -497,13 +517,14 @@ export default function ParcoursPage({ onBack }) {
 
       {/* ══ NAVIGATION STICKY ══ */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 20 }}>
-        {matieres.length > 1 && (
+        {/* Onglets matières */}
+        {programme.length > 1 && (
           <div style={{ padding: '10px 18px 0' }}>
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none' }}>
-              {matieres.map(mat => {
+              {programme.map(mat => {
                 const active = selectedMat?.id === mat.id
                 return (
-                  <button key={mat.id} onClick={() => handleSelectMatiere(mat)} style={{
+                  <button key={mat.id} onClick={() => setSelectedMat(mat)} style={{
                     padding: '6px 14px', borderRadius: 20, flexShrink: 0,
                     border: `1.5px solid ${active ? C.brown : C.border}`,
                     background: active ? C.brown : C.surface,
@@ -511,7 +532,7 @@ export default function ParcoursPage({ onBack }) {
                     fontSize: 12, fontWeight: 700, cursor: 'pointer',
                     transition: 'all .15s', boxShadow: active ? `0 2px 10px ${C.brown}30` : 'none',
                   }}>
-                    {mat.icone || '📚'} {mat.nom}
+                    📚 {mat.nom}
                   </button>
                 )
               })}
@@ -519,6 +540,7 @@ export default function ParcoursPage({ onBack }) {
           </div>
         )}
 
+        {/* Onglets Cours / Épreuves */}
         <div style={{ display: 'flex', gap: 2, padding: '0 18px' }}>
           {[
             { id: 'cours',    label: 'Cours',    Icon: BookOpen      },
@@ -534,11 +556,32 @@ export default function ParcoursPage({ onBack }) {
               <tab.Icon size={13}/>
               {tab.label}
               {tab.badge > 0 && (
-                <span style={{ background: '#EF4444', color: 'white', borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 800 }}>{tab.badge}</span>
+                <span style={{ background: C.red, color: 'white', borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 800 }}>{tab.badge}</span>
               )}
             </button>
           ))}
         </div>
+
+        {/* Chips filtres BKT — uniquement dans l'onglet Cours, avec compteurs */}
+        {activeTab === 'cours' && (
+          <div style={{ padding: '8px 18px 10px', display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {[
+              { key: 'all',      label: `Tout (${stats.total})` },
+              { key: 'todo',     label: `🔴 À démarrer (${stats.todo})` },
+              { key: 'progress', label: `🟠 En cours (${stats.progress})` },
+              { key: 'done',     label: `🟢 Maîtrisées (${stats.done})` },
+            ].map(f => (
+              <button key={f.key} onClick={() => setFiltre(f.key)} style={{
+                padding: '5px 12px', borderRadius: 20, border: 'none', flexShrink: 0,
+                background: filtre === f.key ? C.brown : C.bg,
+                color:      filtre === f.key ? 'white' : C.textSec,
+                fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+              }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ══ ONGLET ÉPREUVES ══ */}
@@ -558,9 +601,9 @@ export default function ParcoursPage({ onBack }) {
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 6 }}>
                     {[
-                      { label: 'Passées',  value: soumises.length, color: C.emerald, Icon: CheckCircle2 },
-                      { label: 'À passer', value: epreuves.filter(e => !e.soumis).length, color: C.brown, Icon: Clock },
-                      { label: 'Moyenne',  value: moyenne != null ? `${moyenne.toFixed(1)}/20` : '—', color: '#2563eb', Icon: Award },
+                      { label: 'Passées',  value: soumises.length,                               color: C.emerald, Icon: CheckCircle2 },
+                      { label: 'À passer', value: epreuves.filter(e => !e.soumis).length,        color: C.brown,   Icon: Clock        },
+                      { label: 'Moyenne',  value: moyenne != null ? `${moyenne.toFixed(1)}/20` : '—', color: C.blue, Icon: Award      },
                     ].map(s => (
                       <div key={s.label} style={{ background: C.surface, borderRadius: 12, padding: '12px 14px', border: `1px solid ${C.border}`, boxShadow: '0 1px 5px rgba(107,58,42,0.06)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
@@ -573,7 +616,6 @@ export default function ParcoursPage({ onBack }) {
                   </div>
                 )
               })()}
-
               {epreuves.map(ep => (
                 <div key={ep.id} onClick={() => navigate(`/epreuve/${ep.id}`)}
                   style={{ background: C.surface, borderRadius: 14, padding: '14px 18px', border: `1.5px solid ${ep.soumis ? `${C.emerald}35` : C.border}`, cursor: 'pointer', transition: 'all .15s', boxShadow: '0 1px 6px rgba(107,58,42,0.06)' }}
@@ -587,19 +629,19 @@ export default function ParcoursPage({ onBack }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
                         <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.titre}</p>
-                        {ep.soumis && ep.nb_incidents > 0 && <ShieldAlert size={12} color="#EF4444" style={{ flexShrink: 0 }}/>}
+                        {ep.soumis && ep.nb_incidents > 0 && <ShieldAlert size={12} color={C.red} style={{ flexShrink: 0 }}/>}
                       </div>
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 10, color: C.textSec }}>{ep.classe_label || ep.type_epreuve}</span>
                         <span style={{ fontSize: 10, color: C.textSec }}>⏱ {ep.duree_minutes} min</span>
                         {ep.soumis && ep.score_total != null && (
-                          <span style={{ fontSize: 11, fontWeight: 800, color: ep.score_total >= 10 ? C.emerald : '#EF4444' }}>{ep.score_total.toFixed(1)}/20</span>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: ep.score_total >= 10 ? C.emerald : C.red }}>{ep.score_total.toFixed(1)}/20</span>
                         )}
                       </div>
                     </div>
                     {ep.soumis && ep.score_total != null ? (
-                      <div style={{ width: 42, height: 42, borderRadius: '50%', border: `2.5px solid ${ep.score_total >= 10 ? C.emerald : '#EF4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <span style={{ fontSize: 11, fontWeight: 900, color: ep.score_total >= 10 ? C.emerald : '#EF4444' }}>{ep.score_total.toFixed(0)}</span>
+                      <div style={{ width: 42, height: 42, borderRadius: '50%', border: `2.5px solid ${ep.score_total >= 10 ? C.emerald : C.red}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, fontWeight: 900, color: ep.score_total >= 10 ? C.emerald : C.red }}>{ep.score_total.toFixed(0)}</span>
                       </div>
                     ) : (
                       <ChevronLeft size={15} color={C.brown} style={{ transform: 'rotate(180deg)', flexShrink: 0 }}/>
@@ -607,7 +649,7 @@ export default function ParcoursPage({ onBack }) {
                   </div>
                   {ep.soumis && ep.score_total != null && (
                     <div style={{ marginTop: 10 }}>
-                      <ProgressBar value={(ep.score_total / 20) * 100} color={ep.score_total >= 10 ? C.emerald : '#EF4444'} h={4}/>
+                      <ProgressBar value={(ep.score_total / 20) * 100} color={ep.score_total >= 10 ? C.emerald : C.red} h={4}/>
                     </div>
                   )}
                 </div>
@@ -620,21 +662,24 @@ export default function ParcoursPage({ onBack }) {
       {/* ══ ONGLET COURS (timeline linéaire) ══ */}
       {activeTab === 'cours' && (
         <div style={{ padding: '20px 16px', maxWidth: 720, margin: '0 auto' }}>
-          {loadingPath ? (
-            <div style={{ textAlign: 'center', padding: '60px 0', display: 'flex', justifyContent: 'center' }}>
-              <Spinner size={36}/>
-            </div>
-          ) : pathData.length === 0 ? (
+          {pathData.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
               <span style={{ fontSize: 44 }}>📭</span>
               <p style={{ fontSize: 15, fontWeight: 700, color: C.brown, margin: '14px 0 6px' }}>Aucun contenu disponible</p>
               <p style={{ fontSize: 13, color: C.textSec, margin: 0 }}>
-                Sélectionne une matière ou attends que l'administrateur ajoute du contenu pour <strong>{user?.niveau_label}</strong>.
+                {user?.niveau_id
+                  ? <>Attends que l'administrateur ajoute du contenu pour <strong>{user.niveau_label}</strong>.</>
+                  : 'Ton niveau n\'est pas encore configuré. Contacte ton enseignant.'}
               </p>
+            </div>
+          ) : filteredPathData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: C.textSec }}>
+              <p style={{ fontSize: 32 }}>🔍</p>
+              <p style={{ fontSize: 14, fontWeight: 700 }}>Aucune UA dans ce filtre</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {/* Recommandée IA */}
+              {/* Bandeau UA recommandée par l'IA */}
               {recommandee && (
                 <div style={{
                   background: `linear-gradient(135deg, ${C.emeraldPale}, ${C.surface})`,
@@ -643,43 +688,44 @@ export default function ParcoursPage({ onBack }) {
                   display: 'flex', alignItems: 'center', gap: 14,
                   animation: 'fadeIn .4s ease',
                 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>⭐</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>⭐</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 9, fontWeight: 700, color: C.emerald, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 2px' }}>Recommandé par l'IA</p>
                     <p style={{ fontSize: 13, fontWeight: 800, color: C.text, margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{recommandee.titre}</p>
-                    <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>Maîtrise BKT : {Math.round(recommandee.score_bkt * 100)}%</p>
+                    <p style={{ fontSize: 10, color: C.textSec, margin: 0 }}>Maîtrise BKT : {Math.round((recommandee.score_bkt ?? 0) * 100)}%</p>
                   </div>
-                  <button onClick={() => navigate(`/cours/${recommandee.ua_id}`)} style={{
-                    padding: '8px 16px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`,
-                    color: 'white', border: 'none', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, boxShadow: `0 3px 10px ${C.emerald}35`,
+                  {/* Recommandée → Alisha tutoriel (navigation cohérente avec ProgressionMap) */}
+                  <button onClick={() => navigate(`/tutoriel/${recommandee.id ?? recommandee.ua_id}`)} style={{
+                    padding: '8px 16px', background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`,
+                    color: 'white', border: 'none', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                    cursor: 'pointer', flexShrink: 0, boxShadow: `0 3px 10px ${C.emerald}35`,
                   }}>
-                    Commencer →
+                    Démarrer avec Alisha →
                   </button>
                 </div>
               )}
 
-              {/* Timeline : Module → Familles → UAs */}
+              {/* Timeline */}
               {(() => {
                 let offset = 0
-                return pathData.map((section, si) => {
+                return filteredPathData.map((section, si) => {
                   const el = (
                     <ModuleSection
                       key={section.module.id}
                       module={section.module}
                       familles={section.familles}
-                      progression={progression}
-                      recommandeeId={recommandee?.ua_id}
-                      isLast={si === pathData.length - 1}
+                      recommandeeId={recommandee?.id ?? recommandee?.ua_id}
+                      isLast={si === filteredPathData.length - 1}
                       globalOffset={offset}
                     />
                   )
-                  offset += (section.familles || []).flatMap(f => f.unites || []).length
+                  offset += section.familles.flatMap(f => f.unites || []).length
                   return el
                 })
               })()}
 
               {/* Trophée si tout terminé */}
-              {overallPct === 100 && totalUnits > 0 && (
+              {overallPct === 100 && stats.total > 0 && (
                 <div style={{
                   textAlign: 'center', padding: '30px 20px', marginTop: 16,
                   background: `linear-gradient(135deg, ${C.gold}15, ${C.brownPale})`,

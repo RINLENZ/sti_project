@@ -119,7 +119,7 @@ const ProgressionWidget = ({ modulesFamilles, navigate }) => {
           <div style={{ height: '100%', width: `${pct}%`, background: C.emerald, transition: 'width .9s ease' }}/>
         </div>
         <button
-          onClick={() => navigate('/progression')}
+          onClick={() => navigate('/parcours')}
           style={{
             fontSize: 10, fontWeight: 700, color: C.brown,
             background: C.brownPale, border: 'none', borderRadius: 8,
@@ -1037,7 +1037,7 @@ export default function Dashboard() {
           {modulesFamilles.length} module{modulesFamilles.length > 1 ? 's' : ''}
         </span>
         <button
-          onClick={() => navigate('/progression')}
+          onClick={() => navigate('/parcours')}
           style={{
             marginLeft: 'auto', fontSize: 11, fontWeight: 700,
             color: C.brown, background: C.brownPale, border: 'none',
