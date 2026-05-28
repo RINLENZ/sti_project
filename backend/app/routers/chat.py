@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..database import get_db
 from ..dependencies import get_current_user
-from ..models.user import User
+from ..models.user import User, TuteurSuivi
 from ..models.chat import ChatRoom, ChatMessage
 from ..ws_manager import push_to_user
 
@@ -152,11 +152,23 @@ def get_messages(
             msg.lu_par = lus + [user_id_str]
     db.commit()
 
+    # B1 — Pré-charge les noms des membres pour éviter N+1 requêtes
+    member_ids = room.membres or []
+    sender_map: dict[str, str] = {}
+    for uid in member_ids:
+        try:
+            u = db.query(User).filter(User.id == UUID(str(uid))).first()
+            if u:
+                sender_map[str(u.id)] = f"{u.prenom} {u.nom}"
+        except Exception:
+            pass
+
     return [
         {
             "id":         str(m.id),
             "contenu":    m.contenu,
             "sender_id":  str(m.sender_id),
+            "sender_nom": sender_map.get(str(m.sender_id), "?"),
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in messages
@@ -204,6 +216,101 @@ def send_message(
         push_to_user(uid, payload)
 
     return {"id": str(msg.id), "ok": True}
+
+
+@router.get("/contacts")
+def get_contacts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retourne la liste de contacts disponibles pour démarrer une conversation.
+
+    • Enseignant / super_admin → ses apprenants liés (TuteurSuivi actif)
+    • Apprenant → ses enseignants liés + ses camarades de classe
+      (même niveau_id + filiere_id, max 100, triés par nom)
+
+    Chaque contact inclut :
+      id, prenom, nom, role, groupe ("Enseignants" | "Camarades" | "Mes apprenants")
+
+    Pas de recherche globale volontairement — la liste est curatée pour
+    éviter les contacts non pertinents et protéger la vie privée.
+    Le filtrage par nom se fait côté client sur cette liste.
+    """
+    uid = str(current_user.id)
+    contacts = []
+
+    if current_user.role in ("enseignant", "super_admin"):
+        # Apprenants liés à cet enseignant via TuteurSuivi
+        liens = (
+            db.query(TuteurSuivi)
+            .filter(TuteurSuivi.tuteur_id == current_user.id, TuteurSuivi.actif == True)
+            .all()
+        )
+        for lien in liens:
+            u = db.query(User).filter(User.id == lien.apprenant_id, User.actif == True).first()
+            if u:
+                contacts.append({
+                    "id":     str(u.id),
+                    "prenom": u.prenom,
+                    "nom":    u.nom,
+                    "role":   "apprenant",
+                    "groupe": "Mes apprenants",
+                    "niveau": u.niveau_label,
+                    "filiere": u.filiere_label,
+                })
+
+    else:  # apprenant
+        # 1. Enseignants liés (TuteurSuivi actif — relation initiée par l'apprenant)
+        liens = (
+            db.query(TuteurSuivi)
+            .filter(TuteurSuivi.apprenant_id == current_user.id, TuteurSuivi.actif == True)
+            .all()
+        )
+        for lien in liens:
+            t = db.query(User).filter(
+                User.id == lien.tuteur_id,
+                User.actif == True,
+                User.role.in_(["enseignant", "super_admin"]),
+            ).first()
+            if t:
+                contacts.append({
+                    "id":     str(t.id),
+                    "prenom": t.prenom,
+                    "nom":    t.nom,
+                    "role":   "enseignant",
+                    "groupe": "Enseignants",
+                    "niveau": None,
+                    "filiere": None,
+                })
+
+        # 2. Camarades de classe (même niveau_id + filiere_id, actifs, max 100)
+        if current_user.niveau_id and current_user.filiere_id:
+            camarades = (
+                db.query(User)
+                .filter(
+                    User.role == "apprenant",
+                    User.niveau_id == current_user.niveau_id,
+                    User.filiere_id == current_user.filiere_id,
+                    User.id != current_user.id,
+                    User.actif == True,
+                )
+                .order_by(User.nom, User.prenom)
+                .limit(100)
+                .all()
+            )
+            for u in camarades:
+                contacts.append({
+                    "id":     str(u.id),
+                    "prenom": u.prenom,
+                    "nom":    u.nom,
+                    "role":   "apprenant",
+                    "groupe": "Camarades",
+                    "niveau": u.niveau_label,
+                    "filiere": u.filiere_label,
+                })
+
+    return contacts
 
 
 @router.delete("/rooms/{room_id}")
