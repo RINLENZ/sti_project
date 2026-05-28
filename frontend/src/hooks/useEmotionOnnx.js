@@ -11,21 +11,23 @@ const LABELS      = ['engagement_eleve','engagement_faible','confusion','frustra
 const MEAN        = [0.485, 0.456, 0.406]
 const STD         = [0.229, 0.224, 0.225]
 
-let _session  = null
-let _loading  = false
-let _failed   = false
+let _session    = null
+let _loading    = false
+let _failed     = false
+let _failCount  = 0
+const MAX_RETRIES = 3   // réessaie 3× (1× au boot + 2 retries), puis abandonne
 
 async function getSession() {
-  if (_session)  return _session
-  if (_loading)  return null
-  if (_failed)   return null
-  _loading = true
-  console.log('[EmotionONNX] Chargement en cours...')
+  if (_session)                    return _session
+  if (_loading)                    return null
+  if (_failed && _failCount >= MAX_RETRIES) return null
+  _loading  = true
+  _failed   = false
+  console.log(`[EmotionONNX] Chargement en cours... (tentative ${_failCount + 1}/${MAX_RETRIES})`)
   try {
     const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
-    ort.env.wasm.wasmPaths = import.meta.env.PROD
-      ? 'https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/ort/'
-      : '/'
+    // Les fichiers ort-wasm-* sont dans public/ → servis depuis '/' (Netlify + dev)
+    ort.env.wasm.wasmPaths = '/'
     ort.env.wasm.numThreads = 1
 
     // Timeout 30s pour détecter un blocage WASM silencieux
@@ -42,7 +44,8 @@ async function getSession() {
     console.log('[EmotionONNX] Inputs :', _session.inputNames, 'Outputs :', _session.outputNames)
     return _session
   } catch (e) {
-    console.error('[EmotionONNX] Échec :', e.message)
+    _failCount++
+    console.error(`[EmotionONNX] Échec (${_failCount}/${MAX_RETRIES}) :`, e.message)
     _loading = false
     _failed  = true
     return null

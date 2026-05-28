@@ -672,19 +672,35 @@ export default function Session() {
 
   async function startCamera() {
     setShowCameraBanner(false)
+
+    // ── Détection réseau lent (3G/2G africain) ────────────────────
+    // Sur réseau lent, MediaPipe WASM (~10 MB) prendrait 40-80s → on réduit la résolution
+    // et on n'utilise pas refineLandmarks (économise ~30% du temps de traitement)
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+    const slowNet = conn && (conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g'
+                             || conn.downlink < 1.5)
+    const camW = slowNet ? 160 : 320
+    const camH = slowNet ? 120 : 240
+
     let attempts = 0
     while ((!window.FaceMesh || !window.Camera) && attempts < 10) {
       await new Promise(r => setTimeout(r, 500)); attempts++
     }
     if (!window.FaceMesh || !window.Camera) { toast.error('MediaPipe non disponible'); return }
     try {
-      const fm = new window.FaceMesh({ locateFile: f => import.meta.env.PROD
-        ? `https://sti-proxy.sergedjiomo01.workers.dev/static/wasm/mediapipe/${f}`
-        : `/mediapipe/face_mesh/${f}` })
-      fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 })
+      // Fichiers MediaPipe depuis public/mediapipe/face_mesh/ (Netlify + dev, sans détour proxy)
+      const fm = new window.FaceMesh({ locateFile: f => `/mediapipe/face_mesh/${f}` })
+      fm.setOptions({
+        maxNumFaces:           1,
+        refineLandmarks:       !slowNet,  // désactivé sur réseau lent (−30% CPU)
+        minDetectionConfidence: slowNet ? 0.6 : 0.5,
+        minTrackingConfidence:  slowNet ? 0.6 : 0.5,
+      })
       fm.onResults(onFaceResults)
       faceMeshRef.current = fm
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: camW, height: camH, frameRate: slowNet ? 10 : 24 }
+      })
       videoRef.current.srcObject = stream
       const cam = new window.Camera(videoRef.current, {
         onFrame: async () => {
@@ -692,12 +708,12 @@ export default function Session() {
           if (!videoRef.current.videoWidth || !videoRef.current.videoHeight) return
           try { await faceMeshRef.current.send({ image: videoRef.current }) } catch {}
         },
-        width: 320, height: 240
+        width: camW, height: camH,
       })
       await cam.start()
-      await new Promise(r => setTimeout(r, 1000))
+      await new Promise(r => setTimeout(r, slowNet ? 500 : 1000))
       setCameraActive(true)
-      toast.success('Analyse visuelle activée ✓')
+      toast.success(slowNet ? 'Caméra activée (mode économique) ✓' : 'Analyse visuelle activée ✓')
 
       // Démarre l'intervalle ONNX immédiatement (sans attendre face-api.js)
       faceApiIntervalRef.current = setInterval(async () => {

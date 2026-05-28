@@ -18,15 +18,18 @@ const ENTROPY_THRESHOLD    = 1.55
 const ENERGY_THRESHOLD     = 0.03
 const COLLECT_MS           = 1500   // 1.5s → ~149 frames, padded à 150
 
-let _session = null
-let _loading = false
-let _failed  = false
+let _session   = null
+let _loading   = false
+let _failed    = false
+let _failCount = 0
+const MAX_RETRIES = 3
 
 async function getKWSSession() {
   if (_session) return _session
   if (_loading) return null
-  if (_failed)  return null
+  if (_failed && _failCount >= MAX_RETRIES) return null
   _loading = true
+  _failed  = false
   try {
     const ort = (await import('onnxruntime-web/wasm')).default ?? (await import('onnxruntime-web/wasm'))
     // Les fichiers ort-wasm-* sont dans public/ → servis depuis '/' (Netlify, dev, partout)
@@ -42,7 +45,8 @@ async function getKWSSession() {
     console.log('[KWS-V4] Inputs :', _session.inputNames, 'Outputs :', _session.outputNames)
     return _session
   } catch (e) {
-    console.warn('[KWS-V4] Chargement échoué :', e.message)
+    _failCount++
+    console.warn(`[KWS-V4] Chargement échoué (${_failCount}/${MAX_RETRIES}) :`, e.message)
     _loading = false
     _failed  = true
     return null
