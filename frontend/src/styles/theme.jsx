@@ -24,8 +24,11 @@ export const C_LIGHT = {
   red:          '#DC2626',
   redPale:      '#FEF2F2',
   orange:       '#F59E0B',
+  accent:       '#F97316',   // orange vif — exercices, streak
   blue:         '#2563EB',
   bluePale:     '#DBEAFE',
+  purple:       '#8B5CF6',   // violet — ressources, BKT delta
+  purplePale:   '#EDE9FE',
 
   gold:         '#D4A853',
   goldPale:     '#FBF3E0',
@@ -60,8 +63,11 @@ export const C_DARK = {
   red:          '#F87171',
   redPale:      '#2D0C0C',
   orange:       '#FBBF24',
+  accent:       '#FB923C',   // orange vif dark — exercices, streak
   blue:         '#60A5FA',
   bluePale:     '#0F1F3D',
+  purple:       '#A78BFA',   // violet dark — ressources, BKT delta
+  purplePale:   '#2D1B4B',
 
   gold:         '#F59E0B',
   goldPale:     '#2D1F08',

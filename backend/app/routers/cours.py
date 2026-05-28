@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import get_current_user, require_enseignant, require_super_admin
+from ..dependencies import get_current_user, get_optional_user, require_enseignant, require_super_admin
 from ..utils import get_kcs
 from ..models.cours import (
     Matiere, Module, FamilleSituation,
@@ -355,8 +355,15 @@ def get_programme_par_niveau(
 
 
 @router.get("/ua/{ua_id}")
-def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db), user_id: Optional[str] = None):
-    """Retourne le détail complet d'une UA avec ressources et exercices."""
+def get_ua_detail(
+    ua_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_user),
+):
+    """Retourne le détail complet d'une UA avec ressources et exercices.
+    Le score BKT et les exercices déjà réussis sont inclus si l'utilisateur
+    est authentifié (token JWT — aucun query param user_id accepté).
+    """
     ua = db.query(UniteApprentissage).filter(
         UniteApprentissage.id == ua_id
     ).first()
@@ -371,20 +378,31 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db), user_id: Optional[
         Exercice.ua_id == ua_id
     ).order_by(Exercice.ordre).all()
 
-    # Score BKT moyen sur les compétences de l'UA (pour recommandation de niveau)
+    # Score BKT + exercices réussis — depuis le JWT, jamais depuis un query param
     bkt_score = None
-    if user_id:
-        try:
-            uid = UUID(user_id)
-            competences = ua.competences or []
-            if competences:
-                bkt_records = db.query(BKTMastery).filter(
-                    BKTMastery.user_id == uid,
-                    BKTMastery.competence.in_(competences)
+    completed_exercise_ids: list[str] = []
+    if current_user:
+        uid = current_user.id
+        competences = ua.competences or []
+        if competences:
+            bkt_records = db.query(BKTMastery).filter(
+                BKTMastery.user_id == uid,
+                BKTMastery.competence.in_(competences),
+            ).all()
+            if bkt_records:
+                bkt_score = round(
+                    sum(b.p_mastery for b in bkt_records) / len(bkt_records), 3
+                )
+        ex_ids = [e.id for e in exercices]
+        if ex_ids:
+            completed_exercise_ids = [
+                str(p.exercice_id)
+                for p in db.query(ProgressionApprenant).filter(
+                    ProgressionApprenant.user_id == uid,
+                    ProgressionApprenant.exercice_id.in_(ex_ids),
+                    ProgressionApprenant.correct == True,
                 ).all()
-                bkt_score = round(sum(b.p_mastery for b in bkt_records) / len(bkt_records), 3) if bkt_records else 0.1
-        except Exception:
-            pass
+            ]
 
     return {
         "id": str(ua.id),
@@ -395,6 +413,7 @@ def get_ua_detail(ua_id: UUID, db: Session = Depends(get_db), user_id: Optional[
         "prerequis": ua.prerequis,
         "duree_estimee": ua.duree_estimee,
         "bkt_score": bkt_score,
+        "completed_exercise_ids": completed_exercise_ids,
         "ressources": [{
             "id": str(r.id),
             "titre": r.titre,

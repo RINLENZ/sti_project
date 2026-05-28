@@ -24,12 +24,12 @@ export default function useAlishaVoice() {
     return () => window.speechSynthesis.removeEventListener('voiceschanged', pickVoice)
   }, [])
 
-  const speak = useCallback((text, { onStart, onEnd } = {}) => {
+  const speak = useCallback((text, { onStart, onEnd, rate } = {}) => {
     if (!window.speechSynthesis || !text) return
     window.speechSynthesis.cancel()
     const utt = new SpeechSynthesisUtterance(text)
     utt.lang  = 'fr-FR'
-    utt.rate  = 0.95
+    utt.rate  = rate ?? 0.95
     utt.pitch = 1.15
     if (voiceRef.current) utt.voice = voiceRef.current
     if (onStart) utt.onstart = onStart

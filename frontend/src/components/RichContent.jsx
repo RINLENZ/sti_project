@@ -1,18 +1,27 @@
 /**
  * Rendu progressif du contenu riche des ressources pédagogiques.
- * Blocs supportés : titre, texte, image, alerte, tableau.
+ * Blocs supportés : titre, texte, image, alerte, tableau, markdown.
  * Affichage section par section (groupé par h1) avec stagger par bloc.
+ * StaticContent : rendu complet sans pagination (pour CoursDetail).
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '../styles/theme.jsx'
+import RichText from './RichText'
 
 // ── Parsing ───────────────────────────────────────────────────────
 
 export function parseBlocks(contenu) {
   if (!contenu) return []
   if (Array.isArray(contenu)) return contenu
-  try { return JSON.parse(contenu) }
-  catch { return [{ id: 'plain', type: 'texte', valeur: String(contenu) }] }
+  try {
+    const parsed = JSON.parse(contenu)
+    if (Array.isArray(parsed)) return parsed
+    // JSON valide mais pas un tableau → Markdown brut
+    return [{ id: 'plain', type: 'markdown', valeur: String(contenu) }]
+  } catch {
+    // Pas du JSON → contenu Markdown / texte brut
+    return [{ id: 'plain', type: 'markdown', valeur: String(contenu) }]
+  }
 }
 
 export function groupBySections(blocks) {
@@ -189,16 +198,49 @@ export function Block({ block, C }) {
         </div>
       )
 
+    case 'markdown':
+      // Contenu non structuré — rendu via RichText (Markdown + KaTeX)
+      return <RichText text={block.valeur} />
+
     default:
       return null
   }
 }
 
+// ── Rendu statique (tout à la fois, sans pagination) ─────────────
+// Utilisé par CoursDetail (lecture libre) et tout contexte hors tutoriel.
+
+export function StaticContent({ data, C, xs }) {
+  const blocks = useMemo(() => parseBlocks(data.contenu), [data.contenu])
+  return (
+    <div>
+      {data.titre && (
+        <h2 style={{ fontSize: xs ? 15 : 17, fontWeight: 800, color: C.brown, marginBottom: 16, paddingBottom: 10, borderBottom: `2px solid ${C.brownPale}` }}>
+          {data.titre}
+        </h2>
+      )}
+      {blocks.map((block, i) => (
+        <Block key={block.id || i} block={block} C={C} />
+      ))}
+      {data.points_cles?.length > 0 && (
+        <div style={{ background: C.goldPale, borderRadius: 14, padding: '14px 18px', border: `1.5px solid ${C.gold}44`, marginTop: 20 }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: C.brownMid, margin: '0 0 10px', textTransform: 'uppercase' }}>🔑 À retenir</p>
+          <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {data.points_cles.map((p, i) => (
+              <li key={i} style={{ fontSize: 14, color: C.text, lineHeight: 1.6 }}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Affichage progressif complet ──────────────────────────────────
 
 export function ProgressiveContent({ data, onDone, C, xs }) {
-  const blocks   = parseBlocks(data.contenu)
-  const sections = groupBySections(blocks)
+  const blocks   = useMemo(() => parseBlocks(data.contenu),    [data.contenu])
+  const sections = useMemo(() => groupBySections(blocks), [blocks])
 
   const [sectionIdx,   setSectionIdx]   = useState(0)
   const [visibleCount, setVisibleCount] = useState(0)

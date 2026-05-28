@@ -17,13 +17,14 @@ export const space = {
   16: 64,
 }
 
-// Border-radius — 5 valeurs, pas plus
+// Border-radius — 5 valeurs structurelles + 1 token sémantique
 export const radius = {
-  sm:   6,
-  md:   12,
-  lg:   20,
-  xl:   28,
-  pill: 9999,
+  sm:     6,
+  md:     12,
+  button: 14,   // CTA principal — standardise tous les boutons primaires
+  lg:     20,
+  xl:     28,
+  pill:   9999,
 }
 
 // Ombres — légères, cohérentes
