@@ -13,8 +13,8 @@ import {
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
-import ContentRenderer from '../../components/ContentRenderer'
 import RichText, { RichTextInline } from '../../components/RichText'
+import { StaticContent } from '../../components/RichContent'
 import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
@@ -23,22 +23,25 @@ import useAlishaVoice from '../../hooks/useAlishaVoice'
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = (s, C) =>
-  s >= 0.80 ? C.emerald : s >= 0.60 ? '#2563eb' :
-  s >= 0.40 ? C.orange  : s >= 0.20 ? C.red : '#7F1D1D'
+  s >= 0.80 ? C.emerald : s >= 0.60 ? C.blue :
+  s >= 0.40 ? C.orange  : s >= 0.20 ? C.red : C.red
 
 const engLabel = s =>
   s >= 0.80 ? 'Élevé' : s >= 0.60 ? 'Modéré' :
   s >= 0.40 ? 'Faible' : s >= 0.20 ? 'Ennui' : 'Décroché'
 
-const ETATS = {
-  engagement_eleve:  { label: '😊 Engagé',     color: '#0D9373' },
-  engagement_modere: { label: '🙂 Modéré',      color: '#2563eb' },
-  engagement_faible: { label: '😐 Peu engagé',  color: '#F59E0B' },
-  confusion:         { label: '🤔 Confusion',   color: '#F59E0B' },
-  frustration:       { label: '😤 Frustration', color: '#DC2626' },
-  ennui:             { label: '😴 Ennui',        color: '#6B5744' },
-  neutre:            { label: '😐 Neutre',       color: '#C4865A' },
-  decrochage:        { label: '⚠️ Décroché',    color: '#7F1D1D' },
+// getETATS(C) — dynamique : s'adapte au mode clair/sombre via les tokens du thème
+function getETATS(C) {
+  return {
+    engagement_eleve:  { label: '😊 Engagé',     color: C.emerald    },
+    engagement_modere: { label: '🙂 Modéré',      color: C.blue       },
+    engagement_faible: { label: '😐 Peu engagé',  color: C.orange     },
+    confusion:         { label: '🤔 Confusion',   color: C.orange     },
+    frustration:       { label: '😤 Frustration', color: C.red        },
+    ennui:             { label: '😴 Ennui',        color: C.textSec    },
+    neutre:            { label: '😐 Neutre',       color: C.brownLight },
+    decrochage:        { label: '⚠️ Décroché',    color: C.red        },
+  }
 }
 
 /* ── face-api.js : désactivé — CDN 404, remplacé par ONNX EfficientNet-B0 ── */
@@ -79,6 +82,7 @@ function fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch) {
 /* ── Gauge component ─────────────────────────────────────────── */
 const MiniGauge = ({ score, emotion, compact = false }) => {
   const { C } = useTheme()
+  const ETATS = getETATS(C)   // dynamique — suit le thème courant
   const color = engColor(score, C)
   const em = ETATS[emotion] || ETATS.neutre
 
@@ -87,7 +91,7 @@ const MiniGauge = ({ score, emotion, compact = false }) => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           width: 34, height: 34, borderRadius: '50%',
-          background: `conic-gradient(${color} ${score * 360}deg, #E5E7EB 0deg)`,
+          background: `conic-gradient(${color} ${score * 360}deg, ${C.border} 0deg)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
@@ -141,7 +145,7 @@ const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }
     textColor = C.brown; lBg = C.brown; lColor = 'white'
   }
   if (correct)   { bg = C.emeraldPale; border = `2px solid ${C.emerald}`; textColor = C.emerald; lBg = C.emerald; lColor = 'white' }
-  if (incorrect) { bg = '#FEE2E2';     border = `2px solid ${C.red}`;     textColor = C.red;     lBg = C.red;     lColor = 'white' }
+  if (incorrect) { bg = C.redPale;     border = `2px solid ${C.red}`;     textColor = C.red;     lBg = C.red;     lColor = 'white' }
 
   return (
     <button onClick={onClick} style={{
@@ -244,8 +248,8 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
   const typeLabel = {
     lecon:   { icon: '📖', label: 'Leçon',    color: C.brown    },
     tp:      { icon: '🔬', label: 'TP',       color: C.emerald  },
-    resume:  { icon: '📋', label: 'Résumé',   color: '#2563EB'  },
-    video:   { icon: '🎬', label: 'Vidéo',    color: '#7C3AED'  },
+    resume:  { icon: '📋', label: 'Résumé',   color: C.blue   },
+    video:   { icon: '🎬', label: 'Vidéo',    color: C.purple },
   }[res?.type] || { icon: '📄', label: 'Ressource', color: C.brown }
 
   return (
@@ -287,6 +291,23 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
       {/* Contenu */}
       <div style={{ flex: 1, maxWidth: 760, width: '100%', margin: '0 auto', padding: '28px 20px' }}>
 
+        {/* U4 — Alisha accueil leçon : uniquement sur la première ressource */}
+        {idx === 0 && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 22 }}>
+            <Suspense fallback={null}>
+              <Alisha state="welcome" size={56} />
+            </Suspense>
+            <div style={{
+              background: C.surface, border: `1.5px solid ${C.brownPale}`,
+              borderRadius: '14px 14px 14px 0', padding: '10px 14px',
+              fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.5, maxWidth: 260,
+              boxShadow: '0 2px 10px rgba(107,58,42,0.07)',
+            }}>
+              Lis attentivement cette leçon — je t'attendrai pour les exercices ! 📖✨
+            </div>
+          </div>
+        )}
+
         {/* Titre ressource */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <div style={{ width: 40, height: 40, borderRadius: 12, background: `${typeLabel.color}18`, border: `1.5px solid ${typeLabel.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
@@ -306,9 +327,9 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
           </div>
         )}
 
-        {/* Contenu principal */}
+        {/* Contenu principal — StaticContent (même renderer que CoursDetail) */}
         <div style={{ background: C.surface, borderRadius: 16, padding: '24px 28px', border: `1px solid ${C.border}`, boxShadow: '0 2px 16px rgba(107,58,42,0.07)', marginBottom: 20 }}>
-          <ContentRenderer content={res?.contenu || ''} />
+          <StaticContent data={{ contenu: res?.contenu || '' }} C={C} />
         </div>
 
         {/* Points clés */}
@@ -348,7 +369,7 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
               Ressource suivante → ({idx + 2}/{ressources.length})
             </button>
           ) : (
-            <button onClick={() => { logAndGo(idx); onStart() }} style={{ flex: 1, padding: '14px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 20px ${C.emerald}40` }}>
+            <button onClick={() => { logAndGo(idx); onStart() }} style={{ flex: 1, padding: '14px', background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 20px ${C.emerald}40` }}>
               Commencer →
             </button>
           )}
@@ -399,33 +420,16 @@ const MSG_WRONG = [
 ]
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)] }
 
-/* ── Sélection de la meilleure voix française disponible ────────
-   Ordre de préférence : voix neuronales (Denise, Amélie, Thomas)
-   > voix Google > n'importe quelle voix fr > défaut système.
-   Résultat mis en cache après le premier appel.               */
-let _cachedFrVoice = undefined   // undefined = pas encore cherché, null = aucune trouvée
-function getBestFrenchVoice() {
-  if (_cachedFrVoice !== undefined) return _cachedFrVoice
-  const voices = window.speechSynthesis?.getVoices() || []
-  const PREF = ['Denise', 'Amélie', 'Thomas', 'Google français',
-                'Hortense', 'Julie', 'Virginie', 'Nicolas']
-  for (const name of PREF) {
-    const v = voices.find(v => v.name.includes(name))
-    if (v) { _cachedFrVoice = v; return v }
-  }
-  _cachedFrVoice = voices.find(v => v.lang?.startsWith('fr')) || null
-  return _cachedFrVoice
-}
-// Recharge la liste quand le navigateur finit de charger les voix
-if (typeof window !== 'undefined' && window.speechSynthesis) {
-  window.speechSynthesis.addEventListener('voiceschanged', () => {
-    _cachedFrVoice = undefined   // force re-sélection au prochain tts()
-  })
-}
+/* ── Sélection vocale déléguée à useAlishaVoice ─────────────────
+   La sélection locale (getBestFrenchVoice + voiceschanged) a été
+   supprimée : elle entrait en conflit avec le lockedRef du hook
+   et causait des changements de voix aléatoires en ligne.
+   Tout TTS passe maintenant par l'API unifiée tts() ↓             */
 
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Session() {
   const { C } = useTheme()
+  const ETATS = getETATS(C)   // recalculé à chaque render — suit le thème courant
   const { uaId }   = useParams()
   const navigate   = useNavigate()
   const [searchParams] = useSearchParams()
@@ -482,6 +486,8 @@ export default function Session() {
   const [vadSpeech,      setVadSpeech]      = useState(false) // parole active détectée
   const [answerFlash,    setAnswerFlash]    = useState(null)  // null|'correct'|'wrong'
   const [feedbackMsg,    setFeedbackMsg]    = useState('')    // message aléatoire de feedback
+  const [bktHistory,     setBktHistory]     = useState({})   // { compétence: {pourcentage,color,label} } — accumulé à chaque réponse
+  const [isLeaving,      setIsLeaving]      = useState(false) // true pendant la sortie animée de la carte question
 
   const videoRef         = useRef(null)
   const canvasRef        = useRef(null)
@@ -496,7 +502,7 @@ export default function Session() {
   // ── Modèles ONNX africains ───────────────────────────────────────
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
   const { lastKeyword }                 = useKWSModel(audioActive)
-  const { speak: alishaSpeak }          = useAlishaVoice()
+  const { speak: _alishaSpeak, stop: _stopAlisha } = useAlishaVoice()
   const faceApiIntervalRef = useRef(null)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
@@ -519,10 +525,22 @@ export default function Session() {
         data: { keyword: lastKeyword.keyword, confidence: Math.round(lastKeyword.confidence * 100) / 100 }
       }).catch(() => {})
     }
-    // Réponses TTS aux commandes
-    if (lastKeyword.keyword === 'aide')      tts('Je t\'envoie une explication.')
-    if (lastKeyword.keyword === 'repeter')   tts('Je répète la question.')
-    if (lastKeyword.keyword === 'lentement') tts('D\'accord, je vais plus lentement.')
+    // Réponses TTS aux commandes vocales
+    if (lastKeyword.keyword === 'aide') {
+      tts('Je t\'envoie une explication.')
+    }
+    if (lastKeyword.keyword === 'repeter') {
+      // Annonce puis relit effectivement l'énoncé (après ~2s pour laisser finir la phrase)
+      const _enonce = exercices[current]?.enonce
+      tts('Je répète la question.')
+      if (_enonce) setTimeout(() => tts(_enonce), 2000)
+    }
+    if (lastKeyword.keyword === 'lentement') {
+      // Relit l'énoncé à vitesse réduite 0.65 (au lieu de juste dire "D'accord")
+      const _enonce = exercices[current]?.enonce
+      tts('D\'accord, je vais plus lentement.')
+      if (_enonce) setTimeout(() => tts(_enonce, 0.65), 2200)
+    }
   }, [lastKeyword])
 
   /* Afficher le banner caméra 4s après le chargement (mobile seulement) */
@@ -610,27 +628,22 @@ export default function Session() {
     } catch {}
   }, [user.id])
 
-  // ── TTS (Text-To-Speech) ─────────────────────────────────────────
+  // ── TTS unifié — délègue à useAlishaVoice (voix verrouillée, stable en ligne) ──
+  // Plus de getBestFrenchVoice ni de voiceschanged local : tout passe par le hook.
   const tts = useCallback((text, rate) => {
-    if (!window.speechSynthesis || !text) return
-    window.speechSynthesis.cancel()
-    const utt    = new SpeechSynthesisUtterance(text)
-    utt.lang     = 'fr-FR'
-    utt.rate     = rate ?? ttsRate
-    utt.pitch    = 1.08    // légèrement plus haut → ton chaleureux et engageant
-    utt.volume   = 1.0
-    const voice  = getBestFrenchVoice()
-    if (voice) utt.voice = voice
-    utt.onstart  = () => setSpeaking(true)
-    utt.onend    = () => setSpeaking(false)
-    utt.onerror  = () => setSpeaking(false)
-    window.speechSynthesis.speak(utt)
-  }, [ttsRate])
+    if (!text) return
+    _alishaSpeak(text, {
+      rate:    rate ?? ttsRate,
+      onStart: () => setSpeaking(true),
+      onEnd:   () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    })
+  }, [_alishaSpeak, ttsRate])
 
   const stopTts = useCallback(() => {
-    window.speechSynthesis?.cancel()
+    _stopAlisha()
     setSpeaking(false)
-  }, [])
+  }, [_stopAlisha])
 
   // Auto-lecture de l'énoncé quand le bruit devient perturbateur
   useEffect(() => {
@@ -639,6 +652,23 @@ export default function Session() {
       if (enonce) tts(enonce)
     }
   }, [bruitPerturb]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // U1 — Auto-lecture de l'énoncé à chaque nouvelle question (accessibilité)
+  // Délai 900ms : laisse l'animation slideInRight se terminer avant de parler
+  useEffect(() => {
+    if (phase !== 'exercices') return
+    const ex = exercices[current]
+    if (!ex?.enonce) return
+    // Pour les exercices APC (JSON encodé), lire contexte + consigne
+    const textToRead = ex.enonce.startsWith('__APC__')
+      ? (() => {
+          try { const d = JSON.parse(ex.enonce.slice(7)); return (d.contexte || '') + '. ' + (d.consigne || '') }
+          catch { return ex.enonce }
+        })()
+      : ex.enonce
+    const t = setTimeout(() => tts(textToRead), 900)
+    return () => clearTimeout(t)
+  }, [current, phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Page Visibility : log si l'utilisateur cache l'onglet (déclaré après sendEvent)
   useEffect(() => {
@@ -657,7 +687,7 @@ export default function Session() {
       : pct >= 70 ? 'Très bien joué ! Tu progresses vraiment.'
       : pct >= 50 ? 'Bien essayé. Continue, tu vas y arriver !'
       : 'Chaque tentative te rapproche du succès !'
-    setTimeout(() => alishaSpeak(finMsg), 600)
+    setTimeout(() => tts(finMsg), 600)
     let startTs = null
     const anim = (ts) => {
       if (!startTs) startTs = ts
@@ -941,11 +971,18 @@ export default function Session() {
       const { data } = await api.post('/api/cours/exercice/verifier', { exercice_id: ex.id, user_id: user.id, reponse })
       const msg = pickRandom(data.correct ? MSG_CORRECT : MSG_WRONG)
       setResultat({ ...data, msg })
+      // Accumule la progression BKT par compétence pour l'affichage fin de session
+      if (data.bkt?.competence) {
+        setBktHistory(prev => ({
+          ...prev,
+          [data.bkt.competence]: { pourcentage: data.bkt.pourcentage, color: data.bkt.color, label: data.bkt.label },
+        }))
+      }
       setFeedbackMsg(msg)
       setScores(prev => [...prev, data.points_gagnes])
       playFeedback(data.correct)
       setAnswerFlash(data.correct ? 'correct' : 'wrong')
-      alishaSpeak(data.correct ? 'Excellent ! Continue comme ça !' : 'Pas tout à fait — tu vas y arriver !')
+      tts(data.correct ? 'Excellent ! Continue comme ça !' : 'Pas tout à fait — tu vas y arriver !')
       setTimeout(() => setAnswerFlash(null), 750)
       const p = cnnEmotionRef.current?.probs || {}
       const emotion_probs = {
@@ -990,23 +1027,28 @@ export default function Session() {
 
   function suivant() {
     navigator.vibrate?.(30)
-    if (current + 1 >= exercices.length) {
-      const r = scores.filter(s => s > 0).length
-      if (exercices.length > 0 && Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
-      if (sessionIdRef.current) {
-        termineeRef.current = true
-        api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
+    // U3 — Animation de sortie avant de charger la question suivante
+    setIsLeaving(true)
+    setTimeout(() => {
+      setIsLeaving(false)
+      if (current + 1 >= exercices.length) {
+        const r = scores.filter(s => s > 0).length
+        if (exercices.length > 0 && Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
+        if (sessionIdRef.current) {
+          termineeRef.current = true
+          api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
+        }
+        clearCache('dashboard_' + user.id)
+        // Marque le défi du jour comme accompli
+        localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
+        setTermine(true)
+      } else {
+        setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
+        setIndices(0); setAdaptation(null); setExplicationIA(null); setIaHistory([]); setRessourceAide(null)
+        setAnswerFlash(null); setFeedbackMsg('')
+        setQuestionTime(Date.now())
       }
-      clearCache('dashboard_' + user.id)
-      // Marque le défi du jour comme accompli
-      localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
-      setTermine(true)
-    } else {
-      setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
-      setIndices(0); setAdaptation(null); setExplicationIA(null); setIaHistory([]); setRessourceAide(null)
-      setAnswerFlash(null); setFeedbackMsg('')
-      setQuestionTime(Date.now())
-    }
+    }, 240)
   }
 
   async function demanderExplication() {
@@ -1066,10 +1108,10 @@ export default function Session() {
     const pct = total > 0 ? Math.round(reussis / total * 100) : 0
     const rateesIds = exercices.filter((_, i) => scores[i] === 0).map(e => e.id)
     const totalPtsGagnes = scores.reduce((a, b) => a + b, 0)
-    const grade = pct >= 90 ? { emoji: '🏆', label: 'Excellent !',       bg: 'linear-gradient(135deg,#F59E0B,#D97706)', anim: 'goldGlow 2s ease infinite' }
-                : pct >= 70 ? { emoji: '🌟', label: 'Très bien !',        bg: `linear-gradient(135deg,${C.emerald},#059669)`, anim: undefined }
-                : pct >= 50 ? { emoji: '👍', label: 'Bien joué !',        bg: `linear-gradient(135deg,${C.brown},${C.brownLight})`, anim: undefined }
-                :             { emoji: '💪', label: 'Continue comme ça !', bg: 'linear-gradient(135deg,#6366F1,#4F46E5)', anim: undefined }
+    const grade = pct >= 90 ? { emoji: '🏆', label: 'Excellent !',       bg: `linear-gradient(135deg,${C.gold},${C.brownMid})`,   anim: 'goldGlow 2s ease infinite' }
+                : pct >= 70 ? { emoji: '🌟', label: 'Très bien !',        bg: `linear-gradient(135deg,${C.emerald},${C.emeraldDark})`, anim: undefined }
+                : pct >= 50 ? { emoji: '👍', label: 'Bien joué !',        bg: `linear-gradient(135deg,${C.brown},${C.brownLight})`,    anim: undefined }
+                :             { emoji: '💪', label: 'Continue comme ça !', bg: `linear-gradient(135deg,${C.purple},${C.purple}CC)`,    anim: undefined }
 
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
@@ -1114,7 +1156,7 @@ export default function Session() {
                   {scores.map((s, i) => (
                     <div key={i} title={`Q${i+1} : ${s > 0 ? '+'+s+' pts' : 'faux'}`} style={{
                       width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: s > 0 ? C.emeraldPale : '#FEE2E2',
+                      background: s > 0 ? C.emeraldPale : C.redPale,
                       border: `1.5px solid ${s > 0 ? C.emerald : C.red}50`,
                       fontSize: 10, fontWeight: 900, color: s > 0 ? C.emerald : C.red,
                       animation: `scaleIn .3s ease ${i * 0.045}s both`,
@@ -1123,6 +1165,25 @@ export default function Session() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* U5 — BKT par compétence (maîtrise acquise pendant la session) */}
+            {Object.keys(bktHistory).length > 0 && (
+              <div style={{ background: C.bg, borderRadius: 14, padding: '14px 16px', marginBottom: 16, border: `1px solid ${C.brownPale}`, textAlign: 'left' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 12px' }}>📊 Maîtrise BKT par compétence</p>
+                {Object.entries(bktHistory).map(([comp, bkt]) => (
+                  <div key={comp} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>{comp}</span>
+                      <span style={{ fontSize: 12, fontWeight: 900, color: bkt.color, flexShrink: 0 }}>{bkt.pourcentage}%</span>
+                    </div>
+                    <div style={{ height: 5, background: C.border, borderRadius: 5, overflow: 'hidden', marginBottom: 2 }}>
+                      <div style={{ height: '100%', width: `${bkt.pourcentage}%`, background: bkt.color, borderRadius: 5, transition: 'width 1.2s ease .4s' }}/>
+                    </div>
+                    <span style={{ fontSize: 10, color: C.textSec }}>{bkt.label}</span>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1159,7 +1220,7 @@ export default function Session() {
               {rateesIds.length > 0 && !rateesParam && (
                 <button onClick={() => navigate(`/session/${uaId}?ratees=${rateesIds.join(',')}&skip=1`)} style={{
                   width: '100%', padding: '14px',
-                  background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+                  background: `linear-gradient(135deg, ${C.red}, ${C.red}CC)`,
                   color: 'white', border: 'none', borderRadius: 14,
                   fontSize: isMobile ? 13 : 14, fontWeight: 800, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
@@ -1178,7 +1239,7 @@ export default function Session() {
                 }}>
                   <ArrowLeft size={15}/> Retour au cours
                 </button>
-                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null) }} style={{
+                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null); setBktHistory({}); setIsLeaving(false) }} style={{
                   padding: '13px', background: C.brownPale,
                   color: C.brown, border: `1.5px solid ${C.brownLight}40`,
                   borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
@@ -1207,8 +1268,8 @@ export default function Session() {
   const ex = exercices[current]
   const diffStyle = {
     1: { bg: C.emeraldPale, color: C.emerald,   label: 'Facile',    icon: '🟢' },
-    2: { bg: '#FEF3C7',     color: '#92400E',    label: 'Moyen',     icon: '🟡' },
-    3: { bg: '#FEE2E2',     color: C.red,        label: 'Difficile', icon: '🔴' },
+    2: { bg: C.goldPale,    color: C.brownDark,  label: 'Moyen',     icon: '🟡' },
+    3: { bg: C.redPale,     color: C.red,        label: 'Difficile', icon: '🔴' },
   }
   const ds = diffStyle[ex.difficulte] || diffStyle[1]
   const totalPts = scores.reduce((a, b) => a + b, 0)
@@ -1293,7 +1354,7 @@ export default function Session() {
                 <span style={{ width: 4, height: 4, borderRadius: '50%', backgroundColor: 'white', animation: 'pulse 1.5s infinite' }}/>LIVE
               </div>
               {faceApiReady && (
-                <div style={{ backgroundColor: '#7C3AED', borderRadius: 20, padding: '2px 8px', fontSize: 9, fontWeight: 800, color: 'white' }}>
+                <div style={{ backgroundColor: C.purple, borderRadius: 20, padding: '2px 8px', fontSize: 9, fontWeight: 800, color: 'white' }}>
                   CNN ✓
                 </div>
               )}
@@ -1314,25 +1375,25 @@ export default function Session() {
             </div>
           )}
           {!audioActive ? (
-            <button onClick={startAudio} style={{ padding: '9px', background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`, color: 'white', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 38 }}>
+            <button onClick={startAudio} style={{ padding: '9px', background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, color: 'white', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 38 }}>
               <Mic size={13}/> Activer le micro
             </button>
           ) : (
-            <div style={{ backgroundColor: bruitPerturb ? '#FEE2E2' : C.emeraldPale, borderRadius: 9, padding: '7px 10px', border: `1px solid ${bruitPerturb ? C.red : C.emerald}30` }}>
+            <div style={{ backgroundColor: bruitPerturb ? C.redPale : C.emeraldPale, borderRadius: 9, padding: '7px 10px', border: `1px solid ${bruitPerturb ? C.red : C.emerald}30` }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: bruitPerturb ? C.red : C.emerald }}>
                   {bruitPerturb ? '🔊 Bruit élevé' : '🎤 Ambiance calme'}
                 </span>
                 <span style={{ fontSize: 9, color: C.textSec }}>{Math.min(100, Math.round(niveauBruit * 100 / 128))}%</span>
               </div>
-              <div style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: 3, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' }}>
                 <div style={{ height: '100%', borderRadius: 3, width: `${Math.min(100, Math.round(niveauBruit * 100 / 128))}%`, backgroundColor: bruitPerturb ? C.red : C.emerald, transition: 'width .5s ease' }}/>
               </div>
               {/* Indicateur VAD */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                 <span style={{
                   width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                  background: vadSpeech ? C.emerald : '#D1D5DB',
+                  background: vadSpeech ? C.emerald : C.border,
                   animation: vadSpeech ? 'pulse 1s infinite' : 'none',
                   transition: 'background .3s'
                 }}/>
@@ -1466,7 +1527,7 @@ export default function Session() {
                   flex: 1, height: '100%',
                   background: i < scores.length
                     ? (scores[i] > 0 ? C.emerald : C.red)
-                    : i === current ? C.brown : '#E5E7EB',
+                    : i === current ? C.brown : C.border,
                   borderRadius: i === 0 ? '5px 0 0 5px' : i === exercices.length - 1 ? '0 5px 5px 0' : 0,
                   transition: 'background .3s ease'
                 }}/>
@@ -1571,7 +1632,8 @@ export default function Session() {
           )}
 
           {/* ── Carte question principale ── */}
-          <div key={current} style={{ animation: 'slideInRight .28s ease' }}>
+          {/* U3 — slideOutLeft à la sortie, slideInRight à l'entrée */}
+          <div key={current} style={{ animation: isLeaving ? 'slideOutLeft .24s ease forwards' : 'slideInRight .28s ease' }}>
           <div style={{
             backgroundColor: C.surface, borderRadius: xs ? 14 : isMobile ? 18 : 22,
             padding: xs ? '14px 12px' : isMobile ? '18px 16px' : '30px 32px',
@@ -1586,22 +1648,22 @@ export default function Session() {
           }}>
             {/* Méta badges + Alisha */}
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-              {/* Alisha réactive */}
-              <Suspense fallback={<span style={{ fontSize:22 }}>{mascot}</span>}>
-                <div style={{ flexShrink: 0, marginBottom: -4 }}>
-                  <Alisha state={alishaState} size={52} />
+              {/* U2 — Alisha réactive (size augmenté pour meilleure visibilité) */}
+              <Suspense fallback={<span style={{ fontSize:26 }}>{mascot}</span>}>
+                <div style={{ flexShrink: 0, marginBottom: -8 }}>
+                  <Alisha state={alishaState} size={64} />
                 </div>
               </Suspense>
               {/* Bulle contextuelle */}
               {alishaBubble && (
                 <div style={{
-                  background:    '#FFF7ED',
-                  border:       '1.5px solid #F97316',
+                  background:    C.goldPale,
+                  border:       `1.5px solid ${C.accent}`,
                   borderRadius:  10,
                   padding:      '5px 11px',
                   fontSize:      11,
                   fontWeight:    700,
-                  color:        '#9A3412',
+                  color:        C.brownDark,
                   maxWidth:      180,
                   lineHeight:    1.4,
                   animation:    'slideDown .25s ease',
@@ -1611,9 +1673,9 @@ export default function Session() {
               )}
               {/* Streak badge */}
               {streak >= 2 && !resultat && (
-                <div style={{ display:'flex', alignItems:'center', gap:3, background:'#FEF3C7', borderRadius:20, padding:'2px 9px', border:'1.5px solid #FDE68A', animation:'streakPop .35s cubic-bezier(.22,1,.36,1)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:3, background:C.goldPale, borderRadius:20, padding:'2px 9px', border:`1.5px solid ${C.gold}60`, animation:'streakPop .35s cubic-bezier(.22,1,.36,1)' }}>
                   <span style={{ fontSize:13, animation:'pulse 1.2s infinite' }}>🔥</span>
-                  <span style={{ fontSize:10, fontWeight:800, color:'#92400E' }}>{streak} série</span>
+                  <span style={{ fontSize:10, fontWeight:800, color:C.brownDark }}>{streak} série</span>
                 </div>
               )}
               <div style={{ flex:1, minWidth:0 }}>
@@ -1638,14 +1700,14 @@ export default function Session() {
             {/* Énoncé / Situation APC */}
             {isAPC && apcData ? (
               <div style={{ marginBottom: 20 }}>
-                <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: 14, padding: isMobile ? '14px' : '18px 20px', marginBottom: 10 }}>
-                  <p style={{ fontSize: 10, fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>📋 Situation-problème</p>
-                  <p style={{ margin: 0, fontSize: isMobile ? 13 : 14, color: '#1E3A5F', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{apcData.contexte}</p>
+                <div style={{ background: C.bluePale, border: `1.5px solid ${C.blue}40`, borderRadius: 14, padding: isMobile ? '14px' : '18px 20px', marginBottom: 10 }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: C.blue, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>📋 Situation-problème</p>
+                  <p style={{ margin: 0, fontSize: isMobile ? 13 : 14, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{apcData.contexte}</p>
                 </div>
                 {apcData.ressources && (
-                  <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', gap: 8 }}>
+                  <div style={{ background: C.emeraldPale, border: `1px solid ${C.emerald}40`, borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', gap: 8 }}>
                     <span style={{ fontSize: 13, flexShrink: 0 }}>📚</span>
-                    <p style={{ margin: 0, fontSize: 12, color: '#166534', lineHeight: 1.7 }}><strong>Ressources :</strong> {apcData.ressources}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: C.emerald, lineHeight: 1.7 }}><strong>Ressources :</strong> {apcData.ressources}</p>
                   </div>
                 )}
                 <div style={{ background: C.brownPale, borderRadius: 12, padding: isMobile ? '12px 14px' : '14px 18px', borderLeft: `4px solid ${C.brown}`, position: 'relative' }}>
@@ -1657,8 +1719,8 @@ export default function Session() {
                   </button>
                 </div>
                 {apcData.criteres && (
-                  <div style={{ marginTop: 8, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '8px 14px' }}>
-                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ marginTop: 8, background: C.goldPale, border: `1px solid ${C.gold}50`, borderRadius: 10, padding: '8px 14px' }}>
+                    <p style={{ margin: 0, fontSize: 11, color: C.brownDark, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
                       <strong>Critères d'évaluation :</strong> {apcData.criteres}
                     </p>
                   </div>
@@ -1684,7 +1746,7 @@ export default function Session() {
             {isIdentification && identImgUrl && (
               <div style={{ marginBottom: 16, textAlign: 'center' }}>
                 <img src={identImgUrl} alt="Schéma à identifier"
-                  style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 12, border: `2px solid #BFDBFE`, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'block', margin: '0 auto' }} />
+                  style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 12, border: `2px solid ${C.blue}40`, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'block', margin: '0 auto' }} />
                 <p style={{ fontSize: 11, color: C.textSec, margin: '6px 0 0', fontStyle: 'italic' }}>Observe bien ce schéma avant de répondre</p>
               </div>
             )}
@@ -1702,7 +1764,7 @@ export default function Session() {
                       padding: isMobile ? '22px 10px' : '30px 16px',
                       borderRadius:20, cursor: resultat ? 'default' : 'pointer',
                       border: `3px solid ${isOk ? C.emerald : isKo ? C.red : isSel ? C.brown : C.brownPale}`,
-                      background: isOk ? C.emeraldPale : isKo ? '#FEE2E2' : isSel ? C.brownPale : C.surface,
+                      background: isOk ? C.emeraldPale : isKo ? C.redPale : isSel ? C.brownPale : C.surface,
                       transition:'all .18s ease',
                       transform: isSel && !resultat ? 'scale(1.05)' : 'scale(1)',
                       boxShadow: isSel && !resultat ? `0 8px 24px ${C.brown}30` : 'none',
@@ -1793,7 +1855,7 @@ export default function Session() {
                                   ? `2.5px solid ${C.brown}`
                                   : `2px dashed ${filled ? C.brown : C.brownLight}`,
                               background: resultat
-                                ? (isCorrectSlot ? C.emeraldPale : '#FEE2E2')
+                                ? (isCorrectSlot ? C.emeraldPale : C.redPale)
                                 : isActive
                                   ? C.brown
                                   : (filled ? C.brownPale : 'transparent'),
@@ -1856,9 +1918,9 @@ export default function Session() {
                           setActiveBlank(nextEmpty !== -1 ? nextEmpty : null)
                         }} style={{
                           padding:'9px 18px', borderRadius:24,
-                          background: isPlaced ? '#E5E7EB' : (activeBlank !== null ? C.brown + '15' : C.surface),
-                          color: isPlaced ? '#9CA3AF' : C.text,
-                          border:`2px solid ${isPlaced ? '#D1D5DB' : (activeBlank !== null ? C.brown : C.brownPale)}`,
+                          background: isPlaced ? C.border : (activeBlank !== null ? C.brown + '15' : C.surface),
+                          color: isPlaced ? C.textSec : C.text,
+                          border:`2px solid ${isPlaced ? C.border : (activeBlank !== null ? C.brown : C.brownPale)}`,
                           fontSize:14, fontWeight:700, cursor: isPlaced ? 'default' : 'pointer',
                           opacity: isPlaced ? 0.5 : 1,
                           textDecoration: isPlaced ? 'line-through' : 'none',
@@ -1926,7 +1988,7 @@ export default function Session() {
                       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <span style={{ fontSize:12, color:C.textSec, fontWeight:600 }}>Ta réponse :</span>
                         <span style={{ padding:'7px 18px', borderRadius:22,
-                          background: resultat.correct ? C.emeraldPale : '#FEE2E2',
+                          background: resultat.correct ? C.emeraldPale : C.redPale,
                           color: resultat.correct ? C.emerald : C.red,
                           fontSize:14, fontWeight:800,
                           border:`2px solid ${resultat.correct ? C.emerald : C.red}30` }}>
@@ -1961,27 +2023,27 @@ export default function Session() {
 
             {/* Feedback résultat — En attente (réponse libre) */}
             {resultat?.en_attente && (
-              <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, padding: '14px 16px', marginBottom: 16, animation: 'slideDown .3s ease' }}>
+              <div style={{ background: C.goldPale, border: `1.5px solid ${C.gold}50`, borderRadius: 14, padding: '14px 16px', marginBottom: 16, animation: 'slideDown .3s ease' }}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ fontSize: 20, flexShrink: 0 }}>⏳</span>
                   <div style={{ flex: 1 }}>
-                    <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: '#92400E' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: C.brownDark }}>
                       Réponse soumise — en attente de correction
                     </p>
-                    <p style={{ margin: '0 0 10px', fontSize: 13, color: '#78350F', lineHeight: 1.6 }}>
+                    <p style={{ margin: '0 0 10px', fontSize: 13, color: C.brownDark, lineHeight: 1.6 }}>
                       {resultat.msg}
                     </p>
                     {/* Réponse modèle pour auto-évaluation */}
-                    <div style={{ background: '#FEF9C3', borderRadius: 10, padding: '10px 14px', borderLeft: '4px solid #EAB308' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 800, color: '#713F12', textTransform: 'uppercase', letterSpacing: .5 }}>
+                    <div style={{ background: C.goldPale, borderRadius: 10, padding: '10px 14px', borderLeft: `4px solid ${C.gold}` }}>
+                      <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 800, color: C.brownDark, textTransform: 'uppercase', letterSpacing: .5 }}>
                         📋 Réponse modèle (auto-évaluation)
                       </p>
-                      <p style={{ margin: 0, fontSize: 13, color: '#1A1207', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                      <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
                         {resultat.reponse_correcte}
                       </p>
                     </div>
                     {resultat.explication && (
-                      <p style={{ margin: '8px 0 0', fontSize: 12, color: '#92400E', lineHeight: 1.6 }}>
+                      <p style={{ margin: '8px 0 0', fontSize: 12, color: C.brownDark, lineHeight: 1.6 }}>
                         💡 {resultat.explication}
                       </p>
                     )}
@@ -2001,7 +2063,7 @@ export default function Session() {
             {/* Feedback résultat — Correct / Incorrect */}
             {resultat && !resultat.en_attente && (
               <div style={{
-                backgroundColor: resultat.correct ? C.emeraldPale : '#FEE2E2',
+                backgroundColor: resultat.correct ? C.emeraldPale : C.redPale,
                 borderRadius: 14, padding: '14px 16px', marginBottom: 16,
                 border: `1px solid ${resultat.correct ? C.emerald : C.red}30`,
                 animation: resultat.correct ? 'slideDown .3s ease' : 'shake .4s ease, slideDown .3s ease'
@@ -2027,7 +2089,7 @@ export default function Session() {
                           Maîtrise — {resultat.bkt.competence}
                         </p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ flex: 1, height: 5, background: '#E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
+                          <div style={{ flex: 1, height: 5, background: C.border, borderRadius: 5, overflow: 'hidden' }}>
                             <div style={{ height: '100%', borderRadius: 5, width: `${resultat.bkt.pourcentage}%`, background: resultat.bkt.color, transition: 'width 1s ease' }}/>
                           </div>
                           <span style={{ fontSize: 12, fontWeight: 900, color: resultat.bkt.color, flexShrink: 0 }}>{resultat.bkt.pourcentage}%</span>
@@ -2074,7 +2136,7 @@ export default function Session() {
                           <button onClick={demanderExplication} disabled={loadingIA} style={{
                             display: 'flex', alignItems: 'center', gap: 7,
                             padding: '9px 16px',
-                            background: loadingIA ? '#E5E7EB' : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
+                            background: loadingIA ? C.border : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
                             color: loadingIA ? C.textSec : 'white',
                             border: 'none', borderRadius: 10,
                             fontSize: 12, fontWeight: 700, cursor: loadingIA ? 'wait' : 'pointer',
@@ -2088,7 +2150,7 @@ export default function Session() {
                         {explicationIA && (
                           <div style={{
                             marginTop: 10,
-                            background: `linear-gradient(135deg, ${C.brownPale}, #FFFBEB)`,
+                            background: `linear-gradient(135deg, ${C.brownPale}, ${C.goldPale})`,
                             borderRadius: 14, padding: '14px 16px',
                             border: `1px solid ${C.gold}40`,
                             animation: 'slideDown .3s ease'
@@ -2128,7 +2190,7 @@ export default function Session() {
                     <Lightbulb size={13}/> Voir un indice
                   </button>
                 ) : (
-                  <div style={{ backgroundColor: '#FFFBEB', borderRadius: 12, padding: 14, border: '1px solid #FDE68A50', animation: 'slideDown .3s ease' }}>
+                  <div style={{ backgroundColor: C.goldPale, borderRadius: 12, padding: 14, border: `1px solid ${C.gold}30`, animation: 'slideDown .3s ease' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
                       <Lightbulb size={14} color={C.orange}/>
                       <span style={{ fontSize: 12, fontWeight: 800, color: C.orange }}>Indice {indices}</span>
@@ -2156,7 +2218,7 @@ export default function Session() {
                 width: '100%', padding: '16px',
                 background: reponse && !submitting
                   ? `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`
-                  : '#E5E7EB',
+                  : C.border,
                 color: reponse && !submitting ? 'white' : C.textSec,
                 border: 'none', borderRadius: 14,
                 fontSize: isMobile ? 14 : 15, fontWeight: 800,
@@ -2173,7 +2235,7 @@ export default function Session() {
             ) : (
               <button onClick={suivant} style={{
                 width: '100%', padding: '16px',
-                background: `linear-gradient(135deg, ${C.emerald}, #0A7A5E)`,
+                background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`,
                 color: 'white', border: 'none', borderRadius: 14,
                 fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,

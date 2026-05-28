@@ -138,7 +138,9 @@ code {
 @keyframes shimmer       { 0%{background-position:-200% center} 100%{background-position:200% center} }
 @keyframes floatUpFade   { 0%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)} 60%{opacity:1;transform:translateX(-50%) translateY(-40px) scale(1.1)} 100%{opacity:0;transform:translateX(-50%) translateY(-80px) scale(.9)} }
 @keyframes trophyPop     { 0%{transform:scale(0) rotate(-30deg);opacity:0} 50%{transform:scale(1.2) rotate(8deg);opacity:1} 70%{transform:scale(.9) rotate(-4deg)} 85%{transform:scale(1.08) rotate(2deg)} 100%{transform:scale(1) rotate(0)} }
-@keyframes slideInRight  { from{opacity:0;transform:translateX(28px)} to{opacity:1;transform:translateX(0)} }
+@keyframes slideInRight          { from{opacity:0;transform:translateX(28px)} to{opacity:1;transform:translateX(0)} }
+@keyframes slideOutLeft          { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(-28px)} }
+@keyframes indeterminateProgress { 0%{transform:translateX(-250%)} 100%{transform:translateX(350%)} }
 @keyframes streakPop     { 0%{transform:scale(.5);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
 @keyframes goldGlow      { 0%,100%{box-shadow:0 0 0 0 #F59E0B00} 50%{box-shadow:0 0 28px 6px #F59E0B55} }
 @keyframes scoreCount    { from{opacity:0;transform:scale(.4) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }

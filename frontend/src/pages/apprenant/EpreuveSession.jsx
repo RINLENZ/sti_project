@@ -8,6 +8,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import { Clock, ChevronLeft, Send, CheckCircle, AlertTriangle, Award, Camera, ShieldAlert, FileText, Upload, Image } from 'lucide-react'
 import useProctoringCamera from '../../hooks/useProctoringCamera'
+import useAlishaVoice from '../../hooks/useAlishaVoice'
 import RichText, { RichTextInline } from '../../components/RichText'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -31,10 +32,10 @@ const EMOTION_LABELS = {
   frustration: 'Frustration', decrochage: 'Décroché',
 }
 
-function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncidents, onStart, cameraError, C }) {
+function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncidents, tabCount, onStart, cameraError, C }) {
   const [expanded, setExpanded] = useState(false)
   const pct = Math.round(engagementScore * 100)
-  const scoreColor = pct >= 70 ? C.emerald : pct >= 40 ? C.orange : '#EF4444'
+  const scoreColor = pct >= 70 ? C.emerald : pct >= 40 ? C.orange : C.red
 
   if (!cameraActive) {
     return (
@@ -47,7 +48,7 @@ function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncide
           Activer la surveillance
         </button>
         {cameraError && (
-          <p style={{ fontSize: 10, color: '#EF4444', textAlign: 'right', marginTop: 4 }}>{cameraError}</p>
+          <p style={{ fontSize: 10, color: C.red, textAlign: 'right', marginTop: 4 }}>{cameraError}</p>
         )}
       </div>
     )
@@ -57,18 +58,18 @@ function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncide
     <div style={{ position: 'fixed', bottom: 90, right: 16, zIndex: 200 }}>
       <div
         onClick={() => setExpanded(e => !e)}
-        style={{ background: C.surface, border: `1.5px solid ${faceDetected ? `${C.emerald}60` : '#FCA5A5'}`, borderRadius: 14, boxShadow: '0 4px 20px rgba(107,58,42,0.18)', cursor: 'pointer', overflow: 'hidden', transition: 'all .2s' }}
+        style={{ background: C.surface, border: `1.5px solid ${faceDetected ? `${C.emerald}60` : `${C.red}60`}`, borderRadius: 14, boxShadow: '0 4px 20px rgba(107,58,42,0.18)', cursor: 'pointer', overflow: 'hidden', transition: 'all .2s' }}
       >
         {/* Ligne compacte toujours visible */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px' }}>
           {/* Indicateur face */}
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: faceDetected ? C.emerald : '#EF4444', boxShadow: `0 0 0 3px ${faceDetected ? C.emerald : '#EF4444'}30`, animation: 'pulse 2s infinite', flexShrink: 0 }}/>
-          <Camera size={13} color={faceDetected ? C.emerald : '#EF4444'}/>
-          <span style={{ fontSize: 11, fontWeight: 800, color: faceDetected ? C.emerald : '#EF4444' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: faceDetected ? C.emerald : C.red, boxShadow: `0 0 0 3px ${faceDetected ? C.emerald : C.red}30`, animation: 'pulse 2s infinite', flexShrink: 0 }}/>
+          <Camera size={13} color={faceDetected ? C.emerald : C.red}/>
+          <span style={{ fontSize: 11, fontWeight: 800, color: faceDetected ? C.emerald : C.red }}>
             {faceDetected ? 'Surveillé' : 'Hors cadre'}
           </span>
           {nbIncidents > 0 && (
-            <span style={{ fontSize: 10, fontWeight: 800, color: '#EF4444', background: '#FEE2E2', padding: '1px 7px', borderRadius: 20 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: C.red, background: C.redPale, padding: '1px 7px', borderRadius: 20 }}>
               {nbIncidents} ⚠
             </span>
           )}
@@ -87,13 +88,13 @@ function ProctoringBadge({ cameraActive, faceDetected, engagementScore, nbIncide
             {(nbIncidents > 0 || tabCount > 0) && (
               <div style={{ margin: '8px 0 0' }}>
                 {nbIncidents > 0 && (
-                  <p style={{ margin: '0 0 2px', fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
+                  <p style={{ margin: '0 0 2px', fontSize: 10, color: C.red, fontWeight: 600 }}>
                     <ShieldAlert size={10} style={{ verticalAlign: 'middle', marginRight: 3 }}/>
                     {nbIncidents} absence{nbIncidents > 1 ? 's' : ''} caméra
                   </p>
                 )}
                 {tabCount > 0 && (
-                  <p style={{ margin: 0, fontSize: 10, color: '#EF4444', fontWeight: 600 }}>
+                  <p style={{ margin: 0, fontSize: 10, color: C.red, fontWeight: 600 }}>
                     <ShieldAlert size={10} style={{ verticalAlign: 'middle', marginRight: 3 }}/>
                     {tabCount} sortie{tabCount > 1 ? 's' : ''} détectée{tabCount > 1 ? 's' : ''}
                   </p>
@@ -138,10 +139,10 @@ function QuestionInput({ q, value, onChange, disabled, correction, C }) {
           const isChosen = value === optLabel || value === optVal
           const isCorrect = correction && (q.reponse_correcte === optLabel || q.reponse_correcte === optVal || q.reponse_correcte?.startsWith(opt[0]))
           const bg = disabled
-            ? (isCorrect ? `${C.emerald}18` : isChosen && !isCorrect ? '#FEE2E2' : C.bg)
+            ? (isCorrect ? `${C.emerald}18` : isChosen && !isCorrect ? C.redPale : C.bg)
             : (isChosen ? `${C.brown}12` : C.bg)
           const border = disabled
-            ? (isCorrect ? `2px solid ${C.emerald}` : isChosen && !isCorrect ? '2px solid #EF4444' : `1.5px solid ${C.brownPale}`)
+            ? (isCorrect ? `2px solid ${C.emerald}` : isChosen && !isCorrect ? `2px solid ${C.red}` : `1.5px solid ${C.brownPale}`)
             : (isChosen ? `2px solid ${C.brown}` : `1.5px solid ${C.brownPale}`)
           return (
             <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: bg, borderRadius: 10, border, cursor: disabled ? 'default' : 'pointer', transition: 'all .15s' }}>
@@ -166,10 +167,10 @@ function QuestionInput({ q, value, onChange, disabled, correction, C }) {
           const isChosen = value?.toLowerCase() === opt.toLowerCase()
           const isCorrect = correction && q.reponse_correcte?.toLowerCase() === opt.toLowerCase()
           const bg = disabled
-            ? (isCorrect ? `${C.emerald}18` : isChosen && !isCorrect ? '#FEE2E2' : C.bg)
+            ? (isCorrect ? `${C.emerald}18` : isChosen && !isCorrect ? C.redPale : C.bg)
             : (isChosen ? `${C.brown}18` : C.bg)
           const border = disabled
-            ? (isCorrect ? `2px solid ${C.emerald}` : isChosen && !isCorrect ? '2px solid #EF4444' : `1.5px solid ${C.brownPale}`)
+            ? (isCorrect ? `2px solid ${C.emerald}` : isChosen && !isCorrect ? `2px solid ${C.red}` : `1.5px solid ${C.brownPale}`)
             : (isChosen ? `2px solid ${C.brown}` : `1.5px solid ${C.brownPale}`)
           return (
             <button key={opt} onClick={() => !disabled && onChange(opt)} style={{ flex: 1, padding: '12px', background: bg, border, borderRadius: 10, cursor: disabled ? 'default' : 'pointer', fontSize: 14, fontWeight: 800, color: isChosen ? C.brown : C.textSec, transition: 'all .15s' }}>
@@ -230,15 +231,15 @@ function QuestionInput({ q, value, onChange, disabled, correction, C }) {
 
 function QuestionBlock({ q, idx, value, onChange, disabled, correction, C }) {
   const typeColors = {
-    definition:'#7C3AED', vrai_faux: C.emerald, completion: C.orange,
-    listage: '#7C3AED', qcm: '#2563EB', code: '#0D9373',
+    definition: C.purple, vrai_faux: C.emerald, completion: C.orange,
+    listage: C.purple, qcm: C.blue, code: C.emerald,
     question_directe: C.brown, reponse_libre: C.textSec,
   }
   const color = typeColors[q.type] || C.brown
   const corr = correction?.[q.id]
 
   return (
-    <div style={{ padding: '16px 18px', background: C.surface, borderRadius: 14, border: `1.5px solid ${corr ? (corr.correct ? `${C.emerald}50` : '#EF444450') : C.brownPale}` }}>
+    <div style={{ padding: '16px 18px', background: C.surface, borderRadius: 14, border: `1.5px solid ${corr ? (corr.correct ? `${C.emerald}50` : `${C.red}50`) : C.brownPale}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -260,13 +261,13 @@ function QuestionBlock({ q, idx, value, onChange, disabled, correction, C }) {
 
       {/* Feedback correction */}
       {corr && (
-        <div style={{ marginTop: 10, padding: '10px 12px', background: corr.correct ? `${C.emerald}10` : corr.correct === null ? `${C.orange}10` : '#FEE2E2', borderRadius: 8, border: `1px solid ${corr.correct ? `${C.emerald}30` : corr.correct === null ? `${C.orange}30` : '#FCA5A530'}` }}>
+        <div style={{ marginTop: 10, padding: '10px 12px', background: corr.correct ? `${C.emerald}10` : corr.correct === null ? `${C.orange}10` : C.redPale, borderRadius: 8, border: `1px solid ${corr.correct ? `${C.emerald}30` : corr.correct === null ? `${C.orange}30` : `${C.red}30`}` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {corr.correct === true  && <CheckCircle size={13} color={C.emerald}/>}
-              {corr.correct === false && <AlertTriangle size={13} color="#EF4444"/>}
+              {corr.correct === false && <AlertTriangle size={13} color={C.red}/>}
               {corr.correct === null  && <Clock size={13} color={C.orange}/>}
-              <span style={{ fontSize: 12, fontWeight: 700, color: corr.correct === true ? C.emerald : corr.correct === false ? '#EF4444' : C.orange }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: corr.correct === true ? C.emerald : corr.correct === false ? C.red : C.orange }}>
                 {corr.correct === true
                   ? `${corr.score} / ${corr.max} pt${corr.max > 1 ? 's' : ''}`
                   : corr.correct === false
@@ -287,12 +288,12 @@ function QuestionBlock({ q, idx, value, onChange, disabled, correction, C }) {
             <div style={{ marginTop: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                 <span style={{ fontSize: 10, color: C.textSec }}>Similarité sémantique</span>
-                <span style={{ fontSize: 10, fontWeight: 800, color: corr.similarite >= 0.65 ? C.emerald : corr.similarite >= 0.4 ? C.orange : '#EF4444' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: corr.similarite >= 0.65 ? C.emerald : corr.similarite >= 0.4 ? C.orange : C.red }}>
                   {Math.round(corr.similarite * 100)}%
                 </span>
               </div>
               <div style={{ height: 4, background: C.brownPale, borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.round(corr.similarite * 100)}%`, background: corr.similarite >= 0.65 ? C.emerald : corr.similarite >= 0.4 ? C.orange : '#EF4444', borderRadius: 4, transition: 'width .6s' }}/>
+                <div style={{ height: '100%', width: `${Math.round(corr.similarite * 100)}%`, background: corr.similarite >= 0.65 ? C.emerald : corr.similarite >= 0.4 ? C.orange : C.red, borderRadius: 4, transition: 'width .6s' }}/>
               </div>
             </div>
           )}
@@ -355,6 +356,9 @@ export default function EpreuveSession() {
     cameraActive, faceDetected, engagementScore, nbIncidents, cameraError,
     videoRef: proctoringVideoRef, startCamera, stopCamera, getIncidentsLog,
   } = useProctoringCamera()
+
+  // ── Voix Alisha (alertes timer + auto-soumission)
+  const { speak: alishaSpeak } = useAlishaVoice()
 
   // ── Chargement épreuve
   useEffect(() => {
@@ -422,7 +426,18 @@ export default function EpreuveSession() {
   // ── Timer
   useEffect(() => {
     if (phase !== 'exam' || timeLeft === null) return
-    if (timeLeft <= 0) { soumettre(true); return }
+    if (timeLeft <= 0) {
+      // Auto-soumission : Alisha prévient avant la soumission
+      alishaSpeak('Le temps est écoulé. Votre copie est soumise automatiquement.')
+      setTimeout(() => soumettre(true), 1000)
+      return
+    }
+    // Alertes vocales à des seuils critiques (5min, 1min)
+    if (timeLeft === 300) {
+      alishaSpeak('Attention ! Il vous reste cinq minutes. Vérifiez vos réponses.')
+    } else if (timeLeft === 60) {
+      alishaSpeak('Plus qu\'une minute ! Finalisez votre copie.')
+    }
     timerRef.current = setTimeout(() => setTimeLeft(t => t - 1), 1000)
     return () => clearTimeout(timerRef.current)
   }, [phase, timeLeft])
@@ -613,7 +628,7 @@ export default function EpreuveSession() {
           </div>
 
           {existingResult ? (
-            <button onClick={startExam} style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg, ${C.emerald}, #059669)`, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <button onClick={startExam} style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <CheckCircle size={17}/> Voir mes résultats
             </button>
           ) : (
@@ -670,7 +685,7 @@ export default function EpreuveSession() {
                       <img src={paperPreview} alt="Aperçu copie" style={{ width: '100%', borderRadius: 10, maxHeight: 240, objectFit: 'cover', border: `2px solid ${C.brownPale}` }}/>
                       <button
                         onClick={() => { setPaperFile(null); setPaperPreview(null) }}
-                        style={{ position: 'absolute', top: 8, right: 8, background: '#EF4444', border: 'none', borderRadius: '50%', width: 24, height: 24, color: 'white', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}
+                        style={{ position: 'absolute', top: 8, right: 8, background: C.red, border: 'none', borderRadius: '50%', width: 24, height: 24, color: 'white', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}
                       >✕</button>
                       <p style={{ margin: '6px 0 0', fontSize: 11, color: C.textSec, textAlign: 'center' }}>
                         {paperFile?.name} · {paperFile ? `${(paperFile.size / 1024).toFixed(0)} Ko` : ''}
@@ -685,6 +700,13 @@ export default function EpreuveSession() {
                       <span style={{ fontSize: 13, fontWeight: 700, color: C.brown }}>Choisir / Photographier la copie</span>
                       <span style={{ fontSize: 11, color: C.textSec }}>JPG, PNG, HEIC — max 10 Mo</span>
                     </button>
+                  )}
+
+                  {/* Barre de progression indéterminée pendant l'analyse IA */}
+                  {paperSubmitting && (
+                    <div style={{ height: 4, background: C.brownPale, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: '40%', background: `linear-gradient(90deg, ${C.brown}, ${C.brownLight})`, borderRadius: 4, animation: 'indeterminateProgress 1.5s ease-in-out infinite' }}/>
+                    </div>
                   )}
 
                   <button
@@ -711,7 +733,7 @@ export default function EpreuveSession() {
   if (phase === 'results' && results) {
     const score = results.score_total ?? 0
     const pct = Math.round(score / 20 * 100)
-    const mention = score >= 16 ? { label: 'Très bien', color: C.emerald } : score >= 14 ? { label: 'Bien', color: '#2563EB' } : score >= 10 ? { label: 'Passable', color: C.orange } : { label: 'Insuffisant', color: '#EF4444' }
+    const mention = score >= 16 ? { label: 'Très bien', color: C.emerald } : score >= 14 ? { label: 'Bien', color: C.blue } : score >= 10 ? { label: 'Passable', color: C.orange } : { label: 'Insuffisant', color: C.red }
     const corrections = results.corrections || {}
 
     return (
@@ -762,9 +784,9 @@ export default function EpreuveSession() {
             </p>
           )}
           {results.nb_incidents > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '8px 14px', background: '#FEF3C7', borderRadius: 8, border: '1px solid #D97706' }}>
-              <ShieldAlert size={14} color="#D97706"/>
-              <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '8px 14px', background: C.goldPale, borderRadius: 8, border: `1px solid ${C.gold}` }}>
+              <ShieldAlert size={14} color={C.brownMid}/>
+              <p style={{ margin: 0, fontSize: 11, color: C.brownDark, fontWeight: 600 }}>
                 {results.nb_incidents} incident{results.nb_incidents > 1 ? 's' : ''} de surveillance détecté{results.nb_incidents > 1 ? 's' : ''} — signalé{results.nb_incidents > 1 ? 's' : ''} à l'enseignant.
               </p>
             </div>
@@ -821,6 +843,7 @@ export default function EpreuveSession() {
         faceDetected={faceDetected}
         engagementScore={engagementScore}
         nbIncidents={nbIncidents}
+        tabCount={tabCount}
         onStart={startCamera}
         cameraError={cameraError}
         C={C}
@@ -839,9 +862,9 @@ export default function EpreuveSession() {
         </div>
 
         {/* Timer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: timerDanger ? '#FEE2E2' : C.bg, borderRadius: 20, border: `1.5px solid ${timerDanger ? '#FCA5A5' : C.brownPale}`, flexShrink: 0, transition: 'all .3s' }}>
-          <Clock size={14} color={timerDanger ? '#EF4444' : C.brown}/>
-          <span style={{ fontSize: 14, fontWeight: 900, color: timerDanger ? '#EF4444' : C.brown, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: timerDanger ? C.redPale : C.bg, borderRadius: 20, border: `1.5px solid ${timerDanger ? `${C.red}60` : C.brownPale}`, flexShrink: 0, transition: 'all .3s' }}>
+          <Clock size={14} color={timerDanger ? C.red : C.brown}/>
+          <span style={{ fontSize: 14, fontWeight: 900, color: timerDanger ? C.red : C.brown, fontVariantNumeric: 'tabular-nums' }}>
             {formatTime(timeLeft ?? 0)}
           </span>
         </div>

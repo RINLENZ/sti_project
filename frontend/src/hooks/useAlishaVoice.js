@@ -86,7 +86,7 @@ export default function useAlishaVoice() {
     }
   }, [])
 
-  const speak = useCallback((text, { onStart, onEnd, rate } = {}) => {
+  const speak = useCallback((text, { onStart, onEnd, onError, rate } = {}) => {
     if (!window.speechSynthesis || !text) return
     window.speechSynthesis.cancel()
     const utt  = new SpeechSynthesisUtterance(text)
@@ -96,6 +96,7 @@ export default function useAlishaVoice() {
     if (voiceRef.current) utt.voice = voiceRef.current
     if (onStart) utt.onstart = onStart
     if (onEnd)   utt.onend   = onEnd
+    if (onError) utt.onerror = onError
     window.speechSynthesis.speak(utt)
   }, [])
 
