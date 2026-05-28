@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react'
-const Alisha = lazy(() => import('../../components/Alisha'))
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -10,6 +9,8 @@ import { Clock, ChevronLeft, Send, CheckCircle, AlertTriangle, Award, Camera, Sh
 import useProctoringCamera from '../../hooks/useProctoringCamera'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import RichText, { RichTextInline } from '../../components/RichText'
+
+const Alisha = lazy(() => import('../../components/Alisha'))
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

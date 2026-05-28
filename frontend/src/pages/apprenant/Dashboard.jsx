@@ -1023,22 +1023,6 @@ export default function Dashboard() {
           >
             🔴 Rejoindre live
           </button>
-          <button
-            onClick={() => navigate('/progression')}
-            style={{
-              padding:      '6px 14px',
-              borderRadius:  10,
-              border:       `1.5px solid ${C.border}`,
-              background:    'none',
-              color:         C.textSec,
-              fontWeight:    600,
-              fontSize:      11,
-              cursor:        'pointer',
-              whiteSpace:   'nowrap',
-            }}
-          >
-            📊 Ma progression
-          </button>
         </div>
       </div>
 

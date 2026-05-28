@@ -12,9 +12,9 @@ function NotFound() {
       alignItems: 'center', justifyContent: 'center', gap: 16,
       background: C.bg, fontFamily: "'DM Sans', system-ui, sans-serif", textAlign: 'center', padding: 24,
     }}>
-      <div style={{ fontSize: 56, fontWeight: 900, color: C.primary, lineHeight: 1 }}>404</div>
-      <p style={{ fontSize: 16, color: C.muted, margin: 0 }}>Cette page n'existe pas.</p>
-      <Link to="/" style={{ color: C.primary, fontWeight: 700, fontSize: 14 }}>Retour à l'accueil</Link>
+      <div style={{ fontSize: 56, fontWeight: 900, color: C.brown, lineHeight: 1 }}>404</div>
+      <p style={{ fontSize: 16, color: C.textMuted, margin: 0 }}>Cette page n'existe pas.</p>
+      <Link to="/" style={{ color: C.brown, fontWeight: 700, fontSize: 14 }}>Retour à l'accueil</Link>
     </div>
   )
 }

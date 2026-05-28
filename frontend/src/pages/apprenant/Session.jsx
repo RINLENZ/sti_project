@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react'
-const Alisha = lazy(() => import('../../components/Alisha'))
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import api from '../../services/api'
@@ -20,6 +19,8 @@ import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 import { clearCache } from '../../services/cache'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
+
+const Alisha = lazy(() => import('../../components/Alisha'))
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = (s, C) =>
@@ -687,7 +688,8 @@ export default function Session() {
       : pct >= 70 ? 'Très bien joué ! Tu progresses vraiment.'
       : pct >= 50 ? 'Bien essayé. Continue, tu vas y arriver !'
       : 'Chaque tentative te rapproche du succès !'
-    setTimeout(() => tts(finMsg), 600)
+    // Stocke les deux timeouts pour les annuler si l'utilisateur quitte avant leur déclenchement
+    const ttsId = setTimeout(() => tts(finMsg), 600)
     let startTs = null
     const anim = (ts) => {
       if (!startTs) startTs = ts
@@ -697,7 +699,7 @@ export default function Session() {
       if (prog < 1) requestAnimationFrame(anim)
     }
     const id = setTimeout(() => requestAnimationFrame(anim), 250)
-    return () => clearTimeout(id)
+    return () => { clearTimeout(id); clearTimeout(ttsId) }
   }, [termine])
 
   async function startCamera() {
@@ -1121,20 +1123,25 @@ export default function Session() {
           {/* ── Carte principale ── */}
           <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? '24px 20px' : '36px 40px', boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, textAlign: 'center', marginBottom: 14 }}>
 
-            {/* Alisha fin de session */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, animation: 'trophyPop .6s ease .1s both' }}>
-              <Suspense fallback={<div style={{ width: 60, height: 70 }} />}>
-                <Alisha state={pct >= 70 ? 'excited' : pct >= 50 ? 'welcome' : 'idle'} size={60} />
-              </Suspense>
-            </div>
-
-            {/* Trophée animé */}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: isMobile ? 72 : 90, height: isMobile ? 72 : 90, borderRadius: '50%', background: grade.bg, boxShadow: '0 6px 30px rgba(0,0,0,0.18)', animation: grade.anim, marginBottom: 10 }}>
-                <span style={{ fontSize: isMobile ? 36 : 44, animation: 'trophyPop .7s cubic-bezier(.22,1,.36,1) .2s both', display: 'block' }}>{grade.emoji}</span>
+            {/* ── Hero : Alisha remplace l'emoji ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <div style={{ animation: 'trophyPop .65s cubic-bezier(.22,1,.36,1) .1s both' }}>
+                <Suspense fallback={<div style={{ width: 110, height: 130 }} />}>
+                  <Alisha
+                    state={pct >= 90 ? 'excited' : pct >= 70 ? 'correct' : pct >= 50 ? 'welcome' : 'idle'}
+                    size={isMobile ? 90 : 110}
+                  />
+                </Suspense>
               </div>
-              <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: C.brown, margin: '0 0 4px' }}>{grade.label}</h2>
-              <p style={{ color: C.textSec, fontSize: 13, margin: 0 }}>{ua.titre}</p>
+              <span style={{
+                background: grade.bg, color: 'white',
+                fontWeight: 900, fontSize: isMobile ? 15 : 17,
+                padding: '6px 22px', borderRadius: 30,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                animation: grade.anim || 'scaleIn .4s ease .35s both',
+                display: 'inline-block',
+              }}>{grade.emoji} {grade.label}</span>
+              <p style={{ color: C.textSec, fontSize: 12, margin: 0 }}>{ua.titre}</p>
             </div>
 
             {/* Score animé central */}
@@ -1168,24 +1175,6 @@ export default function Session() {
               </div>
             )}
 
-            {/* U5 — BKT par compétence (maîtrise acquise pendant la session) */}
-            {Object.keys(bktHistory).length > 0 && (
-              <div style={{ background: C.bg, borderRadius: 14, padding: '14px 16px', marginBottom: 16, border: `1px solid ${C.brownPale}`, textAlign: 'left' }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 12px' }}>📊 Maîtrise BKT par compétence</p>
-                {Object.entries(bktHistory).map(([comp, bkt]) => (
-                  <div key={comp} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>{comp}</span>
-                      <span style={{ fontSize: 12, fontWeight: 900, color: bkt.color, flexShrink: 0 }}>{bkt.pourcentage}%</span>
-                    </div>
-                    <div style={{ height: 5, background: C.border, borderRadius: 5, overflow: 'hidden', marginBottom: 2 }}>
-                      <div style={{ height: '100%', width: `${bkt.pourcentage}%`, background: bkt.color, borderRadius: 5, transition: 'width 1.2s ease .4s' }}/>
-                    </div>
-                    <span style={{ fontSize: 10, color: C.textSec }}>{bkt.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* Stats en 3 colonnes */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
@@ -1224,7 +1213,7 @@ export default function Session() {
                   color: 'white', border: 'none', borderRadius: 14,
                   fontSize: isMobile ? 13 : 14, fontWeight: 800, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
-                  boxShadow: '0 4px 16px rgba(239,68,68,0.35)'
+                  boxShadow: `0 4px 16px ${C.red}59`
                 }}>
                   🔁 Revoir les {rateesIds.length} question{rateesIds.length > 1 ? 's' : ''} ratée{rateesIds.length > 1 ? 's' : ''}
                 </button>
