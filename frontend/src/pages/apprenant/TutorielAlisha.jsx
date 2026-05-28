@@ -1105,8 +1105,8 @@ export default function TutorielAlisha() {
       }}>
         {/* ── L1 — Layout conversationnel ── */}
         {isAlishaCenter ? (
-          /* Feedback correct : Alisha au centre en grand */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          /* Feedback correct : Alisha au centre en grand + carte feedback dessous */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, width: '100%' }}>
             <Alisha state={alishaState} size={alishaLayout.size} />
             {message && (
               <div style={{
@@ -1115,6 +1115,57 @@ export default function TutorielAlisha() {
                 fontSize: 14, color: C.text, lineHeight: 1.6, textAlign: 'center',
                 maxWidth: 340, animation: 'fadeUp .3s ease',
               }}>{message}</div>
+            )}
+            {/* ── FIX : feedback + bouton Continuer toujours visibles en mode centré ── */}
+            {phase === 'feedback' && feedback && (
+              <div
+                ref={cardRef}
+                style={{
+                  background: C.surface, borderRadius: 20,
+                  border: `1.5px solid ${C.border}`,
+                  padding: xs ? '18px' : '22px 24px',
+                  boxShadow: `0 4px 20px ${C.brown}18`,
+                  animation: 'flipInY .38s ease',
+                  width: '100%', maxWidth: 480,
+                  display: 'flex', flexDirection: 'column', gap: 14,
+                }}
+              >
+                <Confetti active={confettiCorrect} count={12} />
+                {/* Résumé feedback correct */}
+                <div style={{
+                  background: C.emeraldPale, borderRadius: 12,
+                  padding: '14px 18px',
+                  border: `2px solid ${C.emerald}`,
+                }}>
+                  <p style={{ fontSize: 16, fontWeight: 800, margin: '0 0 4px', color: C.emerald }}>
+                    ✅ Bonne réponse !
+                  </p>
+                  {feedback.explication && (
+                    <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+                      {feedback.explication}
+                    </p>
+                  )}
+                </div>
+                {/* BKT si disponible */}
+                {bktResult && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '10px 14px', borderRadius: 12,
+                    background: `${bktResult.color}18`,
+                    border: `1.5px solid ${bktResult.color}44`,
+                  }}>
+                    <span style={{ fontSize: 16 }}>🎯</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 12, fontWeight: 800, color: bktResult.color, margin: 0 }}>{bktResult.competence}</p>
+                      <p style={{ fontSize: 11, color: C.textSec, margin: '2px 0 0' }}>Maîtrise : {bktResult.pourcentage}% — {bktResult.label}</p>
+                    </div>
+                  </div>
+                )}
+                <button onClick={advance} style={{ ...primaryBtn(C), animation: 'bounceIn .4s ease .35s both' }}>
+                  {stepIdx + 1 >= sequence.length ? 'Terminer 🎉' : 'Continuer →'}
+                  {xs && <span style={{ fontSize: 10, opacity: .6, marginLeft: 6 }}>↑ swipe</span>}
+                </button>
+              </div>
             )}
           </div>
         ) : (
