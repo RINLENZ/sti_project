@@ -3,16 +3,17 @@
  *
  * Problèmes corrigés :
  * 1. Chrome charge les voix en 2 vagues (locales d'abord, cloud ensuite).
- *    L'ancienne version re-pickait à chaque voiceschanged → voix différente
- *    entre sessions en ligne, résultant en une voix bizarre ou mal calibrée.
+ *    Sur mobile/serveur sans voix locale installée, lockedRef restait false
+ *    → un 2ème voiceschanged arrivait après 200-500ms et changeait la voix
+ *    en pleine session.
  * 2. La voix n'était pas stoppée au démontage du composant.
  *
- * Stratégie :
- * - Priorité aux voix LOCAL (v.localService === true) pour la stabilité.
- * - Une fois une voix locale fr-FR trouvée, on l'écrit dans localStorage
- *   et on ne la remplace plus jamais lors des voiceschanged suivants.
- * - Fallback sur voix fr non-locale uniquement si aucune locale n'existe.
- * - Stop automatique au démontage.
+ * Stratégie de verrouillage (stable en ligne ET hors ligne) :
+ * - Si voix en localStorage → on la réutilise et on verrouille immédiatement.
+ * - Si voix locale fr-FR disponible → verrouillage immédiat (stable).
+ * - Sinon (voix cloud uniquement, ex. Chrome mobile sans pack) →
+ *   on attend le 1er événement voiceschanged (chargement cloud terminé),
+ *   puis on verrouille définitivement. Après ça, plus aucun re-pick.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { splitSpeechChunks } from '../utils/latexToSpeech'
@@ -23,8 +24,8 @@ const STORAGE_KEY = 'alisha_voice_name'
 function scoreVoice(v) {
   if (!v.lang.startsWith('fr')) return -1
   let s = 0
-  if (v.localService)                           s += 100  // voix locale = stable
-  if (v.lang === 'fr-FR')                       s += 10
+  if (v.localService)                                s += 100  // local = stable
+  if (v.lang === 'fr-FR')                            s += 10
   if (/female|femme|hortense|amelie/i.test(v.name)) s += 5
   return s
 }
@@ -37,51 +38,62 @@ function bestFrVoice(voices) {
 }
 
 export default function useAlishaVoice() {
-  const voiceRef    = useRef(null)
-  const lockedRef   = useRef(false)   // true dès qu'on a une voix locale fr-FR stable
-  const mountedRef  = useRef(true)
-  const readingRef  = useRef(false)   // true pendant une lecture longue
+  const voiceRef          = useRef(null)
+  const lockedRef         = useRef(false)   // true = plus jamais de re-pick
+  const voicesChangedOnce = useRef(false)   // true après le 1er voiceschanged
+  const mountedRef        = useRef(true)
+  const readingRef        = useRef(false)   // true pendant une lecture longue
   const [isReading, setIsReading] = useState(false)
 
   useEffect(() => {
     mountedRef.current = true
     if (!window.speechSynthesis) return
 
-    function pickVoice() {
-      if (!mountedRef.current) return
-
-      // Si la voix est déjà verrouillée sur une voix locale, ne rien changer
-      if (lockedRef.current) return
+    function pickVoice(fromEvent = false) {
+      if (!mountedRef.current || lockedRef.current) return
 
       const voices = window.speechSynthesis.getVoices()
       if (!voices.length) return
 
-      // Chercher d'abord par nom persisté (même navigateur, même machine)
+      // 1. Voix persistée en localStorage → confiance totale, verrouillage immédiat
       const savedName = localStorage.getItem(STORAGE_KEY)
       if (savedName) {
         const saved = voices.find(v => v.name === savedName)
         if (saved) {
           voiceRef.current = saved
-          lockedRef.current = saved.localService
+          lockedRef.current = true
           return
         }
+        // Nom sauvé introuvable (autre navigateur/OS) → on supprime et on repick
+        try { localStorage.removeItem(STORAGE_KEY) } catch {}
       }
 
       const best = bestFrVoice(voices)
-      if (best) {
-        voiceRef.current  = best
-        lockedRef.current = best.localService  // verrouiller si locale
+      if (!best) return
+
+      voiceRef.current = best
+
+      // Verrouiller si :
+      //   (a) voix locale trouvée (stable dès le premier appel)
+      //   (b) on est dans un voiceschanged (= vague cloud chargée, liste complète)
+      const shouldLock = best.localService || fromEvent
+      if (shouldLock) {
+        lockedRef.current = true
         try { localStorage.setItem(STORAGE_KEY, best.name) } catch {}
       }
     }
 
-    pickVoice()
-    window.speechSynthesis.addEventListener('voiceschanged', pickVoice)
+    function onVoicesChanged() {
+      voicesChangedOnce.current = true
+      pickVoice(true)  // fromEvent=true → verrouillage définitif
+    }
+
+    pickVoice(false)
+    window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged)
 
     return () => {
       mountedRef.current = false
-      window.speechSynthesis.removeEventListener('voiceschanged', pickVoice)
-      // Stop au démontage pour éviter que la voix continue en arrière-plan
+      window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged)
       window.speechSynthesis.cancel()
     }
   }, [])
