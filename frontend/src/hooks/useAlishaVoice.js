@@ -20,13 +20,15 @@ import { splitSpeechChunks } from '../utils/latexToSpeech'
 
 const STORAGE_KEY = 'alisha_voice_name'
 
-// Score de préférence : voix locale FR féminine > voix locale FR > voix cloud FR
+// Score de préférence : voix locale FR féminine > voix locale FR > Google français > autres cloud FR
 function scoreVoice(v) {
   if (!v.lang.startsWith('fr')) return -1
   let s = 0
-  if (v.localService)                                s += 100  // local = stable
-  if (v.lang === 'fr-FR')                            s += 10
-  if (/female|femme|hortense|amelie/i.test(v.name)) s += 5
+  if (v.localService)                                 s += 100  // local = stable, meilleure qualité
+  if (v.lang === 'fr-FR')                             s += 10
+  if (/female|femme|hortense|amelie/i.test(v.name))  s += 5
+  // Parmi les voix cloud, "Google français" est la mieux notée — pitch neutre s'applique mieux
+  if (!v.localService && /google/i.test(v.name))      s += 8
   return s
 }
 
@@ -37,13 +39,17 @@ function bestFrVoice(voices) {
     .sort((a, b) => b.s - a.s)[0]?.v || null
 }
 
+const VOICE_SETUP_KEY = 'alisha_voice_setup_done'
+
 export default function useAlishaVoice() {
   const voiceRef          = useRef(null)
-  const lockedRef         = useRef(false)   // true = plus jamais de re-pick
-  const voicesChangedOnce = useRef(false)   // true après le 1er voiceschanged
+  const lockedRef         = useRef(false)
+  const voicesChangedOnce = useRef(false)
   const mountedRef        = useRef(true)
-  const readingRef        = useRef(false)   // true pendant une lecture longue
-  const [isReading, setIsReading] = useState(false)
+  const readingRef        = useRef(false)
+  const [isReading,       setIsReading]       = useState(false)
+  // true si l'utilisateur est sur un appareil sans voix locale fr-FR (android sans pack, etc.)
+  const [needsVoiceSetup, setNeedsVoiceSetup] = useState(false)
 
   useEffect(() => {
     mountedRef.current = true
@@ -80,6 +86,11 @@ export default function useAlishaVoice() {
       if (shouldLock) {
         lockedRef.current = true
         try { localStorage.setItem(STORAGE_KEY, best.name) } catch {}
+        // Signale que l'utilisateur n'a pas de voix locale FR (seulement cloud)
+        // → afficher le guide d'installation si pas encore vu
+        if (!best.localService && !localStorage.getItem(VOICE_SETUP_KEY)) {
+          setNeedsVoiceSetup(true)
+        }
       }
     }
 
@@ -104,7 +115,9 @@ export default function useAlishaVoice() {
     const utt  = new SpeechSynthesisUtterance(text)
     utt.lang   = 'fr-FR'
     utt.rate   = rate ?? 0.95
-    utt.pitch  = 1.15
+    // Voix locale (Hortense, Thomas…) : pitch 1.15 → chaleureux, naturel.
+    // Voix cloud (Google français…)  : pitch 1.0  → neutre, évite l'effet robotique/strident.
+    utt.pitch  = (voiceRef.current?.localService ?? false) ? 1.15 : 1.0
     if (voiceRef.current) utt.voice = voiceRef.current
     if (onStart) utt.onstart = onStart
     if (onEnd)   utt.onend   = onEnd
@@ -149,7 +162,7 @@ export default function useAlishaVoice() {
       const utt   = new SpeechSynthesisUtterance(chunks[idx])
       utt.lang    = 'fr-FR'
       utt.rate    = 0.9    // légèrement plus lent pour la lecture de cours
-      utt.pitch   = 1.1
+      utt.pitch   = (voiceRef.current?.localService ?? false) ? 1.1 : 1.0
       if (voiceRef.current) utt.voice = voiceRef.current
       utt.onend   = () => { onChunk?.(idx, chunks.length); idx++; readNext() }
       utt.onerror = () => { idx++; readNext() }
@@ -160,5 +173,10 @@ export default function useAlishaVoice() {
     readNext()
   }, [])
 
-  return { speak, stop, readAloud, isReading, supported: !!window.speechSynthesis }
+  const dismissVoiceSetup = () => {
+    setNeedsVoiceSetup(false)
+    try { localStorage.setItem(VOICE_SETUP_KEY, '1') } catch {}
+  }
+
+  return { speak, stop, readAloud, isReading, supported: !!window.speechSynthesis, needsVoiceSetup, dismissVoiceSetup }
 }

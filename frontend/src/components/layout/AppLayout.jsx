@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import NavRail   from './NavRail'
 import MobileNav from './MobileNav'
-import ParcoursPage from './ParcoursPage'
+import ProgressionMap from '../../pages/apprenant/ProgressionMap'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { useTheme } from '../../styles/theme.jsx'
 
@@ -41,7 +41,7 @@ export default function AppLayout({ children }) {
       >
         <style>{`@keyframes pageFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}`}</style>
         {activeView === 'parcours'
-          ? <ParcoursPage onBack={() => setActiveView('main')} />
+          ? <ProgressionMap />
           : children
         }
       </main>

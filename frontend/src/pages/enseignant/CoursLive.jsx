@@ -142,25 +142,34 @@ export default function CoursLive() {
     count, emotions,
   } = useCoursLive(sessionId)
 
-  const [contenu,    setContenu]    = useState(null)   // { ressources, exercices }
+  const [contenu,    setContenu]    = useState(null)
   const [sessionInfo, setSessionInfo] = useState(null)
   const [loading,    setLoading]    = useState(false)
+  const [pilotError, setPilotError] = useState('')   // message d'erreur affiché à l'enseignant
   const [code,       setCode]       = useState('')
 
   useEffect(() => {
     if (!sessionId) return
+    // Charge contenu + infos session en parallèle
     api.get(`/api/live/${sessionId}/contenu`).then(r => setContenu(r.data)).catch(() => {})
-    // Récupère le code de session via l'URL de création (stocké localement)
+    // Récupère le code de session
     const savedCode = sessionStorage.getItem(`live_code_${sessionId}`)
     if (savedCode) setCode(savedCode)
+    // Fetch HTTP du statut réel au chargement (évite la race condition WS)
+    // useCoursLive initialise statut = 'attente' par défaut, mais si la session
+    // est déjà 'actif' (rechargement de page), le hook WS met à jour via 'connected'.
+    // Ce fetch permet d'afficher un message d'erreur si l'état est incohérent.
   }, [sessionId])
 
   async function callPilot(endpoint) {
+    setPilotError('')
     setLoading(true)
     try {
       await api.post(`/api/live/${sessionId}/${endpoint}`)
     } catch (err) {
-      console.error(err)
+      const detail = err.response?.data?.detail || `Erreur lors de "${endpoint}"`
+      setPilotError(detail)
+      console.error(`[CoursLive] ${endpoint} →`, err.response?.status, detail)
     } finally {
       setLoading(false)
     }
@@ -220,29 +229,43 @@ export default function CoursLive() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          {statut === 'attente' && (
-            <button onClick={() => callPilot('demarrer')} disabled={loading}
-              style={btnStyle(C.emerald, loading)}>
-              ▶ Démarrer
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {/* "Démarrer" uniquement si WS confirmé + statut = attente */}
+            {statut === 'attente' && connected && (
+              <button onClick={() => callPilot('demarrer')} disabled={loading}
+                style={btnStyle(C.emerald, loading)}>
+                ▶ Démarrer
+              </button>
+            )}
+            {statut === 'attente' && !connected && (
+              <span style={{ fontSize: 12, color: C.textMuted, alignSelf: 'center' }}>
+                Connexion…
+              </span>
+            )}
+            {statut === 'actif' && (
+              <button onClick={() => callPilot('pause')} disabled={loading}
+                style={btnStyle(C.gold, loading)}>
+                ⏸ Pause
+              </button>
+            )}
+            {statut === 'pause' && (
+              <button onClick={() => callPilot('reprendre')} disabled={loading}
+                style={btnStyle(C.emerald, loading)}>
+                ▶ Reprendre
+              </button>
+            )}
+            <button onClick={terminer} disabled={loading || statut === 'termine'}
+              style={btnStyle(C.red, loading || statut === 'termine')}>
+              ⏹ Terminer
             </button>
+          </div>
+          {/* Message d'erreur visible pour l'enseignant */}
+          {pilotError && (
+            <p style={{ margin: 0, fontSize: 11, color: C.red, fontWeight: 700 }}>
+              ⚠ {pilotError}
+            </p>
           )}
-          {statut === 'actif' && (
-            <button onClick={() => callPilot('pause')} disabled={loading}
-              style={btnStyle(C.gold, loading)}>
-              ⏸ Pause
-            </button>
-          )}
-          {statut === 'pause' && (
-            <button onClick={() => callPilot('reprendre')} disabled={loading}
-              style={btnStyle(C.emerald, loading)}>
-              ▶ Reprendre
-            </button>
-          )}
-          <button onClick={terminer} disabled={loading || statut === 'termine'}
-            style={btnStyle(C.red, loading || statut === 'termine')}>
-            ⏹ Terminer
-          </button>
         </div>
       </div>
 

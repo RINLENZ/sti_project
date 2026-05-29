@@ -54,6 +54,7 @@ const CoursLivePilot   = lazy(() => import('./pages/enseignant/CoursLive'))
 const SalleAttente    = lazy(() => import('./pages/apprenant/SalleAttente'))
 const EleveLive       = lazy(() => import('./pages/apprenant/EleveLive'))
 const TutorielAlisha  = lazy(() => import('./pages/apprenant/TutorielAlisha'))
+const MonParcours     = lazy(() => import('./pages/apprenant/ProgressionMap'))
 const DataCollection   = lazy(() => import('./pages/DataCollection'))
 const AudioCollection  = lazy(() => import('./pages/AudioCollection'))
 const Contribuer       = lazy(() => import('./pages/Contribuer'))
@@ -200,7 +201,13 @@ export default function App() {
         <Route path="/tutoriel/:uaId" element={
           <ApprenantRoute><TutorielAlisha/></ApprenantRoute>
         }/>
-        {/* /progression → fusionné dans ParcoursPage */}
+        <Route path="/parcours" element={
+          <ApprenantRoute><MonParcours/></ApprenantRoute>
+        }/>
+        <Route path="/parcours" element={
+          <ApprenantRoute><MonParcours/></ApprenantRoute>
+        }/>
+        {/* /progression → alias vers /parcours */}
         <Route path="/progression" element={<Navigate to="/parcours" replace/>}/>
 
         {/* ── Routes super admin ── */}

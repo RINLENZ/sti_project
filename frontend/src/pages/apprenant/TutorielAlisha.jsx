@@ -24,9 +24,36 @@ import Alisha from '../../components/Alisha'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { useWebSocket } from '../../hooks/useWebSocket'
+import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
+import { EMOTION_MODEL_READY } from '../../config/models'
 import { ProgressiveContent, parseBlocks } from '../../components/RichContent'
 import { blocksToSpeech } from '../../utils/latexToSpeech'
 import api from '../../services/api'
+
+// ── Suivi facial — mêmes helpers que Session.jsx ─────────────────
+// Mapping expressions CNN → états affectifs académiques (Ekman adapté)
+const CNN_TO_ETAT = {
+  happy: 'engagement_eleve', neutral: 'neutre', sad: 'ennui',
+  angry: 'frustration', fearful: 'confusion', surprised: 'confusion', disgusted: 'frustration',
+}
+
+function fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch) {
+  const earSignal  = ear < 0.18
+  const poseSignal = Math.abs(yaw) > 28
+  if (earSignal && Math.abs(pitch) > 10) return 'ennui'
+  if (poseSignal && (!cnnProbs || (cnnProbs.neutral || 0) > 0.5)) return 'engagement_faible'
+  if (cnnEmotion) return cnnEmotion
+  if (poseSignal) return 'engagement_faible'
+  return 'neutre'
+}
+
+function computeEAR(lm, idx) {
+  const p = idx.map(i => lm[i])
+  return (Math.hypot(p[1].x-p[5].x, p[1].y-p[5].y) + Math.hypot(p[2].x-p[4].x, p[2].y-p[4].y)) /
+         (2 * Math.hypot(p[0].x-p[3].x, p[0].y-p[3].y))
+}
+
+const FACE_SEND_MS = 5000  // intervalle entre deux envois facial_analysis
 
 // ── P2 / P10 — Sons Web Audio API ────────────────────────────────
 
@@ -570,7 +597,18 @@ export default function TutorielAlisha() {
   const transitioningRef       = useRef(false)
   const touchStartYRef         = useRef(null)   // L7 — swipe-up
 
-  const { speak, stop, readAloud, isReading, supported } = useAlishaVoice()
+  // ── Suivi facial ─────────────────────────────────────────────────
+  const videoRef           = useRef(null)
+  const faceMeshRef        = useRef(null)
+  const cnnEmotionRef      = useRef({ emotion: null, probs: null })
+  const lastFaceSendRef    = useRef(0)
+  const earBufferRef       = useRef([])
+  const faceIntervalRef    = useRef(null)
+  const [cameraActive, setCameraActive] = useState(false)
+
+  const { predict: predictEmotionOnnx } = useEmotionOnnx()
+
+  const { speak, stop, readAloud, isReading, supported, needsVoiceSetup, dismissVoiceSetup } = useAlishaVoice()
   const { lastKeyword } = useKWSModel(audioActive)
   const prevMessageRef = useRef(null)
 
@@ -585,6 +623,117 @@ export default function TutorielAlisha() {
   function logInteraction(type, data = {}) {
     if (!sessionIdRef.current) return
     api.post('/api/interaction', { session_id: sessionIdRef.current, user_id: user.id, type, data }).catch(() => {})
+  }
+
+  // ── Suivi facial discret — même pipeline que Session.jsx ─────────
+  // Auto-démarrage silencieux après création de la session.
+  // Pas de toast bloquant : si la caméra est refusée, on continue sans.
+  function onFaceResults(results) {
+    if (!results.multiFaceLandmarks?.length) {
+      const now = Date.now()
+      if (now - lastFaceSendRef.current > FACE_SEND_MS) {
+        logInteraction('facial_analysis', { visual_score: 0.0, face_detected: false, emotion: 'absent' })
+        lastFaceSendRef.current = now
+      }
+      return
+    }
+    const lm = results.multiFaceLandmarks[0]
+    const earRaw = (computeEAR(lm, [362,385,387,263,373,380]) + computeEAR(lm, [33,160,158,133,153,144])) / 2
+    earBufferRef.current.push(earRaw)
+    if (earBufferRef.current.length > 8) earBufferRef.current.shift()
+    const ear   = earBufferRef.current.reduce((a,b) => a+b, 0) / earBufferRef.current.length
+    const yaw   = (lm[1].x - 0.5) * 180
+    const pitch = (lm[1].y - lm[152].y) * 200
+
+    let score = 1.0
+    if (ear < 0.15) score -= 0.5; else if (ear < 0.20) score -= 0.4; else if (ear < 0.25) score -= 0.2
+    if (Math.abs(yaw) > 45) score -= 0.4; else if (Math.abs(yaw) > 30) score -= 0.3; else if (Math.abs(yaw) > 15) score -= 0.1
+    if (Math.abs(pitch) > 30) score -= 0.2; else if (Math.abs(pitch) > 15) score -= 0.1
+    score = Math.max(0, Math.min(1, score))
+
+    const { emotion: cnnEmotion, probs: cnnProbs, dominant: cnnDominant } = cnnEmotionRef.current
+    const em = fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch)
+
+    const now = Date.now()
+    if (now - lastFaceSendRef.current > FACE_SEND_MS) {
+      logInteraction('facial_analysis', {
+        visual_score:  Math.round(score * 100) / 100,
+        ear:           Math.round(ear * 100) / 100,
+        yaw:           Math.round(yaw),
+        pitch:         Math.round(pitch),
+        face_detected: true,
+        emotion:       em,
+        cnn_dominant:  cnnDominant || null,
+        cnn_happy:     cnnProbs ? Math.round((cnnProbs.happy     || 0) * 100) / 100 : null,
+        cnn_neutral:   cnnProbs ? Math.round((cnnProbs.neutral   || 0) * 100) / 100 : null,
+        cnn_sad:       cnnProbs ? Math.round((cnnProbs.sad       || 0) * 100) / 100 : null,
+        cnn_angry:     cnnProbs ? Math.round((cnnProbs.angry     || 0) * 100) / 100 : null,
+        cnn_fearful:   cnnProbs ? Math.round((cnnProbs.fearful   || 0) * 100) / 100 : null,
+        cnn_surprised: cnnProbs ? Math.round((cnnProbs.surprised || 0) * 100) / 100 : null,
+        cnn_disgusted: cnnProbs ? Math.round((cnnProbs.disgusted || 0) * 100) / 100 : null,
+        source:        cnnDominant ? 'cnn+geometry' : 'geometry',
+      })
+      lastFaceSendRef.current = now
+    }
+  }
+
+  async function startCamera() {
+    try {
+      const conn    = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+      const slowNet = conn && (conn.effectiveType === '2g' || conn.downlink < 1.5)
+      const camW    = slowNet ? 160 : 320
+      const camH    = slowNet ? 120 : 240
+
+      // Attend MediaPipe WASM (max 5s)
+      let tries = 0
+      while ((!window.FaceMesh || !window.Camera) && tries < 10) {
+        await new Promise(r => setTimeout(r, 500)); tries++
+      }
+      if (!window.FaceMesh || !window.Camera) return
+
+      const fm = new window.FaceMesh({ locateFile: f => `/mediapipe/face_mesh/${f}` })
+      fm.setOptions({
+        maxNumFaces: 1, refineLandmarks: !slowNet,
+        minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
+      })
+      fm.onResults(onFaceResults)
+      faceMeshRef.current = fm
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: camW, height: camH, frameRate: slowNet ? 10 : 15 },
+      })
+      if (!videoRef.current) return
+      videoRef.current.srcObject = stream
+      const cam = new window.Camera(videoRef.current, {
+        onFrame: async () => {
+          if (!faceMeshRef.current || !videoRef.current?.videoWidth) return
+          try { await faceMeshRef.current.send({ image: videoRef.current }) } catch {}
+        },
+        width: camW, height: camH,
+      })
+      await cam.start()
+      setCameraActive(true)
+
+      // Modèle ONNX africain pour les expressions
+      faceIntervalRef.current = setInterval(async () => {
+        const vid = videoRef.current
+        if (!vid || !vid.videoWidth || !EMOTION_MODEL_READY) return
+        const res = await predictEmotionOnnx(vid)
+        if (res) cnnEmotionRef.current = { emotion: res.emotion, probs: res.probs, dominant: res.emotion, source: 'onnx' }
+      }, 3000)
+    } catch {
+      // Permission caméra refusée ou indisponible → silencieux, pas de toast
+    }
+  }
+
+  function stopCamera() {
+    if (faceIntervalRef.current)  { clearInterval(faceIntervalRef.current); faceIntervalRef.current = null }
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(t => t.stop())
+      videoRef.current.srcObject = null
+    }
+    if (faceMeshRef.current) { faceMeshRef.current.close?.(); faceMeshRef.current = null }
+    setCameraActive(false)
   }
 
   // ── Chargement UA ─────────────────────────────────────────────
@@ -606,12 +755,15 @@ export default function TutorielAlisha() {
         try {
           const s = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
           sessionIdRef.current = s.data.session_id
+          // Auto-démarrage discret du suivi facial (sans toast bloquant)
+          startCamera()
         } catch {}
       })
       .catch(() => navigate('/dashboard'))
     return () => {
       cancelled = true
       setAudioActive(false)
+      stopCamera()
       if (sessionIdRef.current)
         api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
     }
@@ -1053,6 +1205,32 @@ export default function TutorielAlisha() {
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
+      {/* Capture vidéo cachée pour l'analyse faciale MediaPipe */}
+      <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }}/>
+
+      {/* ── Bandeau installation voix (affiché une seule fois sur appareils sans voix locale FR) ── */}
+      {needsVoiceSetup && supported && (
+        <div style={{
+          background: '#1e3a5f', color: 'white',
+          padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10,
+          fontSize: 12, lineHeight: 1.4,
+        }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>🔊</span>
+          <span style={{ flex: 1 }}>
+            <strong>Améliore la voix d'Alisha :</strong> installe un pack vocal français dans
+            {' '}<strong>Paramètres → Accessibilité → Synthèse vocale</strong>
+            {' '}puis sélectionne <em>Français (France)</em>.
+          </span>
+          <button onClick={dismissVoiceSetup} style={{
+            background: 'rgba(255,255,255,.2)', border: 'none', color: 'white',
+            borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 11,
+            fontWeight: 700, flexShrink: 0,
+          }}>
+            OK, compris
+          </button>
+        </div>
+      )}
+
       {/* ── L6+P1+P3+P8 — Barre de progression enrichie ── */}
       <div style={{
         background: C.surface, borderBottom: `1px solid ${C.border}`,

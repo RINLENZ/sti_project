@@ -260,8 +260,15 @@ async def demarrer_session(
 ):
     session = _get_session(session_id, db)
     _require_pilot(session, current_user)
+
+    if session.statut == "termine":
+        raise HTTPException(400, "Session terminée — impossible de la redémarrer")
+
+    # Idempotent : si déjà actif (ex. rechargement de page par l'enseignant),
+    # on re-broadcaste l'état courant sans retourner d'erreur.
     if session.statut != "attente":
-        raise HTTPException(400, "Session déjà démarrée")
+        await _broadcast_slide(session, db)
+        return {"ok": True, "statut": session.statut}
 
     session.statut     = "actif"
     session.started_at = datetime.now(timezone.utc)
@@ -269,7 +276,7 @@ async def demarrer_session(
 
     await live_manager.broadcast(str(session.id), {"type": "session_started"})
     await _broadcast_slide(session, db)
-    return {"ok": True}
+    return {"ok": True, "statut": "actif"}
 
 
 @router.post("/{session_id}/avancer")
@@ -391,13 +398,15 @@ async def pause_session(
 ):
     session = _get_session(session_id, db)
     _require_pilot(session, current_user)
+    if session.statut == "pause":
+        return {"ok": True, "statut": "pause"}   # idempotent
     if session.statut != "actif":
-        raise HTTPException(400, "Session non active")
+        raise HTTPException(400, f"Impossible de mettre en pause : statut actuel = {session.statut}")
 
     session.statut = "pause"
     db.commit()
     await live_manager.broadcast(str(session.id), {"type": "session_paused"})
-    return {"ok": True}
+    return {"ok": True, "statut": "pause"}
 
 
 @router.post("/{session_id}/reprendre")
@@ -408,13 +417,15 @@ async def reprendre_session(
 ):
     session = _get_session(session_id, db)
     _require_pilot(session, current_user)
+    if session.statut == "actif":
+        return {"ok": True, "statut": "actif"}   # idempotent
     if session.statut != "pause":
-        raise HTTPException(400, "Session non en pause")
+        raise HTTPException(400, f"Impossible de reprendre : statut actuel = {session.statut}")
 
     session.statut = "actif"
     db.commit()
     await live_manager.broadcast(str(session.id), {"type": "session_resumed"})
-    return {"ok": True}
+    return {"ok": True, "statut": "actif"}
 
 
 @router.post("/{session_id}/terminer")

@@ -19,7 +19,7 @@ from app.models.session import LearningSession
 from app.models.interaction import Interaction
 from app.models.cours import ProgressionApprenant, Exercice, BKTMastery
 from app.models.session import EngagementAnalysis
-from app.utils import get_kcs, get_macro_kc
+from app.utils import get_kcs, get_macro_kc, is_valid_kc
 from datetime import datetime
 
 db_url = os.environ.get("DATABASE_URL", "")
@@ -163,6 +163,12 @@ with open("dataset_dkt.jsonl", "w") as f:
 
         kcs     = get_kcs(ex)
         primary = kcs[0] if kcs else None
+
+        # Exclut les KCs invalides : None (pas de compétence définie) et "QCM"
+        # (type d'exercice copié par erreur dans competence_evaluee)
+        if not is_valid_kc(primary):
+            continue
+
         record = {
             "student_id":    str(p.user_id),
             "session_id":    str(p.session_id) if p.session_id else None,
@@ -180,8 +186,11 @@ with open("dataset_dkt.jsonl", "w") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
         dkt_count += 1
 
+excluded_kc = sum(1 for p in progs if not is_valid_kc((get_kcs(exercices_map[str(p.exercice_id)])[0] if exercices_map.get(str(p.exercice_id)) and get_kcs(exercices_map[str(p.exercice_id)]) else None)))
 if null_session_count:
     print(f"  ⚠ {null_session_count} progressions sans session_id (antérieures à la migration) → engagement=null")
+if excluded_kc:
+    print(f"  ⚠ {excluded_kc} interactions exclues (KC=None ou KC=type d'exercice)")
 
 print(f"✓ dataset_dkt.jsonl créé ({dkt_count} interactions)")
 db.close()

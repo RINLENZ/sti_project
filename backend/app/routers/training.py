@@ -22,7 +22,7 @@ from ..models.session import LearningSession, EngagementAnalysis
 from ..models.interaction import Interaction
 from ..services.bkt_calibration import em_bkt
 from ..services.bkt_service import DEFAULT_PARAMS
-from ..utils import get_kcs, get_macro_kc
+from ..utils import get_kcs, get_macro_kc, is_valid_kc
 
 router = APIRouter(prefix="/api/training", tags=["training"])
 
@@ -347,14 +347,21 @@ def export_dkt_data(
             first_attempt = key not in seen
             seen.add(key)
 
-            kcs      = get_kcs(ex)
-            primary  = kcs[0] if kcs else None
+            kcs     = get_kcs(ex)
+            primary = kcs[0] if kcs else None
+
+            # Exclut les KCs invalides (None, "QCM", type d'exercice utilisé par erreur)
+            # Ces interactions restent en base mais ne doivent pas entraîner le DKT.
+            if not is_valid_kc(primary):
+                continue
+
+            macro   = get_macro_kc(primary)
             record = {
                 "student_id":    str(p.user_id),
                 "session_id":    str(p.session_id) if p.session_id else None,
                 "exercise_id":   str(p.exercice_id),
                 "primary_kc":    primary,
-                "macro_kc":      get_macro_kc(primary),
+                "macro_kc":      macro,
                 "all_kcs":       kcs,
                 "correct":       bool(p.correct),
                 "first_attempt": first_attempt,

@@ -1,6 +1,11 @@
 /**
- * Hook de détection d'émotion via notre modèle ONNX africain (EfficientNet-B0).
- * Format d'entrée : (1, 3, 224, 224) channels-first, normalisé ImageNet.
+ * Hook de détection d'émotion via le modèle ONNX africain V4 final (EfficientNet-B0).
+ * Fichier     : /models/model_emotions_v4_final.onnx  (18 MB)
+ * Entrée      : (1, 3, 224, 224) channels-first, normalisé ImageNet
+ * Métriques   : test acc 89.94%, F1-macro 0.8994, Kappa 0.8793
+ * Température : T = 0.8915 (ECE val 0.037 après calibration)
+ * Classes     : engagement_eleve, engagement_faible, confusion,
+ *               frustration, ennui, neutre
  */
 import { useEffect, useRef } from 'react'
 import { EMOTION_MODEL_READY } from '../config/models'
