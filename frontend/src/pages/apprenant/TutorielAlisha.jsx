@@ -1205,28 +1205,48 @@ export default function TutorielAlisha() {
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
+      <style>{`
+        @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+      `}</style>
       {/* Capture vidéo cachée pour l'analyse faciale MediaPipe */}
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }}/>
 
-      {/* ── Bandeau installation voix (affiché une seule fois sur appareils sans voix locale FR) ── */}
+      {/* ── Notification voix (une seule fois, appareils sans voix locale FR) ── */}
       {needsVoiceSetup && supported && (
         <div style={{
-          background: '#1e3a5f', color: 'white',
-          padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10,
-          fontSize: 12, lineHeight: 1.4,
+          background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`,
+          color: 'white',
+          padding: '11px 16px',
+          display: 'flex', alignItems: 'center', gap: 12,
+          fontSize: 12, lineHeight: 1.5,
+          boxShadow: `0 2px 12px ${C.brown}40`,
+          animation: 'slideDown .3s ease',
         }}>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>🔊</span>
-          <span style={{ flex: 1 }}>
-            <strong>Améliore la voix d'Alisha :</strong> installe un pack vocal français dans
-            {' '}<strong>Paramètres → Accessibilité → Synthèse vocale</strong>
-            {' '}puis sélectionne <em>Français (France)</em>.
-          </span>
+          <div style={{
+            width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+            background: 'rgba(255,255,255,.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16,
+          }}>🔊</div>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 2px', fontWeight: 800, fontSize: 12 }}>Améliore la voix d'Alisha</p>
+            <p style={{ margin: 0, opacity: .85, fontSize: 11 }}>
+              Va dans <strong>Paramètres → Accessibilité → Synthèse vocale</strong>, puis sélectionne <em>Français (France)</em>.
+            </p>
+          </div>
           <button onClick={dismissVoiceSetup} style={{
-            background: 'rgba(255,255,255,.2)', border: 'none', color: 'white',
-            borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 11,
-            fontWeight: 700, flexShrink: 0,
-          }}>
-            OK, compris
+            background: 'rgba(255,255,255,.2)',
+            border: '1px solid rgba(255,255,255,.3)',
+            color: 'white', borderRadius: 9,
+            padding: '5px 12px', cursor: 'pointer',
+            fontSize: 11, fontWeight: 700, flexShrink: 0,
+            transition: 'background .15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,.32)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,.2)'}
+          >
+            Compris ✓
           </button>
         </div>
       )}
@@ -1269,6 +1289,27 @@ export default function TutorielAlisha() {
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0, flexShrink: 0, opacity: audioMode === 'silent' ? 0.35 : 1, transition: 'opacity .2s' }}>
               {audioMode === 'full' ? '🔊' : audioMode === 'text' ? '📖' : '🔇'}
             </button>
+          )}
+
+          {/* Indicateur caméra active — discret, informatif */}
+          {cameraActive && (
+            <div title="Analyse IA active (caméra + audio)" style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: `${C.emerald}18`,
+              border: `1px solid ${C.emerald}40`,
+              borderRadius: 20, padding: '3px 8px', flexShrink: 0,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: C.emerald,
+                boxShadow: `0 0 0 3px ${C.emerald}30`,
+                animation: 'pulse 2s infinite',
+                flexShrink: 0,
+              }}/>
+              <span style={{ fontSize: 9, fontWeight: 700, color: C.emerald, letterSpacing: .3 }}>
+                IA active
+              </span>
+            </div>
           )}
         </div>
       </div>

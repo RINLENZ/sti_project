@@ -200,33 +200,95 @@ const Confetti = () => (
   </div>
 )
 
-/* ── Bottom sheet caméra/micro mobile ────────────────────────── */
-const CameraChip = ({ onActivate, onDismiss }) => {
-  const { C } = useTheme()
+/* ── Dialog Alisha — choix caméra / audio ────────────────────── */
+const AlishaPermissionDialog = ({ onChoice, C, xs }) => {
+  const CHOICES = [
+    { id: 'both',   icon: '🎥', label: 'Caméra + Audio',    color: C.brown,   gradient: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})` },
+    { id: 'camera', icon: '📷', label: 'Caméra seulement',  color: C.blue,    gradient: `linear-gradient(135deg, ${C.blue}, #3B82F6)` },
+    { id: 'audio',  icon: '🎤', label: 'Audio seulement',   color: C.emerald, gradient: `linear-gradient(135deg, ${C.emerald}, ${C.emeraldDark})` },
+    { id: 'none',   icon: '✕',  label: 'Non merci',         color: C.textSec, gradient: 'none' },
+  ]
+
   return (
-    <div style={{
-      position: 'fixed', bottom: 76, left: 12, right: 12, zIndex: 200,
-      background: C.surface, borderRadius: 14,
-      padding: '10px 12px',
-      boxShadow: '0 4px 20px rgba(107,58,42,0.18)',
-      border: `1px solid ${C.brownPale}`,
-      display: 'flex', alignItems: 'center', gap: 8,
-      animation: 'slideUp .3s ease'
-    }}>
-      <Camera size={15} color={C.brown} style={{ flexShrink: 0 }}/>
-      <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: C.text }}>
-        Activer l'analyse IA ?
-      </span>
-      <button onClick={onActivate} style={{
-        padding: '6px 12px', background: C.brown, color: 'white',
-        border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer'
-      }}>Oui</button>
-      <button onClick={onDismiss} style={{
-        width: 26, height: 26, background: C.brownPale, border: 'none',
-        borderRadius: 7, cursor: 'pointer', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', flexShrink: 0
-      }}><X size={12} color={C.textSec}/></button>
-    </div>
+    <>
+      {/* Fond semi-transparent léger — ne bloque pas la vue */}
+      <div onClick={() => onChoice('none')} style={{
+        position: 'fixed', inset: 0, zIndex: 299,
+        background: 'rgba(0,0,0,.25)',
+        animation: 'fadeIn .2s ease',
+      }}/>
+
+      {/* Bottom sheet compact — monte du bas */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 300,
+        background: C.surface,
+        borderRadius: '20px 20px 0 0',
+        padding: xs ? '16px 16px 28px' : '18px 24px 28px',
+        boxShadow: '0 -8px 32px rgba(0,0,0,.25)',
+        border: `1px solid ${C.border}`,
+        borderBottom: 'none',
+        animation: 'slideUp .3s cubic-bezier(.2,.8,.4,1)',
+        maxWidth: 560,
+        margin: '0 auto',
+      }}>
+        {/* Poignée */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: '0 auto 14px' }}/>
+
+        {/* En-tête compact : Alisha inline */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <Suspense fallback={null}>
+            <Alisha state="welcome" size={44}/>
+          </Suspense>
+          <div>
+            <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 900, color: C.brown }}>
+              Activer l'analyse IA ?
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: C.textSec, lineHeight: 1.4 }}>
+              Je surveille ton attention pour adapter les exercices.
+            </p>
+          </div>
+        </div>
+
+        {/* Boutons en grille 2×2 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {CHOICES.map(c => (
+            <button
+              key={c.id}
+              onClick={() => onChoice(c.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 12px',
+                background: c.id === 'none' ? C.bg : c.gradient,
+                border: `1.5px solid ${c.id === 'none' ? C.border : 'transparent'}`,
+                borderRadius: 12, cursor: 'pointer', textAlign: 'left',
+                boxShadow: c.id !== 'none' ? `0 3px 12px ${c.color}25` : 'none',
+                transition: 'all .15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '.88' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+            >
+              <span style={{ fontSize: 18, flexShrink: 0 }}>{c.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{
+                  margin: 0, fontSize: 12, fontWeight: 800,
+                  color: c.id === 'none' ? C.textSec : 'white',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {c.label}
+                </p>
+                <p style={{
+                  margin: 0, fontSize: 11,
+                  color: c.id === 'none' ? C.textMuted : 'rgba(255,255,255,.75)',
+                  lineHeight: 1.3,
+                }}>
+                  {c.desc}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -544,12 +606,12 @@ export default function Session() {
     }
   }, [lastKeyword])
 
-  /* Afficher le banner caméra 4s après le chargement (mobile seulement) */
+  /* Afficher le dialog caméra 4s après le chargement (tous appareils) */
   useEffect(() => {
-    if (!isMobile || cameraActive) return
+    if (cameraActive || audioActive) return
     const t = setTimeout(() => setShowCameraBanner(true), 4000)
     return () => clearTimeout(t)
-  }, [isMobile, cameraActive])
+  }, [cameraActive, audioActive])
 
   /* Timer elapsed */
   useEffect(() => {
@@ -1569,11 +1631,18 @@ export default function Session() {
         </div>
       )}
 
-      {/* ── Chip caméra mobile ── */}
-      {isMobile && showCameraBanner && !cameraActive && (
-        <CameraChip
-          onActivate={startBoth}
-          onDismiss={() => setShowCameraBanner(false)}
+      {/* ── Dialog Alisha — choix caméra/audio (tous appareils) ── */}
+      {showCameraBanner && !cameraActive && !audioActive && (
+        <AlishaPermissionDialog
+          C={C}
+          xs={xs}
+          onChoice={async (choice) => {
+            setShowCameraBanner(false)
+            if (choice === 'both')   await startBoth()
+            if (choice === 'camera') await startCamera()
+            if (choice === 'audio')  await startAudio()
+            // 'none' → ferme juste le dialog
+          }}
         />
       )}
 

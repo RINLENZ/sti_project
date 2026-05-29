@@ -79,6 +79,13 @@ export default function useAlishaVoice() {
 
       voiceRef.current = best
 
+      // Signale dès la première sélection d'une voix cloud (pas de voix locale FR).
+      // Bug corrigé : l'ancien code mettait ce check dans shouldLock, donc sur les
+      // navigateurs où voiceschanged ne fire pas, le banner n'apparaissait jamais.
+      if (!best.localService && !localStorage.getItem(VOICE_SETUP_KEY)) {
+        setNeedsVoiceSetup(true)
+      }
+
       // Verrouiller si :
       //   (a) voix locale trouvée (stable dès le premier appel)
       //   (b) on est dans un voiceschanged (= vague cloud chargée, liste complète)
@@ -86,11 +93,6 @@ export default function useAlishaVoice() {
       if (shouldLock) {
         lockedRef.current = true
         try { localStorage.setItem(STORAGE_KEY, best.name) } catch {}
-        // Signale que l'utilisateur n'a pas de voix locale FR (seulement cloud)
-        // → afficher le guide d'installation si pas encore vu
-        if (!best.localService && !localStorage.getItem(VOICE_SETUP_KEY)) {
-          setNeedsVoiceSetup(true)
-        }
       }
     }
 

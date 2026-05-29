@@ -136,17 +136,21 @@ export default function Onboarding() {
     try {
       const pays = selectedPays?.name || 'Cameroun'
       const payload = {
-  niveau_label:  selectedNiveau.nom,
-  filiere_label: selectedFiliere?.nom || null,
-  pays,
-}
-      await api.put(`/auth/profil/${user.id}/update`, payload)
+        niveau_label:  selectedNiveau.nom,
+        niveau_id:     selectedNiveau.id   || null,   // ← manquait : nécessaire pour ProgressionMap
+        filiere_label: selectedFiliere?.nom || null,
+        filiere_id:    selectedFiliere?.id  || null,   // ← manquait
+        pays,
+      }
+      const { data: updated } = await api.put(`/auth/profil/${user.id}/update`, payload)
       dispatch(loginSuccess({
         token,
         user: {
           ...user,
           niveau_label:  selectedNiveau.nom,
+          niveau_id:     updated.niveau_id  ?? selectedNiveau.id  ?? null,
           filiere_label: selectedFiliere?.nom || null,
+          filiere_id:    updated.filiere_id ?? selectedFiliere?.id ?? null,
           pays,
         }
       }))

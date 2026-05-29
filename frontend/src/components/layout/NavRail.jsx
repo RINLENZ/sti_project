@@ -289,10 +289,31 @@ function Avatar({ user, roleColor, size = 34 }) {
   )
 }
 
-// ─── URL de destination par type de notification ──────────────────────────────
+// ─── Helpers notifications ─────────────────────────────────────────────────────
+
+function timeAgo(dateStr) {
+  if (!dateStr) return ''
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
+  if (diff < 60)   return 'À l\'instant'
+  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`
+  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)} h`
+  if (diff < 172800) return 'Hier'
+  return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
+
+const NOTIF_META = {
+  badge_debloque:       { emoji: '🏆', color: '#F59E0B', label: 'Badge' },
+  competence_maitrisee: { emoji: '🎯', color: '#10B981', label: 'Maîtrisé' },
+  competence_progres:   { emoji: '📊', color: '#6366F1', label: 'Progression' },
+  session_terminee:     { emoji: '✅', color: '#3B82F6', label: 'Session' },
+  enseignant_lie:       { emoji: '👨‍🏫', color: '#C4865A', label: 'Enseignant' },
+  apprenant_lie:        { emoji: '🎓', color: '#C4865A', label: 'Apprenant' },
+  apprenant_session:    { emoji: '📚', color: '#8B5CF6', label: 'Activité' },
+  apprenant_decrocheur: { emoji: '⚠️', color: '#EF4444', label: 'Alerte' },
+}
+
 // ─── Panel notifications ───────────────────────────────────────────────────────
 function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, anchorRect }) {
-  const { C } = useTheme()
   const navigate = useNavigate()
 
   const top  = Math.max(8, anchorRect ? anchorRect.top - 8 : 100)
@@ -313,99 +334,150 @@ function NotifPanel({ notifications, nbNonLues, onMarkRead, onMarkAll, onClose, 
         aria-label="Notifications"
         style={{
           position:      'fixed',
-          top:            Math.min(top, window.innerHeight - 400 - 16),
+          top:            Math.min(top, window.innerHeight - 480 - 16),
           left:           left,
-          width:          320,
-          maxHeight:     '65vh',
-          background:     C.sidebarBg,
-          border:        '1px solid rgba(255,255,255,0.1)',
-          borderRadius:   radius.lg,
-          boxShadow:      '0 16px 56px rgba(0,0,0,0.7)',
+          width:          340,
+          maxHeight:     '72vh',
+          background:    'rgba(28,20,12,0.97)',
+          backdropFilter:'blur(20px)',
+          border:        '1px solid rgba(196,134,90,0.18)',
+          borderRadius:   16,
+          boxShadow:      '0 24px 64px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.04)',
           zIndex:         z.modal,
           display:       'flex',
           flexDirection: 'column',
           fontFamily:    "'DM Sans', system-ui, sans-serif",
-          animation:     'scaleIn 0.15s ease',
+          animation:     'scaleIn 0.18s cubic-bezier(.2,.8,.4,1)',
+          overflow:       'hidden',
         }}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{
-          padding:       `${space[3]}px ${space[4]}px`,
-          borderBottom:  '1px solid rgba(255,255,255,0.08)',
-          display:       'flex',
-          alignItems:    'center',
+          padding:        '14px 18px 12px',
+          borderBottom:   '1px solid rgba(255,255,255,0.07)',
+          display:        'flex',
+          alignItems:     'center',
           justifyContent: 'space-between',
-          flexShrink:     0,
+          flexShrink:      0,
+          background:     'rgba(255,255,255,0.03)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
-            <span style={{ fontSize: type.md, fontWeight: weight.bold, color: 'white' }}>Notifications</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Bell size={15} color="rgba(255,255,255,0.6)"/>
+            <span style={{ fontSize: 14, fontWeight: 800, color: 'white' }}>Notifications</span>
             {nbNonLues > 0 && (
-              <span style={{ background: '#EF4444', color: 'white', borderRadius: radius.pill, padding: '1px 7px', fontSize: 9, fontWeight: weight.black }}>
+              <span style={{
+                background: 'linear-gradient(135deg, #EF4444, #B91C1C)',
+                color: 'white', borderRadius: 20,
+                padding: '1px 7px', fontSize: 10, fontWeight: 900,
+                boxShadow: '0 2px 8px rgba(239,68,68,0.4)',
+              }}>
                 {nbNonLues}
               </span>
             )}
           </div>
           {nbNonLues > 0 && (
-            <button
-              onClick={onMarkAll}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4865A', fontSize: type.xs, fontWeight: weight.semibold, padding: 0 }}
+            <button onClick={onMarkAll} style={{
+              background: 'rgba(196,134,90,0.12)',
+              border: '1px solid rgba(196,134,90,0.25)',
+              color: '#C4865A', borderRadius: 8,
+              padding: '4px 10px', cursor: 'pointer',
+              fontSize: 11, fontWeight: 700,
+              transition: 'all .15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(196,134,90,0.22)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(196,134,90,0.12)'}
             >
-              Tout marquer lu
+              Tout lire
             </button>
           )}
         </div>
 
-        {/* Liste */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>
+        {/* ── Liste ── */}
+        <div style={{ overflowY: 'auto', flex: 1, scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
           {notifications.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.28)', fontSize: type.sm, padding: `${space[6]}px ${space[4]}px`, margin: 0 }}>
-              Aucune notification
-            </p>
-          ) : notifications.map(n => {
-            const url = getNotifUrl(n)
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <p style={{ fontSize: 36, margin: '0 0 10px' }}>🔔</p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, fontWeight: 600, margin: 0 }}>
+                Aucune notification
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: 11, margin: '6px 0 0' }}>
+                Elles apparaîtront ici au fur et à mesure de ta progression.
+              </p>
+            </div>
+          ) : notifications.map((n, i) => {
+            const url  = getNotifUrl(n)
+            const meta = NOTIF_META[n.type] || { emoji: '📢', color: '#9CA3AF', label: '' }
             return (
               <button
                 key={n.id}
                 onClick={() => handleClick(n)}
                 style={{
-                  width:          '100%',
-                  padding:       `${space[3]}px ${space[4]}px`,
-                  background:     n.lu ? 'none' : 'rgba(255,255,255,0.05)',
+                  width:         '100%',
+                  padding:       '12px 16px',
+                  background:     n.lu ? 'transparent' : 'rgba(196,134,90,0.06)',
                   border:         'none',
-                  borderBottom:  '1px solid rgba(255,255,255,0.06)',
+                  borderBottom:  '1px solid rgba(255,255,255,0.05)',
+                  borderLeft:    `3px solid ${n.lu ? 'transparent' : meta.color}`,
                   cursor:         url ? 'pointer' : 'default',
                   textAlign:      'left',
                   display:       'flex',
                   alignItems:    'flex-start',
-                  gap:            space[2],
-                  transition:    `background ${motion.fast_out}`,
+                  gap:            12,
+                  transition:    'background .15s',
+                  animation:      i < 2 && !n.lu ? 'fadeIn .3s ease' : 'none',
                 }}
-                onMouseEnter={e => { if (url) e.currentTarget.style.background = n.lu ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.09)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = n.lu ? 'none' : 'rgba(255,255,255,0.05)' }}
+                onMouseEnter={e => { if (url) e.currentTarget.style.background = n.lu ? 'rgba(255,255,255,0.04)' : 'rgba(196,134,90,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = n.lu ? 'transparent' : 'rgba(196,134,90,0.06)' }}
               >
-                {/* Point non-lu */}
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: n.lu ? 'transparent' : '#C4865A', flexShrink: 0, marginTop: 5 }} />
+                {/* Icône type */}
+                <div style={{
+                  width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                  background: `${meta.color}20`,
+                  border: `1px solid ${meta.color}35`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 15,
+                  opacity: n.lu ? 0.5 : 1,
+                }}>
+                  {meta.emoji}
+                </div>
 
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: space[1] }}>
-                  <span style={{ fontSize: type.sm, fontWeight: n.lu ? weight.normal : weight.bold, color: n.lu ? 'rgba(255,255,255,0.4)' : 'white', lineHeight: 1.35 }}>
-                    {n.titre}
-                  </span>
-                  <span style={{ fontSize: type.xs, color: 'rgba(255,255,255,0.35)', lineHeight: 1.4 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: n.lu ? 600 : 800,
+                      color: n.lu ? 'rgba(255,255,255,0.35)' : 'white',
+                      lineHeight: 1.3,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {n.titre}
+                    </span>
+                    {!n.lu && <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color, flexShrink: 0, boxShadow: `0 0 6px ${meta.color}` }}/>}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', lineHeight: 1.4, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {n.message}
                   </span>
-                  <span style={{ fontSize: type['2xs'], color: 'rgba(255,255,255,0.2)' }}>
-                    {n.created_at
-                      ? new Date(n.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                      : ''}
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 3, display: 'block' }}>
+                    {timeAgo(n.created_at)}
                   </span>
                 </div>
 
-                {/* Flèche si navigable */}
-                {url && <ChevronRight size={13} color="rgba(255,255,255,0.25)" style={{ flexShrink: 0, marginTop: 3 }} />}
+                {url && <ChevronRight size={13} color="rgba(255,255,255,0.2)" style={{ flexShrink: 0, marginTop: 4 }}/>}
               </button>
             )
           })}
         </div>
+
+        {/* ── Pied : lien vers toutes les notifs ── */}
+        {notifications.length > 0 && (
+          <div style={{
+            padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.07)',
+            background: 'rgba(255,255,255,0.02)', flexShrink: 0, textAlign: 'center',
+          }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', fontWeight: 600 }}>
+              {notifications.length} notification{notifications.length > 1 ? 's' : ''} récentes
+            </span>
+          </div>
+        )}
       </div>
     </>,
     document.body
