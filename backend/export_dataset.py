@@ -18,7 +18,6 @@ from app.database import SessionLocal
 from app.models.session import LearningSession
 from app.models.interaction import Interaction
 from app.models.cours import ProgressionApprenant, Exercice, BKTMastery
-from app.models.session import EngagementAnalysis
 from app.utils import get_kcs, get_macro_kc, is_valid_kc
 from datetime import datetime
 
@@ -124,26 +123,31 @@ for i in response_ints:
         if key not in time_map:
             time_map[key] = i.data.get("time_seconds")
 
-all_eng = db.query(EngagementAnalysis).all()
-eng_by_session = {}
-for e in all_eng:
-    eng_by_session.setdefault(str(e.session_id), []).append(e)
+# ── Jointure learning_sessions par session_id ────────────────────────────────
+# EngagementAnalysis n'est jamais peuplé (table morte) → on joint learning_sessions
+# directement pour récupérer les 3 composantes calculées par clore_session().
+all_sessions = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
+sessions_by_id = {str(s.id): s for s in all_sessions}
 
-# ── Engagement via jointure directe session_id ────────────────────────────────
-def _avg_engagement_direct(session_id_val) -> dict:
-    """Jointure directe session_id → EngagementAnalysis (pas de proximité temporelle)."""
+def _engagement_from_session(session_id_val) -> dict:
+    """
+    Retourne les 4 composantes d'engagement depuis learning_sessions.
+    - fused        = score_engagement (α·facial + β·audio + γ·comport.)
+    - facial       = score_facial     (α — MediaPipe + CNN)
+    - audio        = score_audio      (β — VAD + bruit ambiant, None si micro inactif)
+    - behavioral   = score_comportemental (γ — idle/response/help)
+    Toutes nulles pour les anciennes sessions (avant la migration).
+    """
     if not session_id_val:
-        return {"behavioral": None, "facial": None, "fused": None}
-    engs = eng_by_session.get(str(session_id_val), [])
-    if not engs:
-        return {"behavioral": None, "facial": None, "fused": None}
-    b  = [e.interaction_score for e in engs if e.interaction_score is not None]
-    fc = [e.facial_score      for e in engs if e.facial_score      is not None]
-    fu = [e.engagement_score  for e in engs if e.engagement_score  is not None]
+        return {"behavioral": None, "audio": None, "facial": None, "fused": None}
+    s = sessions_by_id.get(str(session_id_val))
+    if not s:
+        return {"behavioral": None, "audio": None, "facial": None, "fused": None}
     return {
-        "behavioral": round(sum(b) /len(b),  4) if b  else None,
-        "facial":     round(sum(fc)/len(fc), 4) if fc else None,
-        "fused":      round(sum(fu)/len(fu), 4) if fu else None,
+        "behavioral": round(s.score_comportemental, 4) if s.score_comportemental is not None else None,
+        "audio":      round(s.score_audio,           4) if s.score_audio          is not None else None,
+        "facial":     round(s.score_facial,           4) if s.score_facial         is not None else None,
+        "fused":      round(s.score_engagement,       4) if s.score_engagement     is not None else None,
     }
 
 dkt_count = 0
@@ -181,7 +185,7 @@ with open("dataset_dkt.jsonl", "w") as f:
             "time_seconds":  time_map.get(key),
             "difficulty":    ex.difficulte,
             "timestamp":     p.date_debut.isoformat() if p.date_debut else None,
-            "engagement":    _avg_engagement_direct(p.session_id),
+            "engagement":    _engagement_from_session(p.session_id),
         }
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
         dkt_count += 1

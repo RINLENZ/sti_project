@@ -12,11 +12,14 @@ class LearningSession(Base):
     cours_id         = Column(String, nullable=False)
     started_at       = Column(DateTime(timezone=True), server_default=func.now())
     ended_at         = Column(DateTime(timezone=True), nullable=True)
-    score_final      = Column(Float, nullable=True)    # score exercices
-    score_engagement = Column(Float, nullable=True)    # score fusionné final
-    etat_affectif    = Column(String, nullable=True)   # état dominant session
-    nb_interactions  = Column(Integer, default=0)      # nombre d'événements
-    duree_secondes   = Column(Integer, nullable=True)  # durée session
+    score_final           = Column(Float, nullable=True)   # score exercices
+    score_engagement      = Column(Float, nullable=True)   # fusionné : α·facial + β·audio + γ·comport.
+    score_facial          = Column(Float, nullable=True)   # α — visuel (MediaPipe + CNN)
+    score_audio           = Column(Float, nullable=True)   # β — audio (VAD + bruit ambiant)
+    score_comportemental  = Column(Float, nullable=True)   # γ — comportemental (idle/response/help)
+    etat_affectif         = Column(String, nullable=True)  # état dominant session
+    nb_interactions       = Column(Integer, default=0)     # nombre d'événements
+    duree_secondes        = Column(Integer, nullable=True) # durée session
 
 
 class EngagementAnalysis(Base):

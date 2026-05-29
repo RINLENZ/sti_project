@@ -18,7 +18,7 @@ from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.user import User
 from ..models.cours import BKTMastery, ProgressionApprenant, Exercice, UniteApprentissage
-from ..models.session import LearningSession, EngagementAnalysis
+from ..models.session import LearningSession
 from ..models.interaction import Interaction
 from ..services.bkt_calibration import em_bkt
 from ..services.bkt_service import DEFAULT_PARAMS
@@ -47,7 +47,7 @@ def get_training_stats(
     nb_interactions  = db.query(Interaction).count()
     nb_progressions  = db.query(ProgressionApprenant).filter(ProgressionApprenant.correct.isnot(None)).count()
     nb_bkt           = db.query(BKTMastery).count()
-    nb_engagements   = db.query(EngagementAnalysis).count()
+    nb_engagements   = db.query(LearningSession).filter(LearningSession.score_engagement.isnot(None)).count()
     nb_apprenants    = db.query(User).filter(User.role == "apprenant").count()
 
     # Nombre de séquences BKT disponibles (user × compétence avec ≥ 2 réponses)
@@ -195,32 +195,10 @@ def export_training_data(
             "nb_correct":    m.nb_correct,
         })
 
-    # Précharge engagements par session
-    all_eng = db.query(EngagementAnalysis).all()
-    eng_by_session: dict[str, list] = {}
-    for e in all_eng:
-        sid = str(e.session_id)
-        eng_by_session.setdefault(sid, []).append({
-            "timestamp":        e.timestamp.isoformat() if e.timestamp else None,
-            "facial_score":     e.facial_score,
-            "audio_score":      e.audio_score,
-            "interaction_score":e.interaction_score,
-            "engagement_score": e.engagement_score,
-            "etat_affectif":    e.etat_affectif,
-            "action_triggered": e.action_triggered,
-        })
-
     def generate():
         for s in sessions:
             sid = str(s.id)
             uid = str(s.user_id)
-            engs = eng_by_session.get(sid, [])
-
-            # Agrège les analyses d'engagement de la session
-            engagement_moyen = None
-            if engs:
-                scores = [e["engagement_score"] for e in engs if e["engagement_score"] is not None]
-                engagement_moyen = round(sum(scores) / len(scores), 4) if scores else None
 
             record = {
                 "session_id":     sid,
@@ -228,12 +206,13 @@ def export_training_data(
                 "cours_id":       s.cours_id,
                 # ── Features d'entrée ──────────────────────────────────────
                 "features": {
-                    "duree_secondes":   s.duree_secondes,
-                    "nb_interactions":  s.nb_interactions,
-                    "engagement_moyen": engagement_moyen,
-                    "engagement_score": s.score_engagement,
-                    "etat_affectif":    s.etat_affectif,
-                    "nb_analyses":      len(engs),
+                    "duree_secondes":       s.duree_secondes,
+                    "nb_interactions":      s.nb_interactions,
+                    "score_engagement":     round(s.score_engagement,     4) if s.score_engagement     is not None else None,
+                    "score_facial":         round(s.score_facial,          4) if s.score_facial          is not None else None,
+                    "score_audio":          round(s.score_audio,           4) if s.score_audio           is not None else None,
+                    "score_comportemental": round(s.score_comportemental,  4) if s.score_comportemental  is not None else None,
+                    "etat_affectif":        s.etat_affectif,
                 },
                 # ── État BKT à la fin de la session ───────────────────────
                 "bkt_state": mastery_by_user.get(uid, []),
@@ -310,30 +289,30 @@ def export_dkt_data(
             if key not in time_map:
                 time_map[key] = i.data.get("time_seconds")
 
-    # Précharge engagement analyses par session
-    all_eng = db.query(EngagementAnalysis).all()
-    eng_by_session: dict[str, list] = {}
-    for e in all_eng:
-        eng_by_session.setdefault(str(e.session_id), []).append(e)
+    # Précharge learning_sessions pour les 3 composantes d'engagement.
+    # EngagementAnalysis n'est jamais peuplé (table morte) — on joint learning_sessions.
+    all_sessions = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
+    sessions_by_id: dict[str, LearningSession] = {str(s.id): s for s in all_sessions}
 
     def _avg_engagement(session_id_val) -> dict:
         """
-        Jointure directe via session_id (colonne ajoutée à progressions).
-        Retourne {"behavioral", "facial", "fused"} moyennés sur la session.
-        Si session_id est NULL (anciennes progressions), retourne tous None.
+        Retourne les 4 composantes d'engagement depuis learning_sessions.
+        Données peuplées par clore_session() via engagement_service.compute_behavioral_score().
+        - fused       = score_engagement (α·facial + β·audio + γ·comport.)
+        - facial      = score_facial     (α — MediaPipe + CNN)
+        - audio       = score_audio      (β — VAD + bruit ambiant, None si micro inactif)
+        - behavioral  = score_comportemental (γ — idle/response/help)
         """
         if not session_id_val:
-            return {"behavioral": None, "facial": None, "fused": None}
-        engs = eng_by_session.get(str(session_id_val), [])
-        if not engs:
-            return {"behavioral": None, "facial": None, "fused": None}
-        behavioral = [e.interaction_score for e in engs if e.interaction_score is not None]
-        facial     = [e.facial_score     for e in engs if e.facial_score     is not None]
-        fused      = [e.engagement_score for e in engs if e.engagement_score is not None]
+            return {"behavioral": None, "audio": None, "facial": None, "fused": None}
+        s = sessions_by_id.get(str(session_id_val))
+        if not s:
+            return {"behavioral": None, "audio": None, "facial": None, "fused": None}
         return {
-            "behavioral": round(sum(behavioral) / len(behavioral), 4) if behavioral else None,
-            "facial":     round(sum(facial)     / len(facial),     4) if facial     else None,
-            "fused":      round(sum(fused)       / len(fused),     4) if fused       else None,
+            "behavioral": round(s.score_comportemental, 4) if s.score_comportemental is not None else None,
+            "audio":      round(s.score_audio,           4) if s.score_audio          is not None else None,
+            "facial":     round(s.score_facial,           4) if s.score_facial         is not None else None,
+            "fused":      round(s.score_engagement,       4) if s.score_engagement     is not None else None,
         }
 
     def generate():

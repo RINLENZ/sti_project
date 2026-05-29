@@ -98,6 +98,18 @@ def create_missing_tables():
         conn.execute(sa.text(
             "CREATE INDEX IF NOT EXISTS ix_progressions_session_id ON progressions(session_id)"
         ))
+        # Composantes d'engagement séparées dans learning_sessions
+        # score_facial = modalité visuelle (MediaPipe + CNN)
+        # score_comportemental = modalité comportementale (idle/response/help)
+        conn.execute(sa.text(
+            "ALTER TABLE learning_sessions ADD COLUMN IF NOT EXISTS score_facial FLOAT"
+        ))
+        conn.execute(sa.text(
+            "ALTER TABLE learning_sessions ADD COLUMN IF NOT EXISTS score_audio FLOAT"
+        ))
+        conn.execute(sa.text(
+            "ALTER TABLE learning_sessions ADD COLUMN IF NOT EXISTS score_comportemental FLOAT"
+        ))
         conn.execute(sa.text("COMMIT"))
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────

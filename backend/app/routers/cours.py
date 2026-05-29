@@ -774,11 +774,14 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db), current_user:
     duree = int((now - session.started_at.replace(tzinfo=timezone.utc)).total_seconds()) \
         if session.started_at else None
 
-    session.ended_at        = now
-    session.score_engagement = result["score"]
-    session.etat_affectif   = result.get("etat_affectif", "neutre")
-    session.nb_interactions  = len(events)
-    session.duree_secondes   = duree
+    session.ended_at             = now
+    session.score_engagement     = result["score"]                  # fusionné α·facial + β·audio + γ·comport.
+    session.score_facial         = result.get("visual_score")       # α — MediaPipe + CNN (None si caméra inactive)
+    session.score_audio          = result.get("audio_score")        # β — VAD + bruit ambiant (None si micro inactif)
+    session.score_comportemental = result.get("behavioral_score")   # γ — idle/response/help
+    session.etat_affectif        = result.get("etat_affectif", "neutre")
+    session.nb_interactions      = len(events)
+    session.duree_secondes       = duree
     db.commit()
 
     # ── Notifications post-session ─────────────────────────────────
