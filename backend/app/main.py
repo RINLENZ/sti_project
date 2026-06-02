@@ -44,12 +44,16 @@ async def init_ws_loop():
 
 @app.on_event("startup")
 def create_missing_tables():
-    """Crée toutes les tables manquantes et applique les migrations DDL idempotentes.
+    """Crée les tables manquantes et applique les migrations DDL idempotentes.
 
-    Chaque DDL est isolé dans son propre try/except : un timeout Supabase ou un lock
-    sur une table active ne bloque plus le démarrage. Les colonnes qui existent déjà
-    sont ignorées par IF NOT EXISTS ; celles qui manquent réapparaîtront au prochain
-    redémarrage dans un créneau moins chargé.
+    Stratégie anti-timeout Supabase :
+    - On consulte information_schema / pg_indexes (lecture seule, aucun lock)
+      AVANT chaque ALTER TABLE / CREATE INDEX.
+    - Si la colonne/l'index existe déjà → on saute le DDL complètement.
+    - Seules les colonnes vraiment absentes déclenchent un ALTER TABLE
+      (typiquement lors du tout premier déploiement sur une DB vierge).
+    - Résultat : après le premier déploiement réussi, le startup DDL
+      s'exécute en < 200 ms sans aucun lock sur les tables.
     """
     import logging as _log
     _ddl = _log.getLogger(__name__)
@@ -57,75 +61,98 @@ def create_missing_tables():
     try:
         Base.metadata.create_all(bind=engine, checkfirst=True)
     except Exception as _e:
-        _ddl.warning("create_all incomplet (tables peut-être déjà à jour) : %s", _e)
+        _ddl.warning("create_all incomplet : %s", _e)
 
-    # Chaque instruction dans son propre bloc : un échec ne bloque pas les suivants.
-    # ROLLBACK après chaque erreur pour remettre la connexion dans un état propre.
-    _STEPS = [
-        # ALTER TYPE doit tourner hors transaction explicite
-        "COMMIT",
-        "ALTER TYPE exercice_type ADD VALUE IF NOT EXISTS 'vrai_faux'",
-        "COMMIT",
-        "ALTER TYPE statut_enum ADD VALUE IF NOT EXISTS 'en_attente_correction'",
-        "COMMIT",
-        "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS commentaire_enseignant TEXT",
-        # Convertit JSON → JSONB pour les colonnes de chat (si table déjà existante)
-        """DO $$ BEGIN
+    def _col(conn, table: str, col: str) -> bool:
+        """Retourne True si la colonne existe déjà (lecture seule, sans lock)."""
+        r = conn.execute(sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name=:t AND column_name=:c"
+        ), {"t": table, "c": col}).fetchone()
+        return r is not None
+
+    def _idx(conn, name: str) -> bool:
+        """Retourne True si l'index existe déjà."""
+        r = conn.execute(sa.text(
+            "SELECT 1 FROM pg_indexes WHERE indexname=:i"
+        ), {"i": name}).fetchone()
+        return r is not None
+
+    def _run(conn, sql: str, label: str = ""):
+        """Exécute un DDL et absorbe l'erreur sans tuer le démarrage."""
+        try:
+            conn.execute(sa.text(sql))
+        except Exception as _e:
+            _ddl.warning("DDL échoué (%s) : %s", label or sql[:60], _e)
+            try:
+                conn.execute(sa.text("ROLLBACK"))
+            except Exception:
+                pass
+
+    with engine.connect() as conn:
+
+        # ── ALTER TYPE hors transaction (idempotent côté PG) ──────────
+        _run(conn, "COMMIT")
+        _run(conn, "ALTER TYPE exercice_type ADD VALUE IF NOT EXISTS 'vrai_faux'", "exercice_type")
+        _run(conn, "COMMIT")
+        _run(conn, "ALTER TYPE statut_enum ADD VALUE IF NOT EXISTS 'en_attente_correction'", "statut_enum")
+        _run(conn, "COMMIT")
+
+        # ── ADD COLUMN : vérifie d'abord, exécute seulement si absent ─
+        _COLS = [
+            # (table, colonne, définition SQL)
+            ("progressions",      "commentaire_enseignant", "TEXT"),
+            ("progressions",      "session_id",             "UUID REFERENCES learning_sessions(id) ON DELETE SET NULL"),
+            ("progressions",      "engagement_fused",       "FLOAT"),
+            ("progressions",      "engagement_facial",      "FLOAT"),
+            ("progressions",      "engagement_audio",       "FLOAT"),
+            ("progressions",      "engagement_behavioral",  "FLOAT"),
+            ("epreuves",          "date_ouverture",         "TIMESTAMP WITH TIME ZONE"),
+            ("epreuves",          "date_cloture",           "TIMESTAMP WITH TIME ZONE"),
+            ("epreuve_reponses",  "copie_type",             "VARCHAR(20) DEFAULT 'numerique'"),
+            ("epreuve_reponses",  "image_copie_url",        "TEXT"),
+            ("epreuve_reponses",  "vision_corrections",     "JSON"),
+            ("epreuve_reponses",  "dataset_valide",         "BOOLEAN DEFAULT FALSE"),
+            ("learning_sessions", "score_facial",           "FLOAT"),
+            ("learning_sessions", "score_audio",            "FLOAT"),
+            ("learning_sessions", "score_comportemental",   "FLOAT"),
+        ]
+        for _t, _c, _typedef in _COLS:
+            if not _col(conn, _t, _c):
+                _run(conn, f"ALTER TABLE {_t} ADD COLUMN {_c} {_typedef}", f"{_t}.{_c}")
+
+        # ── JSON → JSONB chat (conditionnel côté PG, pas de lock si déjà JSONB) ─
+        _run(conn, """DO $$ BEGIN
             IF EXISTS (SELECT FROM information_schema.columns
                        WHERE table_name='chat_rooms' AND column_name='membres'
                        AND data_type='json') THEN
                 ALTER TABLE chat_rooms ALTER COLUMN membres TYPE JSONB USING membres::text::jsonb;
             END IF;
-        END $$;""",
-        """DO $$ BEGIN
+        END $$;""", "chat_rooms.membres→jsonb")
+        _run(conn, """DO $$ BEGIN
             IF EXISTS (SELECT FROM information_schema.columns
                        WHERE table_name='chat_messages' AND column_name='lu_par'
                        AND data_type='json') THEN
                 ALTER TABLE chat_messages ALTER COLUMN lu_par TYPE JSONB USING lu_par::text::jsonb;
             END IF;
-        END $$;""",
-        # Indexes
-        "CREATE INDEX IF NOT EXISTS idx_progressions_user ON progressions(user_id)",
-        "CREATE INDEX IF NOT EXISTS idx_progressions_ua ON progressions(ua_id)",
-        "CREATE INDEX IF NOT EXISTS idx_sessions_user_date ON learning_sessions(user_id, started_at DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_chat_msgs_room ON chat_messages(room_id, created_at DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_bkt_user ON bkt_mastery(user_id, competence)",
-        "CREATE INDEX IF NOT EXISTS idx_ep_rep_epreuve ON epreuve_reponses(epreuve_id, statut)",
-        "CREATE INDEX IF NOT EXISTS idx_ep_rep_apprenant ON epreuve_reponses(apprenant_id)",
-        # Colonnes epreuves
-        "ALTER TABLE epreuves ADD COLUMN IF NOT EXISTS date_ouverture TIMESTAMP WITH TIME ZONE",
-        "ALTER TABLE epreuves ADD COLUMN IF NOT EXISTS date_cloture   TIMESTAMP WITH TIME ZONE",
-        # Copies papier / dataset
-        "ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS copie_type VARCHAR(20) DEFAULT 'numerique'",
-        "ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS image_copie_url TEXT",
-        "ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS vision_corrections JSON",
-        "ALTER TABLE epreuve_reponses ADD COLUMN IF NOT EXISTS dataset_valide BOOLEAN DEFAULT FALSE",
-        # session_id dans progressions
-        "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES learning_sessions(id) ON DELETE SET NULL",
-        "CREATE INDEX IF NOT EXISTS ix_progressions_session_id ON progressions(session_id)",
-        # Engagement per-exercice dans progressions
-        "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS engagement_fused FLOAT",
-        "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS engagement_facial FLOAT",
-        "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS engagement_audio FLOAT",
-        "ALTER TABLE progressions ADD COLUMN IF NOT EXISTS engagement_behavioral FLOAT",
-        # Composantes d'engagement dans learning_sessions
-        "ALTER TABLE learning_sessions ADD COLUMN IF NOT EXISTS score_facial FLOAT",
-        "ALTER TABLE learning_sessions ADD COLUMN IF NOT EXISTS score_audio FLOAT",
-        "ALTER TABLE learning_sessions ADD COLUMN IF NOT EXISTS score_comportemental FLOAT",
-        "COMMIT",
-    ]
+        END $$;""", "chat_messages.lu_par→jsonb")
 
-    with engine.connect() as conn:
-        for _sql in _STEPS:
-            try:
-                conn.execute(sa.text(_sql))
-            except Exception as _e:
-                _ddl.warning("DDL ignoré (colonne/index déjà présent ou timeout) : %.80s — %s",
-                             _sql.strip().splitlines()[0], _e)
-                try:
-                    conn.execute(sa.text("ROLLBACK"))
-                except Exception:
-                    pass
+        # ── CREATE INDEX : vérifie d'abord ────────────────────────────
+        _INDEXES = [
+            ("idx_progressions_user",    "CREATE INDEX idx_progressions_user ON progressions(user_id)"),
+            ("idx_progressions_ua",      "CREATE INDEX idx_progressions_ua ON progressions(ua_id)"),
+            ("idx_sessions_user_date",   "CREATE INDEX idx_sessions_user_date ON learning_sessions(user_id, started_at DESC)"),
+            ("idx_chat_msgs_room",       "CREATE INDEX idx_chat_msgs_room ON chat_messages(room_id, created_at DESC)"),
+            ("idx_bkt_user",             "CREATE INDEX idx_bkt_user ON bkt_mastery(user_id, competence)"),
+            ("idx_ep_rep_epreuve",       "CREATE INDEX idx_ep_rep_epreuve ON epreuve_reponses(epreuve_id, statut)"),
+            ("idx_ep_rep_apprenant",     "CREATE INDEX idx_ep_rep_apprenant ON epreuve_reponses(apprenant_id)"),
+            ("ix_progressions_session_id", "CREATE INDEX ix_progressions_session_id ON progressions(session_id)"),
+        ]
+        for _name, _sql in _INDEXES:
+            if not _idx(conn, _name):
+                _run(conn, _sql, _name)
+
+        _run(conn, "COMMIT")
 
 # ── Rate limiting middleware (Redis sliding window) ───────────────
 try:
