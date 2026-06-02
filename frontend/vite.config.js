@@ -40,14 +40,17 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,svg,png,ico,woff2}'],
           globIgnores: ['**/models/**', '**/ort-wasm**', '**/vision_bundle**'],
           runtimeCaching: [
-            // API : stale-while-revalidate — affiche le cache, met à jour en arrière-plan
+            // API : NetworkFirst — réseau prioritaire, cache en fallback uniquement
+            // StaleWhileRevalidate rejeté : status 0 (ERR_NETWORK) était mis en cache
+            // et servi au retour de connexion → app vide après coupure.
             {
               urlPattern: /\/api\//,
-              handler: 'StaleWhileRevalidate',
+              handler: 'NetworkFirst',
               options: {
                 cacheName: 'sensia-api',
-                expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 }, // 24h
-                cacheableResponse: { statuses: [0, 200] },
+                networkTimeoutSeconds: 10,
+                expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 },
+                cacheableResponse: { statuses: [200] },  // jamais cacher les erreurs
               },
             },
             // Auth : NetworkFirst — toujours vérifier l'identité en ligne

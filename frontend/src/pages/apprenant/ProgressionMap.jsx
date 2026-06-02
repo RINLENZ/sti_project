@@ -12,6 +12,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import { getCache, setCache } from '../../services/cache'
 import api from '../../services/api'
+import { useOnlineRetry } from '../../hooks/useOnlineRetry'
 
 // ── Niveau BKT → couleur + label (via thème — dark mode compatible) ──────────
 function bktLevel(score, C) {
@@ -131,6 +132,7 @@ export default function ProgressionMap() {
   const [recommandee, setRecommandee] = useState(null)
   const [activeTab,   setActiveTab]   = useState('cours')  // 'cours' | 'epreuves'
   const [epreuves,    setEpreuves]    = useState([])
+  const retryKey = useOnlineRetry()
 
   // ── Chargement avec cache ─────────────────────────────────────────
   useEffect(() => {
@@ -166,7 +168,7 @@ export default function ProgressionMap() {
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.niveau_id])
+  }, [user?.id, user?.niveau_id, retryKey])
 
   // ── Stats + filtrage ──────────────────────────────────────────────
   const allUAs = useMemo(() =>

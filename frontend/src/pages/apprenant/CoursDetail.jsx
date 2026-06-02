@@ -14,6 +14,7 @@ import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Sk } from '../../components/Skeleton'
 import { StaticContent } from '../../components/RichContent'
+import { useOnlineRetry } from '../../hooks/useOnlineRetry'
 
 // ── Constantes difficulté (une seule définition) ─────────────────
 const DIFF_LABEL = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile' }
@@ -227,14 +228,15 @@ export default function CoursDetail() {
   const [tab,          setTab]          = useState('lecon')
   const [loading,      setLoading]      = useState(true)
   const [ressourceIdx, setRessourceIdx] = useState(0)
+  const retryKey = useOnlineRetry()
 
-  // user_id N'EST PLUS passé en query param — le backend lit le JWT
   useEffect(() => {
+    setLoading(true)
     api.get(`/api/cours/ua/${uaId}`)
       .then(({ data }) => setUA(data))
       .catch(() => toast.error('Erreur de chargement'))
       .finally(() => setLoading(false))
-  }, [uaId])
+  }, [uaId, retryKey])
 
   if (loading) return <CoursDetailSkeleton />
 

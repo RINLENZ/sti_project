@@ -17,6 +17,7 @@ import {
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { SkDashboard } from '../../components/Skeleton'
+import { useOnlineRetry } from '../../hooks/useOnlineRetry'
 const Alisha = lazy(() => import('../../components/Alisha'))
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
@@ -677,6 +678,7 @@ export default function Dashboard() {
   const [sessions,        setSessions]        = useState(null)
   const [loading,         setLoading]         = useState(true)
   const [copied,          setCopied]          = useState(false)
+  const retryKey = useOnlineRetry()
 
   const loadModulesPourMatiere = useCallback(async (mat) => {
     const grouped = await Promise.all(
@@ -775,7 +777,7 @@ export default function Dashboard() {
       }
     }
     load()
-  }, [user.id, loadModulesPourMatiere])
+  }, [user.id, loadModulesPourMatiere, retryKey])
 
   async function selectMatiere(mat) {
     setMatActive(mat)

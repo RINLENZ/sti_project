@@ -26,6 +26,14 @@ function processQueue(error, token = null) {
 }
 
 function forceLogout() {
+  // Sync Redux avant navigation pour éviter l'état incohérent
+  // (token supprimé du localStorage mais store garde user + token en mémoire)
+  try {
+    const { store } = require('../store/store.js')
+    const { logout } = require('../store/authSlice.js')
+    store.dispatch(logout())
+  } catch { /* hors contexte React ou store non initialisé */ }
+
   localStorage.removeItem('sti_token')
   localStorage.removeItem('sti_refresh_token')
   localStorage.removeItem('sti_user')
@@ -37,7 +45,8 @@ async function retryRequest(config, retries = 2) {
   for (let i = 0; i < retries; i++) {
     await new Promise(r => setTimeout(r, 1000 * (i + 1)))
     try {
-      return await api(config)
+      // _retry: true évite que le retry déclenche un second refresh de token si 401
+      return await api({ ...config, _retry: true })
     } catch { /* continue */ }
   }
   return Promise.reject(new Error('Connexion impossible après plusieurs tentatives'))
@@ -91,7 +100,12 @@ api.interceptors.response.use(
       return api(original)
     } catch (refreshErr) {
       processQueue(refreshErr, null)
-      forceLogout()
+      // Ne pas forcer la déconnexion sur une simple erreur réseau :
+      // si le refresh échoue parce que la connexion est coupée, le token
+      // est peut-être encore valide — on ne veut pas déconnecter l'utilisateur.
+      const isAuthError = refreshErr.response?.status === 401
+                       || refreshErr.response?.status === 403
+      if (isAuthError) forceLogout()
       return Promise.reject(refreshErr)
     } finally {
       _refreshing = false
