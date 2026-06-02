@@ -24,7 +24,7 @@ import Alisha from '../../components/Alisha'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { useWebSocket } from '../../hooks/useWebSocket'
-import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
+import { useEmotionOnnx, preloadEmotionModel } from '../../hooks/useEmotionOnnx'
 import { EMOTION_MODEL_READY } from '../../config/models'
 import { ProgressiveContent, parseBlocks } from '../../components/RichContent'
 import { blocksToSpeech } from '../../utils/latexToSpeech'
@@ -722,6 +722,11 @@ export default function TutorielAlisha() {
       })
       await cam.start()
       setCameraActive(true)
+
+      // Précharge ONNX après MediaPipe — évite la compétition de runtimes WASM
+      // MediaPipe vient de démarrer cam.start() ; on lui laisse 4s pour compiler
+      // son WASM avant de lancer un deuxième InferenceSession.
+      setTimeout(preloadEmotionModel, 4000)
 
       // Modèle ONNX africain pour les expressions
       faceIntervalRef.current = setInterval(async () => {

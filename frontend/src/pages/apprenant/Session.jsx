@@ -14,7 +14,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import RichText, { RichTextInline } from '../../components/RichText'
 import { StaticContent } from '../../components/RichContent'
-import { useEmotionOnnx } from '../../hooks/useEmotionOnnx'
+import { useEmotionOnnx, preloadEmotionModel } from '../../hooks/useEmotionOnnx'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 import { clearCache } from '../../services/cache'
@@ -808,6 +808,9 @@ export default function Session() {
       await new Promise(r => setTimeout(r, slowNet ? 500 : 1000))
       setCameraActive(true)
       toast.success(slowNet ? 'Caméra activée (mode économique) ✓' : 'Analyse visuelle activée ✓')
+
+      // Précharge ONNX 4s après MediaPipe — évite la compétition WASM
+      setTimeout(preloadEmotionModel, 4000)
 
       // Démarre l'intervalle ONNX immédiatement (sans attendre face-api.js)
       faceApiIntervalRef.current = setInterval(async () => {

@@ -57,9 +57,15 @@ async function getSession() {
   }
 }
 
-// Précharge dès l'import du module (avant que MediaPipe démarre)
-if (EMOTION_MODEL_READY) {
-  setTimeout(() => getSession(), 500)
+/**
+ * Précharge le modèle ONNX après que MediaPipe soit initialisé.
+ * À appeler explicitement depuis startCamera(), jamais au module load.
+ * Délai recommandé : 3-5s après cam.start() pour laisser MediaPipe WASM
+ * finir sa compilation avant de charger un deuxième runtime WASM.
+ */
+export function preloadEmotionModel() {
+  if (!EMOTION_MODEL_READY || _session || _loading) return
+  getSession()
 }
 
 export function useEmotionOnnx() {
