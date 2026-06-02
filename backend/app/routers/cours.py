@@ -622,13 +622,12 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             )
             db.add(mastery)
 
+        p_avant = mastery.p_mastery   # capture AVANT la mise à jour pour la détection de seuil
         mastery.p_mastery     = update_knowledge(mastery.p_mastery, correct)
         mastery.nb_tentatives += 1
         if correct:
             mastery.nb_correct += 1
         db.commit()
-
-        p_avant = mastery.p_mastery
         interp = interpret_mastery(mastery.p_mastery)
         bkt_result = {
             "competence":  primary_kc,
@@ -699,19 +698,24 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             from ..models.session import LearningSession as _LS
             from ..services.engagement_service import compute_behavioral_score as _eng
 
-            _prog_id = str(prog.id)  # str() évite tout problème de type UUID avec text()
+            # Capture prog_id avant tout accès (expire_on_commit peut décharger l'objet)
+            _prog_id = str(prog.id)
+            _logger  = _log.getLogger(__name__)
 
-            # Garantit une transaction propre quelle que soit l'histoire précédente
-            # (PgBouncer transaction-mode + commits notifications peuvent laisser ABORTED)
+            # Garantit une transaction propre quelle que soit l'histoire précédente.
+            # PgBouncer transaction-mode : si un commit de notification a levé une
+            # IntegrityError, PostgreSQL garde la connexion en état ABORTED jusqu'au ROLLBACK.
             try:
                 db.rollback()
-            except Exception:
-                pass
+                _logger.debug("engagement rollback OK session=%s", str(body.session_id)[:8])
+            except Exception as _rb_e:
+                _logger.warning("engagement rollback failed : %s", _rb_e)
 
             # Laisse le response précédent atteindre la DB (délai réseau frontend → DB)
             _time.sleep(0.3)
 
             # Début de la fenêtre = timestamp du dernier response de CETTE session
+            _logger.debug("engagement querying last_response session=%s", str(body.session_id)[:8])
             _last = (
                 db.query(_Inter)
                 .filter(_Inter.session_id == body.session_id, _Inter.type == 'response')
@@ -742,27 +746,37 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
                 _win_sec = round((_win_end - _win_start.replace(tzinfo=timezone.utc)
                                   if _win_start.tzinfo is None
                                   else _win_end - _win_start).total_seconds())
-                _log.getLogger(__name__).info(
+                _logger.info(
                     "engagement window session=%s prog=%s start=%s dur=%ds events=%d",
-                    str(body.session_id)[:8], str(_prog_id)[:8],
+                    str(body.session_id)[:8], _prog_id[:8],
                     _win_start.isoformat()[:19], _win_sec, len(_window)
                 )
 
                 _res = _eng(_window)   # fenêtre vide → valeurs neutres (0.5)
+                _logger.debug(
+                    "engagement computed session=%s score=%.3f fac=%s aud=%s beh=%s",
+                    str(body.session_id)[:8], _res["score"],
+                    _res.get("visual_score"), _res.get("audio_score"),
+                    _res.get("behavioral_score"),
+                )
+                # NOTE : pas de ::uuid — SQLAlchemy text() utilise : comme préfixe de binding,
+                # ::uuid déclencherait un SyntaxError. UUID string PostgreSQL cast implicitement.
                 db.execute(_text("""
                     UPDATE progressions
                     SET engagement_fused      = :fused,
                         engagement_facial     = :facial,
                         engagement_audio      = :audio,
                         engagement_behavioral = :behavioral
-                    WHERE id = :prog_id::uuid
+                    WHERE id = :prog_id
                 """), {
                     "fused":      _res["score"],
                     "facial":     _res.get("visual_score"),
                     "audio":      _res.get("audio_score"),
                     "behavioral": _res.get("behavioral_score"),
-                    "prog_id":    _prog_id,   # str UUID — compatible text() + PgBouncer
+                    "prog_id":    _prog_id,
                 })
+                _logger.debug("engagement UPDATE executed session=%s prog=%s",
+                              str(body.session_id)[:8], _prog_id[:8])
                 db.commit()
         except Exception as _e:
             import logging as _log2
