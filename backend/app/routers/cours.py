@@ -671,7 +671,13 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
                 if nb_maitrisees == seuil:
                     notif_badge(db, body.user_id, badge_id)
         except Exception:
-            pass
+            # Un commit de notification a peut-être mis la transaction PostgreSQL en état
+            # ABORTED (contrainte FK, timeout réseau, etc.).
+            # Sans rollback ici, toutes les requêtes suivantes échouent silencieusement.
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
     # ── Engagement per-exercice — granularité temporelle pour DKT-E ─────────────
     # Fenêtre = interactions DB entre le dernier event "response" de la session
@@ -693,7 +699,14 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             from ..models.session import LearningSession as _LS
             from ..services.engagement_service import compute_behavioral_score as _eng
 
-            _prog_id = prog.id  # capture avant que l'ORM expire l'objet post-commit
+            _prog_id = str(prog.id)  # str() évite tout problème de type UUID avec text()
+
+            # Garantit une transaction propre quelle que soit l'histoire précédente
+            # (PgBouncer transaction-mode + commits notifications peuvent laisser ABORTED)
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
             # Laisse le response précédent atteindre la DB (délai réseau frontend → DB)
             _time.sleep(0.3)
@@ -742,13 +755,13 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
                         engagement_facial     = :facial,
                         engagement_audio      = :audio,
                         engagement_behavioral = :behavioral
-                    WHERE id = :prog_id
+                    WHERE id = :prog_id::uuid
                 """), {
                     "fused":      _res["score"],
                     "facial":     _res.get("visual_score"),
                     "audio":      _res.get("audio_score"),
                     "behavioral": _res.get("behavioral_score"),
-                    "prog_id":    _prog_id,
+                    "prog_id":    _prog_id,   # str UUID — compatible text() + PgBouncer
                 })
                 db.commit()
         except Exception as _e:

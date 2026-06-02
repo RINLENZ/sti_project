@@ -1,4 +1,6 @@
 import axios from 'axios'
+import { store }  from '../store/store.js'
+import { logout } from '../store/authSlice.js'
 
 const BASE_URL = import.meta.env.VITE_API_URL
   || import.meta.env.VITE_BACKEND_URL
@@ -26,14 +28,7 @@ function processQueue(error, token = null) {
 }
 
 function forceLogout() {
-  // Sync Redux avant navigation pour éviter l'état incohérent
-  // (token supprimé du localStorage mais store garde user + token en mémoire)
-  try {
-    const { store } = require('../store/store.js')
-    const { logout } = require('../store/authSlice.js')
-    store.dispatch(logout())
-  } catch { /* hors contexte React ou store non initialisé */ }
-
+  try { store.dispatch(logout()) } catch {}
   localStorage.removeItem('sti_token')
   localStorage.removeItem('sti_refresh_token')
   localStorage.removeItem('sti_user')

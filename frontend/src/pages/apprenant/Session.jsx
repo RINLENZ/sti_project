@@ -553,10 +553,11 @@ export default function Session() {
   const [isLeaving,      setIsLeaving]      = useState(false) // true pendant la sortie animée de la carte question
 
   const videoRef         = useRef(null)
-  const canvasRef        = useRef(null)
-  const displayRef       = useRef(null)
-  const faceMeshRef      = useRef(null)
-  const lastSendRef      = useRef(0)
+  const canvasRef          = useRef(null)
+  const displayRef         = useRef(null)
+  const faceMeshRef        = useRef(null)
+  const cameraStartingRef  = useRef(false)   // guard anti double-appel startCamera()
+  const lastSendRef        = useRef(0)
   const earBufferRef     = useRef([])
   const termineeRef      = useRef(false)
   const cnnEmotionRef    = useRef({ emotion: null, probs: null })  // dernière détection CNN (face-api.js ou ONNX)
@@ -765,6 +766,12 @@ export default function Session() {
   }, [termine])
 
   async function startCamera() {
+    // Guard : empêche les appels concurrents (re-render, bouton double-clic)
+    // qui créeraient plusieurs instances FaceMesh et téléchargeraient les
+    // packed assets plusieurs fois → crash lors d'une connexion instable.
+    if (cameraActive || cameraStartingRef.current) return
+    cameraStartingRef.current = true
+
     setShowCameraBanner(false)
 
     // ── Détection réseau lent (3G/2G africain) ────────────────────
@@ -844,6 +851,7 @@ export default function Session() {
         if (ok) toast.success('face-api chargé ✓', { duration: 2000 })
       })
     } catch { toast.error('Caméra non disponible') }
+    finally { cameraStartingRef.current = false }
   }
 
   async function startAudio() {

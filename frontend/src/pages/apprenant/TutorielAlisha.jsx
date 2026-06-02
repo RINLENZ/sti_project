@@ -607,6 +607,7 @@ export default function TutorielAlisha() {
   // ── Suivi facial ─────────────────────────────────────────────────
   const videoRef           = useRef(null)
   const faceMeshRef        = useRef(null)
+  const cameraStartingRef  = useRef(false)   // guard anti double-appel startCamera()
   const cnnEmotionRef      = useRef({ emotion: null, probs: null })
   const lastFaceSendRef    = useRef(0)
   const earBufferRef       = useRef([])
@@ -687,6 +688,8 @@ export default function TutorielAlisha() {
   }
 
   async function startCamera() {
+    if (cameraActive || cameraStartingRef.current) return
+    cameraStartingRef.current = true
     try {
       const conn    = navigator.connection || navigator.mozConnection || navigator.webkitConnection
       const slowNet = conn && (conn.effectiveType === '2g' || conn.downlink < 1.5)
@@ -737,6 +740,8 @@ export default function TutorielAlisha() {
       }, 3000)
     } catch {
       // Permission caméra refusée ou indisponible → silencieux, pas de toast
+    } finally {
+      cameraStartingRef.current = false
     }
   }
 
