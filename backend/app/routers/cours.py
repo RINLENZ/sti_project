@@ -674,32 +674,68 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
             pass
 
     # ── Engagement per-exercice — granularité temporelle pour DKT-E ─────────────
-    # Fenêtre glissante Redis : uniquement les événements DEPUIS le dernier exercice.
-    # Utilise un UPDATE SQL direct pour éviter le re-chargement ORM post-commit
-    # qui déclencherait un SELECT * et échouerait si les colonnes n'existent pas encore.
+    # Fenêtre = interactions DB entre le dernier event "response" de la session
+    # (exercice précédent) et maintenant.
+    #
+    # Pourquoi DB-only et pas Redis :
+    #   Le frontend logue POST /api/interaction type='response' APRÈS verifier_reponse.
+    #   → Au moment du calcul, le response courant n'est pas encore en DB. ✓
+    #   → Le response de l'exercice précédent y est depuis l'exercice précédent. ✓
+    #
+    # sleep(0.3) : garde contre la race condition où l'exercice précédent serait
+    # soumis très rapidement avant que son response event atteigne la DB.
     if body.session_id:
         try:
-            import redis as _redis_client, json as _json
-            import logging as _log
-            from sqlalchemy import text as _text
-            from ..config import settings as _settings
+            import time as _time, logging as _log
+            from datetime import datetime, timezone
+            from sqlalchemy import text as _text, desc as _desc
+            from ..models.interaction import Interaction as _Inter
+            from ..models.session import LearningSession as _LS
             from ..services.engagement_service import compute_behavioral_score as _eng
 
-            _r   = _redis_client.from_url(_settings.redis_url, decode_responses=True)
-            _raw = _r.get(f"session_events:{body.session_id}")
-            _all = _json.loads(_raw) if _raw else []
+            _prog_id = prog.id  # capture avant que l'ORM expire l'objet post-commit
 
-            # Curseur : index de début de la fenêtre pour cet exercice
-            _ck  = f"session_ex_cursor:{body.session_id}"
-            _cur = int(_r.get(_ck) or 0)
-            _window = _all[_cur:]
+            # Laisse le response précédent atteindre la DB (délai réseau frontend → DB)
+            _time.sleep(0.3)
 
-            # Avance le curseur AVANT le calcul (même si le calcul échoue)
-            _r.set(_ck, len(_all), ex=86400)
+            # Début de la fenêtre = timestamp du dernier response de CETTE session
+            _last = (
+                db.query(_Inter)
+                .filter(_Inter.session_id == body.session_id, _Inter.type == 'response')
+                .order_by(_desc(_Inter.timestamp))
+                .first()
+            )
 
-            if _window and prog.id:
-                _res = _eng(_window)
-                # UPDATE SQL direct — contourne l'ORM expiré post-commit BKT
+            if _last:
+                _win_start = _last.timestamp
+            else:
+                # Premier exercice : depuis le début de la session
+                _s = db.query(_LS).filter(_LS.id == body.session_id).first()
+                _win_start = _s.started_at if _s else None
+
+            if _win_start and _prog_id:
+                _win_end = datetime.now(timezone.utc)
+
+                _events_db = (
+                    db.query(_Inter)
+                    .filter(
+                        _Inter.session_id == body.session_id,
+                        _Inter.timestamp > _win_start,
+                    )
+                    .order_by(_Inter.timestamp)
+                    .all()
+                )
+                _window = [{"type": e.type, "data": e.data or {}} for e in _events_db]
+                _win_sec = round((_win_end - _win_start.replace(tzinfo=timezone.utc)
+                                  if _win_start.tzinfo is None
+                                  else _win_end - _win_start).total_seconds())
+                _log.getLogger(__name__).info(
+                    "engagement window session=%s prog=%s start=%s dur=%ds events=%d",
+                    str(body.session_id)[:8], str(_prog_id)[:8],
+                    _win_start.isoformat()[:19], _win_sec, len(_window)
+                )
+
+                _res = _eng(_window)   # fenêtre vide → valeurs neutres (0.5)
                 db.execute(_text("""
                     UPDATE progressions
                     SET engagement_fused      = :fused,
@@ -712,11 +748,14 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
                     "facial":     _res.get("visual_score"),
                     "audio":      _res.get("audio_score"),
                     "behavioral": _res.get("behavioral_score"),
-                    "prog_id":    prog.id,
+                    "prog_id":    _prog_id,
                 })
                 db.commit()
         except Exception as _e:
-            _log.getLogger(__name__).warning("engagement per-exercice non persisté : %s", _e)
+            import logging as _log2
+            _log2.getLogger(__name__).warning(
+                "engagement per-exercice non persisté : %s", _e, exc_info=True
+            )
 
     return {
         "correct":          correct,
@@ -800,7 +839,6 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db), current_user:
         redis = redis_client.from_url(settings.redis_url, decode_responses=True)
         cached = redis.get(f"session_events:{session_id}")
         events = json.loads(cached) if cached else []
-        redis.delete(f"session_ex_cursor:{session_id}")   # libère le curseur
     except Exception:
         events = []
 
