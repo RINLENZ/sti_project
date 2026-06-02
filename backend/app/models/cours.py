@@ -141,8 +141,14 @@ class ProgressionApprenant(Base):
     commentaire_enseignant = Column(Text, nullable=True)
     date_debut             = Column(DateTime(timezone=True), nullable=True)
     date_fin               = Column(DateTime(timezone=True), nullable=True)
-    # FK vers la session d'apprentissage active — permet la jointure directe avec EngagementAnalysis
+    # FK vers la session d'apprentissage active
     session_id             = Column(UUID(as_uuid=True), ForeignKey("learning_sessions.id"), nullable=True)
+    # Engagement per-exercice (fenêtre d'événements depuis le dernier exercice)
+    # Granularité temporelle nécessaire pour DKT-E (vs score global session)
+    engagement_fused       = Column(Float, nullable=True)   # α·facial + β·audio + γ·comport.
+    engagement_facial      = Column(Float, nullable=True)   # α — MediaPipe
+    engagement_audio       = Column(Float, nullable=True)   # β — VAD + bruit
+    engagement_behavioral  = Column(Float, nullable=True)   # γ — idle/response/help
 
 
 class BKTMastery(Base):

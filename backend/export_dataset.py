@@ -129,18 +129,31 @@ for i in response_ints:
 all_sessions = db.query(LearningSession).filter(LearningSession.ended_at.isnot(None)).all()
 sessions_by_id = {str(s.id): s for s in all_sessions}
 
-def _engagement_from_session(session_id_val) -> dict:
+def _engagement_for_prog(prog) -> dict:
     """
-    Retourne les 4 composantes d'engagement depuis learning_sessions.
-    - fused        = score_engagement (α·facial + β·audio + γ·comport.)
-    - facial       = score_facial     (α — MediaPipe + CNN)
-    - audio        = score_audio      (β — VAD + bruit ambiant, None si micro inactif)
-    - behavioral   = score_comportemental (γ — idle/response/help)
-    Toutes nulles pour les anciennes sessions (avant la migration).
+    Retourne les 4 composantes d'engagement pour une interaction DKT.
+
+    Priorité 1 — Per-exercice (post-refactor, granularité temporelle réelle) :
+        engagement_fused / facial / audio / behavioral sur ProgressionApprenant.
+        Valeur différente par exercice → signal temporel exploitable par le LSTM DKT-E.
+
+    Priorité 2 — Session globale (fallback pour données historiques) :
+        Score agrégé depuis learning_sessions.
+        Même valeur pour tous les exercices d'une session → constante, non idéal
+        mais préserve la compatibilité avec les données collectées avant le refactor.
     """
-    if not session_id_val:
+    # Priorité 1 : scores per-exercice
+    if prog.engagement_fused is not None:
+        return {
+            "behavioral": round(prog.engagement_behavioral, 4) if prog.engagement_behavioral is not None else None,
+            "audio":      round(prog.engagement_audio,      4) if prog.engagement_audio      is not None else None,
+            "facial":     round(prog.engagement_facial,     4) if prog.engagement_facial     is not None else None,
+            "fused":      round(prog.engagement_fused,      4),
+        }
+    # Priorité 2 : score session global (fallback)
+    if not prog.session_id:
         return {"behavioral": None, "audio": None, "facial": None, "fused": None}
-    s = sessions_by_id.get(str(session_id_val))
+    s = sessions_by_id.get(str(prog.session_id))
     if not s:
         return {"behavioral": None, "audio": None, "facial": None, "fused": None}
     return {
@@ -185,7 +198,7 @@ with open("dataset_dkt.jsonl", "w") as f:
             "time_seconds":  time_map.get(key),
             "difficulty":    ex.difficulte,
             "timestamp":     p.date_debut.isoformat() if p.date_debut else None,
-            "engagement":    _engagement_from_session(p.session_id),
+            "engagement":    _engagement_for_prog(p),
         }
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
         dkt_count += 1

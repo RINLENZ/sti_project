@@ -673,6 +673,51 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
         except Exception:
             pass
 
+    # ── Engagement per-exercice — granularité temporelle pour DKT-E ─────────────
+    # Fenêtre glissante Redis : uniquement les événements DEPUIS le dernier exercice.
+    # Utilise un UPDATE SQL direct pour éviter le re-chargement ORM post-commit
+    # qui déclencherait un SELECT * et échouerait si les colonnes n'existent pas encore.
+    if body.session_id:
+        try:
+            import redis as _redis_client, json as _json
+            import logging as _log
+            from sqlalchemy import text as _text
+            from ..config import settings as _settings
+            from ..services.engagement_service import compute_behavioral_score as _eng
+
+            _r   = _redis_client.from_url(_settings.redis_url, decode_responses=True)
+            _raw = _r.get(f"session_events:{body.session_id}")
+            _all = _json.loads(_raw) if _raw else []
+
+            # Curseur : index de début de la fenêtre pour cet exercice
+            _ck  = f"session_ex_cursor:{body.session_id}"
+            _cur = int(_r.get(_ck) or 0)
+            _window = _all[_cur:]
+
+            # Avance le curseur AVANT le calcul (même si le calcul échoue)
+            _r.set(_ck, len(_all), ex=86400)
+
+            if _window and prog.id:
+                _res = _eng(_window)
+                # UPDATE SQL direct — contourne l'ORM expiré post-commit BKT
+                db.execute(_text("""
+                    UPDATE progressions
+                    SET engagement_fused      = :fused,
+                        engagement_facial     = :facial,
+                        engagement_audio      = :audio,
+                        engagement_behavioral = :behavioral
+                    WHERE id = :prog_id
+                """), {
+                    "fused":      _res["score"],
+                    "facial":     _res.get("visual_score"),
+                    "audio":      _res.get("audio_score"),
+                    "behavioral": _res.get("behavioral_score"),
+                    "prog_id":    prog.id,
+                })
+                db.commit()
+        except Exception as _e:
+            _log.getLogger(__name__).warning("engagement per-exercice non persisté : %s", _e)
+
     return {
         "correct":          correct,
         "reponse_correcte": exercice.reponse_correcte,
@@ -750,11 +795,12 @@ def clore_session(session_id: UUID, db: Session = Depends(get_db), current_user:
     if str(current_user.id) != str(session.user_id) and current_user.role not in ("enseignant", "super_admin"):
         raise HTTPException(403, "Accès non autorisé")
 
-    # Récupère les événements depuis Redis
+    # Récupère les événements depuis Redis + nettoie le curseur per-exercice
     try:
         redis = redis_client.from_url(settings.redis_url, decode_responses=True)
         cached = redis.get(f"session_events:{session_id}")
         events = json.loads(cached) if cached else []
+        redis.delete(f"session_ex_cursor:{session_id}")   # libère le curseur
     except Exception:
         events = []
 

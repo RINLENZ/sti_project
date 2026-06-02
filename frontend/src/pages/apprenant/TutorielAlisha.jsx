@@ -569,6 +569,13 @@ export default function TutorielAlisha() {
   const [bktResult,      setBktResult]      = useState(null)
   const [finalBktResult, setFinalBktResult] = useState(null)
   const [audioActive,    setAudioActive]    = useState(false)
+  // Consentement caméra + micro (persisté dans localStorage)
+  // Valeurs : null (non demandé) | 'full' | 'camera' | 'none'
+  const CONSENT_KEY = 'alisha_media_consent'
+  const [mediaConsent,   setMediaConsent]   = useState(
+    () => localStorage.getItem('alisha_media_consent')
+  )
+  const [showConsent,    setShowConsent]    = useState(false)
   const [ressourceAide,  setRessourceAide]  = useState(null)
   const [badgeNotif,     setBadgeNotif]     = useState(null)
   const [scoreCorrects,  setScoreCorrects]  = useState(0)
@@ -609,7 +616,9 @@ export default function TutorielAlisha() {
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
 
   const { speak, stop, readAloud, isReading, supported, needsVoiceSetup, dismissVoiceSetup } = useAlishaVoice()
-  const { lastKeyword } = useKWSModel(audioActive)
+  const { lastKeyword } = useKWSModel(audioActive, (dur) => {
+    logInteraction('vad_speech', { event: 'end', duration_seconds: dur })
+  })
   const prevMessageRef = useRef(null)
 
   // ── L5 — Attribution XP ──────────────────────────────────────
@@ -750,13 +759,18 @@ export default function TutorielAlisha() {
         setStepIdx(0)
         setIntroPhase(0)
         setPhase('step')
-        setAudioActive(true)
         stepStartRef.current = Date.now()
         try {
           const s = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
           sessionIdRef.current = s.data.session_id
-          // Auto-démarrage discret du suivi facial (sans toast bloquant)
-          startCamera()
+          // Demande de consentement si jamais accordé, sinon applique immédiatement
+          const consent = localStorage.getItem('alisha_media_consent')
+          if (!consent) {
+            setShowConsent(true)
+          } else {
+            if (consent === 'full' || consent === 'camera') startCamera()
+            if (consent === 'full') setAudioActive(true)
+          }
         } catch {}
       })
       .catch(() => navigate('/dashboard'))
@@ -1011,6 +1025,15 @@ export default function TutorielAlisha() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastKeyword])
 
+  // ── Gestion consentement média ───────────────────────────────
+  function handleConsent(choice) {
+    localStorage.setItem(CONSENT_KEY, choice)
+    setMediaConsent(choice)
+    setShowConsent(false)
+    if (choice === 'full' || choice === 'camera') startCamera()
+    if (choice === 'full') setAudioActive(true)
+  }
+
   // ── Raccourcis clavier ────────────────────────────────────────
   useEffect(() => {
     function onKey(e) {
@@ -1211,6 +1234,11 @@ export default function TutorielAlisha() {
       `}</style>
       {/* Capture vidéo cachée pour l'analyse faciale MediaPipe */}
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }}/>
+
+      {/* ── Modal consentement caméra + micro ── */}
+      {showConsent && (
+        <PermissionModal C={C} onChoice={handleConsent}/>
+      )}
 
       {/* ── Notification voix (une seule fois, appareils sans voix locale FR) ── */}
       {needsVoiceSetup && supported && (
@@ -1864,4 +1892,89 @@ function sectionBox(bg, borderColor) {
 
 function sectionLabel(color) {
   return { fontSize: 11, fontWeight: 800, color, margin: '0 0 10px', textTransform: 'uppercase' }
+}
+
+// ── Modal de consentement caméra + micro ─────────────────────────
+function PermissionModal({ C, onChoice }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 2000,
+      background: 'rgba(26,18,7,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div style={{
+        background: C.surface, borderRadius: 22, padding: '28px 24px',
+        maxWidth: 380, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.3)',
+        display: 'flex', flexDirection: 'column', gap: 0,
+      }}>
+        {/* Icon */}
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: '50%', margin: '0 auto 12px',
+            background: `linear-gradient(135deg, ${C.brownPale}, ${C.emeraldPale})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30,
+          }}>🤖</div>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: C.text }}>
+            Alisha va analyser ton engagement
+          </h2>
+        </div>
+
+        {/* Description */}
+        <p style={{ fontSize: 13, color: C.textSec, lineHeight: 1.6, margin: '0 0 20px', textAlign: 'center' }}>
+          Pour adapter le tutoriel à ton niveau de concentration, Alisha peut analyser
+          ton <strong style={{ color: C.text }}>visage</strong> (attention, émotions)
+          et ta <strong style={{ color: C.text }}>voix</strong> (commandes : "Aide", "Répéter", "Plus lentement").
+        </p>
+
+        {/* Détails collecte */}
+        <div style={{
+          background: C.bg, borderRadius: 12, padding: '10px 14px', marginBottom: 20,
+          border: `1px solid ${C.border}`, fontSize: 12, color: C.textSec, lineHeight: 1.7,
+        }}>
+          <p style={{ margin: 0, fontWeight: 700, color: C.text, marginBottom: 4 }}>Ce qui est analysé :</p>
+          <p style={{ margin: 0 }}>📷 Orientation du regard, ouverture des yeux, expression</p>
+          <p style={{ margin: 0 }}>🎤 Énergie sonore et mots-clés vocaux seulement</p>
+          <p style={{ margin: '4px 0 0', color: C.textMuted }}>Aucune image ni enregistrement audio n'est envoyé.</p>
+        </div>
+
+        {/* Boutons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button
+            onClick={() => onChoice('full')}
+            style={{
+              padding: '13px', borderRadius: 12, border: 'none',
+              background: `linear-gradient(135deg, ${C.brown}, ${C.brownMid})`,
+              color: 'white', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+            }}
+          >
+            📷 🎤 Activer caméra + micro
+          </button>
+          <button
+            onClick={() => onChoice('camera')}
+            style={{
+              padding: '11px', borderRadius: 12,
+              border: `1.5px solid ${C.border}`, background: C.bg,
+              color: C.text, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            📷 Caméra uniquement
+          </button>
+          <button
+            onClick={() => onChoice('none')}
+            style={{
+              padding: '10px', borderRadius: 12, border: 'none',
+              background: 'none', color: C.textMuted,
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Continuer sans analyse
+          </button>
+        </div>
+
+        <p style={{ margin: '12px 0 0', fontSize: 10, color: C.textMuted, textAlign: 'center' }}>
+          Ce choix est mémorisé. Tu peux le modifier depuis ton profil.
+        </p>
+      </div>
+    </div>
+  )
 }

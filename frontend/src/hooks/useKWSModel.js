@@ -100,15 +100,27 @@ async function inferKWS(pcmFloat32, nativeSR) {
   }
 }
 
-export function useKWSModel(audioActive) {
+// ── Seuil VAD énergie float32 (calibré micro standard) ───────────
+// RMS > 0.008 sur au moins 4 chunks consécutifs (~370ms) → parole active
+const VAD_RMS_THRESHOLD = 0.008
+const VAD_CONFIRM_FRAMES = 4   // fenêtres consécutives pour confirmer début/fin parole
+
+export function useKWSModel(audioActive, onVadActivity) {
   const [lastKeyword, setLastKeyword] = useState(null)
   const [kwsReady,    setKwsReady]    = useState(false)
 
-  const ctxRef    = useRef(null)
-  const procRef   = useRef(null)
-  const bufferRef = useRef([])
-  const activeRef = useRef(false)
-  const srRef     = useRef(44100)
+  const ctxRef         = useRef(null)
+  const procRef        = useRef(null)
+  const bufferRef      = useRef([])
+  const activeRef      = useRef(false)
+  const srRef          = useRef(44100)
+  const onVadRef       = useRef(onVadActivity)
+  // VAD state
+  const vadActiveRef   = useRef(false)
+  const vadStartRef    = useRef(0)
+  const vadFramesRef   = useRef(0)   // frames consécutives au-dessus du seuil
+
+  useEffect(() => { onVadRef.current = onVadActivity }, [onVadActivity])
 
   const startListening = useCallback(async () => {
     if (activeRef.current) return
@@ -142,20 +154,41 @@ export function useKWSModel(audioActive) {
         const chunk = e.inputBuffer.getChannelData(0)
         bufferRef.current.push(...chunk)
 
-        const needed    = Math.ceil(srRef.current * COLLECT_MS / 1000)
-        const hopNeeded = Math.ceil(srRef.current * HOP_MS / 1000)
+        const needed = Math.ceil(srRef.current * COLLECT_MS / 1000)
 
         // Garde le buffer à taille max = 2 × fenêtre pour éviter croissance infinie
         if (bufferRef.current.length > needed * 2)
           bufferRef.current = bufferRef.current.slice(-needed)
 
+        // ── VAD énergie — indépendant du KWS ─────────────────────
+        if (onVadRef.current) {
+          const rms = Math.sqrt(chunk.reduce((s, v) => s + v * v, 0) / chunk.length)
+          const isSpeech = rms > VAD_RMS_THRESHOLD
+
+          if (isSpeech) {
+            vadFramesRef.current += 1
+            if (!vadActiveRef.current && vadFramesRef.current >= VAD_CONFIRM_FRAMES) {
+              vadActiveRef.current = true
+              vadStartRef.current  = Date.now()
+            }
+          } else {
+            if (vadActiveRef.current) {
+              // Parole terminée — émet seulement si durée >= 1s
+              const dur = Math.round((Date.now() - vadStartRef.current) / 1000)
+              if (dur >= 1) onVadRef.current(dur)
+            }
+            vadActiveRef.current = false
+            vadFramesRef.current = 0
+          }
+        }
+
+        // ── KWS inference ─────────────────────────────────────────
         if (bufferRef.current.length < needed) return
 
         const now = Date.now()
         if (now - lastHopTime < HOP_MS) return
         lastHopTime = now
 
-        // Prend la dernière fenêtre de 1500ms (glissante)
         const pcm = new Float32Array(bufferRef.current.slice(-needed))
 
         if (!KWS_MODEL_READY) return
@@ -170,6 +203,13 @@ export function useKWSModel(audioActive) {
   }, [])
 
   const stopListening = useCallback(() => {
+    // Émet l'événement de fin si parole en cours au moment de l'arrêt
+    if (vadActiveRef.current && onVadRef.current) {
+      const dur = Math.round((Date.now() - vadStartRef.current) / 1000)
+      if (dur >= 1) onVadRef.current(dur)
+    }
+    vadActiveRef.current = false
+    vadFramesRef.current = 0
     activeRef.current = false
     procRef.current?.disconnect()
     ctxRef.current?.close()
