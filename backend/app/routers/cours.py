@@ -692,7 +692,7 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
     if body.session_id:
         try:
             import time as _time, logging as _log
-            from datetime import datetime, timezone
+            from datetime import timezone
             from sqlalchemy import text as _text, desc as _desc
             from ..models.interaction import Interaction as _Inter
             from ..models.session import LearningSession as _LS
