@@ -101,7 +101,9 @@ class Exercice(Base):
     ua_id              = Column(UUID(as_uuid=True), ForeignKey("unites_apprentissage.id"), nullable=False)
     titre              = Column(String, nullable=False)
     type               = Column(
-        Enum("qcm", "vrai_faux", "texte_trou", "reponse_libre", name="exercice_type"),
+        Enum("qcm", "vrai_faux", "texte_trou", "reponse_libre",
+             "ordre_elements", "correspondance", "identification_erreur",
+             name="exercice_type"),
         nullable=False
     )
     enonce             = Column(Text, nullable=False)

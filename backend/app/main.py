@@ -100,6 +100,12 @@ def create_missing_tables():
         _run(conn, "COMMIT")
         _run(conn, "ALTER TYPE statut_enum ADD VALUE IF NOT EXISTS 'en_attente_correction'", "statut_enum")
         _run(conn, "COMMIT")
+        _run(conn, "ALTER TYPE exercice_type ADD VALUE IF NOT EXISTS 'ordre_elements'", "exercice_type")
+        _run(conn, "COMMIT")
+        _run(conn, "ALTER TYPE exercice_type ADD VALUE IF NOT EXISTS 'correspondance'", "exercice_type")
+        _run(conn, "COMMIT")
+        _run(conn, "ALTER TYPE exercice_type ADD VALUE IF NOT EXISTS 'identification_erreur'", "exercice_type")
+        _run(conn, "COMMIT")
 
         # ── ADD COLUMN : vérifie d'abord, exécute seulement si absent ─
         _COLS = [

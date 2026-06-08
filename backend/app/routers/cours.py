@@ -561,7 +561,22 @@ def verifier_reponse(body: ReponseSubmit, db: Session = Depends(get_db), current
     except (json.JSONDecodeError, TypeError):
         expected = exercice.reponse_correcte
 
-    correct = _comparer_reponse(submitted, expected)
+    # ── Correspondance — comparaison par paires, insensible à l'ordre ──
+    if exercice.type == "correspondance":
+        try:
+            sub_pairs = frozenset(
+                (_normaliser(str(p[0])), _normaliser(str(p[1])))
+                for p in (submitted if isinstance(submitted, list) else [])
+            )
+            exp_pairs = frozenset(
+                (_normaliser(str(p[0])), _normaliser(str(p[1])))
+                for p in (expected if isinstance(expected, list) else [])
+            )
+            correct = bool(sub_pairs) and sub_pairs == exp_pairs
+        except Exception:
+            correct = False
+    else:
+        correct = _comparer_reponse(submitted, expected)
 
     # Enregistre ou met à jour la progression
     prog = db.query(ProgressionApprenant).filter(

@@ -734,12 +734,19 @@ Analyse cette fiche de préparation et extrais la structure pédagogique.
     ✗ MAUVAIS : "Dans un contexte professionnel, il est important de maîtriser…"
 • prerequis        : Notions déjà vues (liste)
 • duree_estimee    : Durée en minutes (entier)
-• contenu_lecon    : Cours complet en Markdown structuré :
+• contenu_lecon    : Cours complet en Markdown avec structure narrative et scientifique :
     ## Mise en situation
-    ## I. [Notion principale]
-    ### Exemple appliqué  ← avec noms/lieux africains
-    ## II. [Deuxième notion]
+    Scénario concret et vivant ancré dans la vie africaine (2-3 phrases d'accroche).
+    ## I. [Titre de la notion — formulé comme une question ou une découverte]
+    > 💡 **Analogie** : comparaison du quotidien AVANT la formule abstraite.
+    Formule ou définition en LaTeX ($...$). Contexte camerounais (Yaoundé, Bamenda…).
+    **⚠️ À retenir :** résume l'invariant ou le piège fréquent.
+    ### Démarche : Observation → Hypothèse → Modèle → Vérification
+    Exemple guidé pas à pas avec noms/lieux africains.
+    ## II. [Deuxième notion — même logique : analogie → modèle → exemple]
+    Tableau si pertinent : | Notion | Formule | Exemple |
     ## Synthèse
+    Points clés en liste courte (3-5 items). Lien avec la situation-problème.
 • points_cles      : 4-6 points essentiels (phrases courtes)
 
 Réponds UNIQUEMENT avec ce JSON (sans texte autour) :
@@ -786,11 +793,11 @@ GROUPE 1 — "Évaluation des ressources"  (groupe=1, difficulte=1, points=5)
   → Mémorisation et compréhension directe du cours
 
 GROUPE 2 — "Application et compréhension"  (groupe=2, difficulte=2, points=10)
-  → 3 exercices : 2 qcm + 1 texte_trou
+  → 3 exercices : 1 qcm + 1 texte_trou + 1 ordre_elements
   → Application sur des cas simples
 
 GROUPE 3 — "Résolution de problèmes"  (groupe=3, difficulte=3, points=15)
-  → 3 exercices : 1 qcm + 2 reponse_libre
+  → 3 exercices : 1 correspondance + 1 identification_erreur + 1 reponse_libre
   → Analyse en lien DIRECT avec la situation-problème
 
 ━━━ RÈGLES ━━━
@@ -799,6 +806,15 @@ GROUPE 3 — "Résolution de problèmes"  (groupe=3, difficulte=3, points=15)
                1 blanc → reponse_correcte = "mot" ;
                2+ blancs → reponse_correcte = ["mot1", "mot2"]
 • reponse_libre → options = null ; reponse_correcte = modèle 2-4 phrases
+• ordre_elements → options = liste de 4-6 étapes MÉLANGÉES (ordre aléatoire) ;
+                   reponse_correcte = JSON array des étapes dans l'ORDRE CORRECT,
+                   ex: '["Étape 1 : …", "Étape 2 : …", "Étape 3 : …"]'
+• correspondance → options = tableau plat alternant gauche/droite :
+                   ["terme1", "définition1", "terme2", "définition2", ...] (3-4 paires) ;
+                   reponse_correcte = JSON array de paires,
+                   ex: '[["terme1","définition1"],["terme2","définition2"]]'
+• identification_erreur → options = liste de 4-5 étapes/affirmations dont UNE EST FAUSSE ;
+                          reponse_correcte = texte exact de l'étape incorrecte
 • Groupe 3 doit référencer la situation-problème
 
 Réponds UNIQUEMENT avec ce JSON :
@@ -806,7 +822,7 @@ Réponds UNIQUEMENT avec ce JSON :
   "exercices": [
     {{
       "titre": "…",
-      "type": "qcm|vrai_faux|texte_trou|reponse_libre",
+      "type": "qcm|vrai_faux|texte_trou|reponse_libre|ordre_elements|correspondance|identification_erreur",
       "enonce": "…",
       "options": ["A. …", "B. …", "C. …", "D. …"],
       "reponse_correcte": "…",
@@ -859,7 +875,7 @@ Réponds UNIQUEMENT avec ce JSON :
         for i, ex in enumerate(ex_data.get("exercices", [])):
             type_val    = ex.get("type", "qcm")
             opts        = ex.get("options")
-            options_val = opts if type_val in ("qcm", "vrai_faux", "texte_trou") and isinstance(opts, list) else None
+            options_val = opts if type_val in ("qcm", "vrai_faux", "texte_trou", "ordre_elements", "correspondance", "identification_erreur") and isinstance(opts, list) else None
 
             # Groupe 3 reponse_libre → format APC avec situation/consigne/critères
             raw_enonce = ex.get("enonce", "")
@@ -1196,6 +1212,26 @@ async def generer_exercices_ia(
         ),
         "reponse_libre": (
             '"options" = null. "reponse_correcte" = réponse modèle complète et concise (1-3 phrases).'
+        ),
+        "ordre_elements": (
+            'L\'énoncé décrit une procédure ou un processus à remettre en ordre. '
+            '"options" = liste de 4-6 étapes MÉLANGÉES (ordre aléatoire, libellés courts). '
+            '"reponse_correcte" = JSON string array des étapes dans l\'ORDRE CORRECT, '
+            'ex: \'["Étape 1 : initialiser la variable", "Étape 2 : entrer dans la boucle", ...]\'. '
+            'Les étapes dans options DOIVENT correspondre exactement aux étapes dans reponse_correcte.'
+        ),
+        "correspondance": (
+            'L\'énoncé demande d\'associer des termes à leurs définitions/valeurs. '
+            '"options" = tableau PLAT alternant gauche et droite : '
+            '["terme1", "def1", "terme2", "def2", "terme3", "def3"] — exactement 3-4 paires. '
+            '"reponse_correcte" = JSON string de paires : '
+            '\'[["terme1","def1"],["terme2","def2"],["terme3","def3"]]\'. '
+            'Les éléments de options DOIVENT correspondre exactement à ceux de reponse_correcte.'
+        ),
+        "identification_erreur": (
+            'L\'énoncé présente un raisonnement ou une série d\'étapes dont UNE EST INCORRECTE. '
+            '"options" = liste de 4-5 étapes/affirmations numérotées (une seule est fausse). '
+            '"reponse_correcte" = texte EXACT de l\'étape incorrecte (copie exacte d\'un élément de options).'
         ),
     }.get(type_ex, '"options" = null, "reponse_correcte" = réponse attendue.')
 

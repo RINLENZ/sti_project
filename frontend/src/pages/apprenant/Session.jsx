@@ -448,6 +448,12 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
 /* ── Sons de feedback + fanfare de fin ───────────────────────────
    Web Audio API synthétisé — aucune dépendance externe          */
 
+// Normalisation front-end pour comparaison des réponses (accents, casse)
+function _normaliserFront(s) {
+  if (s == null) return ''
+  return String(s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
 // Fanfare jouée dès que la session se termine, indépendamment du TTS.
 // ≥80% : accord majeur montant joyeux. <80% : mélodie d'encouragement.
 function playEndFanfare(pct) {
@@ -545,6 +551,10 @@ export default function Session() {
   const [reponse, setReponse]     = useState(null)
   const [blanks, setBlanks]       = useState([])
   const [activeBlank, setActiveBlank] = useState(null)   // index du trou sélectionné
+  const [ordreUser, setOrdreUser] = useState([])          // ordre_elements
+  const [corrPairs, setCorrPairs] = useState({})          // correspondance {gauche: droite}
+  const [selectedGauche, setSelectedGauche] = useState(null) // correspondance — sélection en cours
+  const [droitesMelangees, setDroitesMelangees] = useState([]) // correspondance — colonne droite mélangée
   const [resultat, setResultat]   = useState(null)
   const [indices, setIndices]     = useState(0)
   const [termine, setTermine]     = useState(false)
@@ -714,6 +724,27 @@ export default function Session() {
     if (audioContextRef.current)    audioContextRef.current.close()
     if (window.speechSynthesis)     window.speechSynthesis.cancel()
   }, [])
+
+  // Initialise les états des nouveaux types à chaque changement d'exercice
+  useEffect(() => {
+    const ex = exercices[current]
+    if (!ex) return
+    if (ex.type === 'ordre_elements' && Array.isArray(ex.options) && ex.options.length) {
+      setOrdreUser([...ex.options])
+      setReponse(JSON.stringify(ex.options))
+    } else if (ex.type === 'correspondance' && Array.isArray(ex.options) && ex.options.length) {
+      setCorrPairs({})
+      setSelectedGauche(null)
+      setReponse(null)
+      const droites = ex.options.filter((_, i) => i % 2 !== 0)
+      const shuffled = [...droites]
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+      }
+      setDroitesMelangees(shuffled)
+    }
+  }, [current, exercices])
 
   // Chrono par question — reset à chaque nouvelle question, s'arrête après réponse
   useEffect(() => {
@@ -1177,6 +1208,7 @@ export default function Session() {
         setTermine(true)
       } else {
         setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
+        setOrdreUser([]); setCorrPairs({}); setSelectedGauche(null); setDroitesMelangees([])
         setIndices(0); setAdaptation(null); setExplicationIA(null); setIaHistory([]); setRessourceAide(null)
         setAnswerFlash(null); setFeedbackMsg('')
         setQuestionTime(Date.now())
@@ -1359,7 +1391,7 @@ export default function Session() {
                 }}>
                   <ArrowLeft size={15}/> Retour au cours
                 </button>
-                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null); setBktHistory({}); setIsLeaving(false) }} style={{
+                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null); setOrdreUser([]); setCorrPairs({}); setSelectedGauche(null); setDroitesMelangees([]); setBktHistory({}); setIsLeaving(false) }} style={{
                   padding: '13px', background: C.brownPale,
                   color: C.brown, border: `1.5px solid ${C.brownLight}40`,
                   borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
@@ -1406,6 +1438,10 @@ export default function Session() {
   const isMultiBlank     = nbBlanksInEnonce > 1
   const multiParts       = isMultiBlank ? ex.enonce.split('___') : []
   const multiNbBlanks    = nbBlanksInEnonce
+  const isOrdreElements  = ex.type === 'ordre_elements'
+  const isCorrespondance = ex.type === 'correspondance'
+  const isIdentErreur    = ex.type === 'identification_erreur'
+  const corrGauches      = isCorrespondance ? (ex.options || []).filter((_, i) => i % 2 === 0) : []
   const MASCOT = {
     engagement_eleve:'🦁', engagement_modere:'🐘', engagement_faible:'🐢',
     confusion:'🤔', frustration:'🐆', ennui:'😴', neutre:'🦉', decrochage:'⚠️',
@@ -2146,6 +2182,181 @@ export default function Session() {
                     {reponse.trim().split(/\s+/).length} mot(s)
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* ── Ordre des éléments ── */}
+            {isOrdreElements && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 10px' }}>
+                  {resultat ? 'Ordre soumis' : 'Remets ces étapes dans l\'ordre correct :'}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {ordreUser.map((item, i) => {
+                    const correctOrder = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
+                    const isCorrect = !!resultat && _normaliserFront(item) === _normaliserFront(correctOrder[i])
+                    return (
+                      <div key={item + i} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        background: resultat ? (isCorrect ? C.emeraldPale : C.redPale) : C.surface,
+                        border: `2px solid ${resultat ? (isCorrect ? C.emerald : C.red) + '60' : C.brownPale}`,
+                        borderRadius: 12, padding: '10px 14px', transition: 'all .2s',
+                      }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: C.brown, minWidth: 24, flexShrink: 0 }}>{i + 1}.</span>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: resultat ? (isCorrect ? C.emerald : C.red) : C.text, lineHeight: 1.4 }}>{item}</span>
+                        {!resultat && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+                            <button onClick={() => {
+                              if (i === 0) return
+                              const arr = [...ordreUser];
+                              [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]
+                              setOrdreUser(arr); setReponse(JSON.stringify(arr))
+                            }} style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', fontSize: 15, lineHeight: 1, padding: '1px 4px', opacity: i === 0 ? 0.2 : 0.7 }}>▲</button>
+                            <button onClick={() => {
+                              if (i === ordreUser.length - 1) return
+                              const arr = [...ordreUser];
+                              [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]
+                              setOrdreUser(arr); setReponse(JSON.stringify(arr))
+                            }} style={{ background: 'none', border: 'none', cursor: i === ordreUser.length - 1 ? 'default' : 'pointer', fontSize: 15, lineHeight: 1, padding: '1px 4px', opacity: i === ordreUser.length - 1 ? 0.2 : 0.7 }}>▼</button>
+                          </div>
+                        )}
+                        {resultat && (isCorrect
+                          ? <CheckCircle size={16} color={C.emerald} style={{ flexShrink: 0 }}/>
+                          : <XCircle    size={16} color={C.red}     style={{ flexShrink: 0 }}/>)}
+                      </div>
+                    )
+                  })}
+                </div>
+                {resultat && !resultat.correct && (() => {
+                  const arr = (() => { try { return JSON.parse(resultat.reponse_correcte) } catch { return [] } })()
+                  return arr.length ? (
+                    <div style={{ marginTop: 10, background: C.emeraldPale, borderRadius: 10, padding: '8px 14px', border: `1px solid ${C.emerald}30` }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.emerald }}>
+                        ✅ Ordre correct : {arr.join(' → ')}
+                      </p>
+                    </div>
+                  ) : null
+                })()}
+              </div>
+            )}
+
+            {/* ── Correspondance ── */}
+            {isCorrespondance && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 12px' }}>
+                  {resultat ? 'Résultat' : 'Relie chaque élément à sa correspondance :'}
+                </p>
+                {selectedGauche && !resultat && (
+                  <p style={{ fontSize: 12, color: C.brown, fontWeight: 700, margin: '0 0 8px', background: C.brownPale, padding: '6px 12px', borderRadius: 8 }}>
+                    « {selectedGauche} » sélectionné — clique sur sa correspondance →
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: isMobile ? 8 : 12 }}>
+                  {/* Colonne gauche */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {corrGauches.map((gauche) => {
+                      const paired = corrPairs[gauche]
+                      const isSel = selectedGauche === gauche
+                      const correctPairs = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
+                      const correctDroite = correctPairs.find(p => p[0] === gauche)?.[1]
+                      const isOk = !!resultat && paired && _normaliserFront(paired) === _normaliserFront(correctDroite)
+                      const isKo = !!resultat && paired && !isOk
+                      return (
+                        <button key={gauche} onClick={() => {
+                          if (resultat) return
+                          setSelectedGauche(isSel ? null : gauche)
+                        }} style={{
+                          padding: '9px 12px', borderRadius: 10, textAlign: 'left',
+                          background: resultat ? (isOk ? C.emeraldPale : isKo ? C.redPale : C.surface) : (isSel ? C.brown : paired ? C.brownPale : C.surface),
+                          color: resultat ? (isOk ? C.emerald : isKo ? C.red : C.text) : (isSel ? 'white' : C.text),
+                          border: `2px solid ${resultat ? (isOk ? C.emerald : isKo ? C.red : C.brownPale) + '80' : (isSel ? C.brown : paired ? C.brown + '50' : C.brownPale)}`,
+                          fontSize: isMobile ? 12 : 13, fontWeight: 700, cursor: resultat ? 'default' : 'pointer',
+                          transition: 'all .15s', lineHeight: 1.4,
+                        }}>
+                          {gauche}
+                          {paired && !resultat && <span style={{ fontSize: 10, color: isSel ? 'rgba(255,255,255,.7)' : C.textSec, marginLeft: 4 }}>↔ {paired}</span>}
+                          {resultat && (isOk ? <CheckCircle size={14} color={C.emerald} style={{ marginLeft: 4, verticalAlign: 'middle' }}/> : isKo ? <XCircle size={14} color={C.red} style={{ marginLeft: 4, verticalAlign: 'middle' }}/> : null)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {/* Colonne droite (mélangée) */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {droitesMelangees.map((droite) => {
+                      const alreadyUsed = Object.values(corrPairs).includes(droite)
+                      const correctPairs = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
+                      const expectedGauche = correctPairs.find(p => p[1] === droite)?.[0]
+                      const actualGauche = Object.entries(corrPairs).find(([, d]) => d === droite)?.[0]
+                      const isOk = !!resultat && expectedGauche && actualGauche && _normaliserFront(actualGauche) === _normaliserFront(expectedGauche)
+                      const isKo = !!resultat && actualGauche && !isOk
+                      const isUnmatched = !!resultat && !actualGauche
+                      return (
+                        <button key={droite} onClick={() => {
+                          if (resultat || !selectedGauche) return
+                          const newPairs = { ...corrPairs, [selectedGauche]: droite }
+                          setCorrPairs(newPairs)
+                          setSelectedGauche(null)
+                          const allPaired = corrGauches.every(g => newPairs[g])
+                          setReponse(allPaired ? JSON.stringify(Object.entries(newPairs)) : null)
+                        }} style={{
+                          padding: '9px 12px', borderRadius: 10, textAlign: 'left',
+                          background: resultat ? (isOk ? C.emeraldPale : isKo ? C.redPale : C.surface) : (alreadyUsed ? C.brownPale : selectedGauche ? C.brown + '12' : C.surface),
+                          color: resultat ? (isOk ? C.emerald : isKo ? C.red : C.textSec) : C.text,
+                          border: `2px solid ${resultat ? (isOk ? C.emerald : isKo ? C.red : C.brownPale) + '80' : (selectedGauche ? C.brown : C.brownPale)}`,
+                          fontSize: isMobile ? 12 : 13, fontWeight: 700,
+                          cursor: resultat ? 'default' : (selectedGauche ? 'pointer' : 'default'),
+                          opacity: !resultat && !selectedGauche && alreadyUsed ? 0.5 : isUnmatched ? 0.6 : 1,
+                          textDecoration: !resultat && alreadyUsed ? 'line-through' : 'none',
+                          transition: 'all .15s', lineHeight: 1.4,
+                        }}>
+                          {droite}
+                          {resultat && (isOk ? <CheckCircle size={14} color={C.emerald} style={{ marginLeft: 4, verticalAlign: 'middle' }}/> : isKo ? <XCircle size={14} color={C.red} style={{ marginLeft: 4, verticalAlign: 'middle' }}/> : null)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {!reponse && !resultat && corrGauches.length > 0 && (
+                  <p style={{ fontSize: 11, color: C.textSec, margin: '8px 0 0' }}>
+                    {Object.keys(corrPairs).length}/{corrGauches.length} paires faites
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ── Identification d'erreur ── */}
+            {isIdentErreur && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 10px' }}>
+                  {resultat ? 'Résultat' : 'Identifie l\'étape incorrecte :'}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(ex.options || []).map((step, i) => {
+                    const isSel = reponse === step
+                    const isTheError = !!resultat && _normaliserFront(step) === _normaliserFront(resultat.reponse_correcte)
+                    const userWasWrong = !!resultat && !resultat.correct && isSel
+                    return (
+                      <button key={i} onClick={() => !resultat && setReponse(step)} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '11px 14px', borderRadius: 12, textAlign: 'left',
+                        background: resultat
+                          ? (isTheError ? C.redPale : C.surface)
+                          : (isSel ? C.red + '18' : C.surface),
+                        border: `2px solid ${resultat
+                          ? (isTheError ? C.red + '80' : C.brownPale + '50')
+                          : (isSel ? C.red : C.brownPale)}`,
+                        cursor: resultat ? 'default' : 'pointer',
+                        opacity: resultat && !isTheError && !userWasWrong ? 0.5 : 1,
+                        transition: 'all .15s',
+                      }}>
+                        <span style={{ fontSize: 11, fontWeight: 900, color: C.textSec, minWidth: 56, flexShrink: 0, marginTop: 1 }}>Étape {i + 1}</span>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: isTheError && resultat ? C.red : C.text, lineHeight: 1.5 }}>{step}</span>
+                        {resultat && isTheError && <XCircle size={16} color={C.red} style={{ flexShrink: 0 }}/>}
+                        {userWasWrong && !isTheError && <XCircle size={16} color={C.red + '80'} style={{ flexShrink: 0 }}/>}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
 
