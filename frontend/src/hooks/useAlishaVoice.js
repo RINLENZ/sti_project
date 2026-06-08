@@ -28,8 +28,8 @@ function cleanForTTS(text) {
   if (!text) return ''
   // 1. Convertit LaTeX display ($$...$$) et inline ($...$) en français parlé
   let clean = text
-    .replace(/\$\$([^$]+)\$\$/gs, (_, latex) => ' ' + latexToFrench(latex) + ' ')
-    .replace(/\$([^$\n]+)\$/g,    (_, latex) => ' ' + latexToFrench(latex) + ' ')
+    .replace(/\$\$([^$]+)\$\$/gs, (_, latex) => { try { return ' ' + latexToFrench(latex) + ' ' } catch { return ' ' } })
+    .replace(/\$([^$\n]+)\$/g,    (_, latex) => { try { return ' ' + latexToFrench(latex) + ' ' } catch { return ' ' } })
   // 2. Emojis (plages Unicode principales)
   clean = clean
     .replace(/[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, '')
@@ -218,7 +218,7 @@ export default function useAlishaVoice() {
   // ── API publique : speak (nettoyage → Edge TTS → fallback Web Speech) ─
   const speak = useCallback(async (text, opts = {}) => {
     const clean = cleanForTTS(text)
-    if (!clean) return
+    if (!clean) { opts.onEnd?.(); return }
     const ok = await speakEdge(clean, opts)
     // ok === true  → Edge TTS a joué
     // ok === null  → supplanté par un appel plus récent, ne rien faire

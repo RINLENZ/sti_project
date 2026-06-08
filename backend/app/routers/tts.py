@@ -6,7 +6,6 @@ POST /api/tts/speak  → stream audio/mpeg
 GET  /api/tts/voices → liste des voix supportées
 """
 import io
-import html as html_lib
 import edge_tts
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -54,25 +53,6 @@ class TTSRequest(BaseModel):
         return v
 
 
-def _ssml_wrap(text: str, voice_id: str, rate: str) -> str:
-    """
-    Enveloppe le texte en SSML pour forcer la détection fr-FR.
-    Nécessaire pour Vivienne (multilingue) qui bascule en espagnol
-    sur sin/cos/tan et autres termes identiques entre langues.
-    """
-    safe = html_lib.escape(text)
-    return (
-        '<speak version="1.0" '
-        'xmlns="http://www.w3.org/2001/10/synthesis" '
-        'xmlns:mstts="https://www.w3.org/2001/mstts" '
-        f'xml:lang="fr-FR">'
-        f'<voice name="{voice_id}">'
-        f'<prosody rate="{rate}">'
-        f'<lang xml:lang="fr-FR">{safe}</lang>'
-        f'</prosody></voice></speak>'
-    )
-
-
 @router.post("/speak")
 async def speak(req: TTSRequest):
     """
@@ -82,9 +62,8 @@ async def speak(req: TTSRequest):
     """
     voice_id = VOICES[req.voice]
     rate     = VOICE_RATES[req.voice]
-    ssml     = _ssml_wrap(req.text, voice_id, rate)
     try:
-        communicate = edge_tts.Communicate(ssml, voice_id)
+        communicate = edge_tts.Communicate(req.text, voice_id, rate=rate)
         buf = io.BytesIO()
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":

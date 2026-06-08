@@ -4,7 +4,7 @@
  * Capacité : 200 entrées, éviction LRU sur la plus ancienne.
  */
 
-const DB_NAME   = 'alisha_tts_cache'
+const DB_NAME   = 'alisha_tts_cache_v2'
 const STORE     = 'audio'
 const VERSION   = 1
 const MAX_ITEMS = 200

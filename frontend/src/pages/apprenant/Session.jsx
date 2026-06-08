@@ -2289,7 +2289,7 @@ export default function Session() {
                               </Suspense>
                               <div style={{ flex: 1 }}>
                                 <span style={{ fontSize: 11, fontWeight: 800, color: C.brown, display: 'block' }}>Alisha explique</span>
-                                <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: '4px 0 0' }}>{explicationIA}</p>
+                                <RichText text={explicationIA} style={{ fontSize: 13, lineHeight: 1.7, margin: '4px 0 0' }} />
                               </div>
                             </div>
                             <button onClick={() => setExplicationIA(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.textSec, textDecoration: 'underline', padding: 0 }}>

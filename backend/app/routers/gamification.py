@@ -153,7 +153,7 @@ def _compute_badge_conditions(db: Session, user_id: uuid.UUID, stats: UserStats)
     # Session avec engagement fusionné ≥ 0.80
     row3 = db.execute(text(
         "SELECT COUNT(*) FROM learning_sessions "
-        "WHERE user_id = :uid AND score_fusionne >= 0.80 AND ended_at IS NOT NULL"
+        "WHERE user_id = :uid AND score_engagement >= 0.80 AND ended_at IS NOT NULL"
     ), {"uid": str(user_id)}).fetchone()
     session_engagement_eleve = int(row3[0] or 0) > 0
 
