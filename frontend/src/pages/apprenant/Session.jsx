@@ -445,8 +445,41 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
 
 
 
-/* ── Sons de feedback ─────────────────────────────────────────────
+/* ── Sons de feedback + fanfare de fin ───────────────────────────
    Web Audio API synthétisé — aucune dépendance externe          */
+
+// Fanfare jouée dès que la session se termine, indépendamment du TTS.
+// ≥80% : accord majeur montant joyeux. <80% : mélodie d'encouragement.
+function playEndFanfare(pct) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    if (pct >= 80) {
+      // Accord majeur ascendant + note de couronne
+      [[523, 0, 'sine', .28], [659, .14, 'sine', .25], [784, .28, 'sine', .22],
+       [1047, .44, 'sine', .30], [1319, .56, 'triangle', .22]].forEach(([freq, t, type, vol]) => {
+        const osc = ctx.createOscillator(), g = ctx.createGain()
+        osc.type = type; osc.frequency.value = freq
+        g.gain.setValueAtTime(0, ctx.currentTime + t)
+        g.gain.linearRampToValueAtTime(vol, ctx.currentTime + t + .06)
+        g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + t + .55)
+        osc.connect(g); g.connect(ctx.destination)
+        osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + .6)
+      })
+    } else {
+      // Mélodie encourageante (3 notes montantes douces)
+      [[440, 0], [523, .22], [587, .44]].forEach(([freq, t]) => {
+        const osc = ctx.createOscillator(), g = ctx.createGain()
+        osc.type = 'sine'; osc.frequency.value = freq
+        g.gain.setValueAtTime(0, ctx.currentTime + t)
+        g.gain.linearRampToValueAtTime(.18, ctx.currentTime + t + .05)
+        g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + t + .45)
+        osc.connect(g); g.connect(ctx.destination)
+        osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + .5)
+      })
+    }
+  } catch {}
+}
+
 function playFeedback(correct) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -764,6 +797,8 @@ export default function Session() {
   useEffect(() => {
     if (!termine) return
     const pct = scores.length > 0 ? Math.round(scores.filter(s => s > 0).length / scores.length * 100) : 0
+    // Fanfare immédiate (Web Audio, ne dépend pas du backend)
+    playEndFanfare(pct)
     // Stocke les deux timeouts pour les annuler si l'utilisateur quitte avant leur déclenchement
     const ttsId = setTimeout(() => alishaCtrl.triggerEvent('session_complete', { pct }), 600)
     let startTs = null

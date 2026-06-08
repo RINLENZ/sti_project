@@ -13,7 +13,7 @@
  *   - edgeAvailable : ne bascule sur false que si la requête N'a pas été supplantée
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { splitSpeechChunks } from '../utils/latexToSpeech'
+import { splitSpeechChunks, latexToFrench } from '../utils/latexToSpeech'
 import { getAudio, setAudio } from '../services/ttsCache'
 import { BASE_URL } from '../services/api'
 
@@ -22,20 +22,24 @@ const VOICE_SETUP_KEY = 'alisha_voice_setup_done'
 const PREF_VOICE_KEY  = 'alisha_edge_voice'   // 'denise' | 'vivienne'
 
 // ── Nettoyage du texte avant TTS ──────────────────────────────────
-// Retire emojis, markdown, espaces multiples pour éviter que le
-// moteur ne lise "emoji celebration super" au lieu de "Super !".
+// Ordre important : LaTeX d'abord (remplace $...$ par du texte),
+// puis emojis/markdown (évite de lire "backslash frac" ou "dollar").
 function cleanForTTS(text) {
   if (!text) return ''
-  return text
-    // Emojis courants (plages Unicode principales)
+  // 1. Convertit LaTeX display ($$...$$) et inline ($...$) en français parlé
+  let clean = text
+    .replace(/\$\$([^$]+)\$\$/gs, (_, latex) => ' ' + latexToFrench(latex) + ' ')
+    .replace(/\$([^$\n]+)\$/g,    (_, latex) => ' ' + latexToFrench(latex) + ' ')
+  // 2. Emojis (plages Unicode principales)
+  clean = clean
     .replace(/[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, '')
-    // Symboles supplémentaires
     .replace(/[\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}]/gu, '')
     // Markdown léger (* _ ` ~ # |)
     .replace(/[*_`~#|]/g, '')
     // Espaces multiples
     .replace(/\s{2,}/g, ' ')
     .trim()
+  return clean
 }
 
 // ── Web Speech — scoring de voix (logique v1 conservée) ───────────
