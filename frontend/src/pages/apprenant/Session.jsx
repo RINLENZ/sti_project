@@ -19,6 +19,7 @@ import { useKWSModel } from '../../hooks/useKWSModel'
 import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 import { clearCache } from '../../services/cache'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
+import useAlishaController from '../../hooks/useAlishaController'
 
 const Alisha = lazy(() => import('../../components/Alisha'))
 
@@ -567,6 +568,18 @@ export default function Session() {
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
   const { lastKeyword }                 = useKWSModel(audioActive)
   const { speak: _alishaSpeak, stop: _stopAlisha } = useAlishaVoice()
+
+  const alishaCtrl = useAlishaController({
+    speakFn:      _alishaSpeak,
+    stopFn:       _stopAlisha,
+    engagement:   { score: engagementScore, emotion },
+    bkt:          resultat?.bkt ?? null,
+    streak,
+    studentName:  user?.prenom ?? null,
+    answerFlash,
+    loadingIA,
+    explicationIA,
+  })
   const faceApiIntervalRef = useRef(null)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
@@ -747,12 +760,8 @@ export default function Session() {
   useEffect(() => {
     if (!termine) return
     const pct = scores.length > 0 ? Math.round(scores.filter(s => s > 0).length / scores.length * 100) : 0
-    const finMsg = pct >= 90 ? 'Incroyable ! Tu as presque tout réussi !'
-      : pct >= 70 ? 'Très bien joué ! Tu progresses vraiment.'
-      : pct >= 50 ? 'Bien essayé. Continue, tu vas y arriver !'
-      : 'Chaque tentative te rapproche du succès !'
     // Stocke les deux timeouts pour les annuler si l'utilisateur quitte avant leur déclenchement
-    const ttsId = setTimeout(() => tts(finMsg), 600)
+    const ttsId = setTimeout(() => alishaCtrl.triggerEvent('session_complete', { pct }), 600)
     let startTs = null
     const anim = (ts) => {
       if (!startTs) startTs = ts
@@ -1060,7 +1069,11 @@ export default function Session() {
       setScores(prev => [...prev, data.points_gagnes])
       playFeedback(data.correct)
       setAnswerFlash(data.correct ? 'correct' : 'wrong')
-      tts(data.correct ? 'Excellent ! Continue comme ça !' : 'Pas tout à fait — tu vas y arriver !')
+      alishaCtrl.triggerEvent(data.correct ? 'correct' : 'wrong', {
+        bkt:       data.bkt ?? null,
+        streak:    data.correct ? streak + 1 : 0,
+        hintsUsed: indices,
+      })
       setTimeout(() => setAnswerFlash(null), 750)
       const p = cnnEmotionRef.current?.probs || {}
       const emotion_probs = {
@@ -1119,6 +1132,9 @@ export default function Session() {
         clearCache('dashboard_' + user.id)
         // Marque le défi du jour comme accompli
         localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
+        const nb = exercices.length
+        const xpGagnes = 20 + (r * 10) + (nb > 0 && r / nb >= 0.8 ? 50 : 0) + (nb > 0 && r === nb ? 50 : 0)
+        api.post('/api/gamification/award-xp', { user_id: user.id, xp_gagnes: xpGagnes, session_terminee: true, nb_exercices: nb, nb_corrects: r }).catch(() => {}).then(() => window.__refreshXPBar?.())
         setTermine(true)
       } else {
         setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
@@ -1357,35 +1373,8 @@ export default function Session() {
   }
   const mascot = MASCOT[emotion] || '🦉'
 
-  // ── État Alisha mappé sur contexte session ────────────────────
-  const alishaState = answerFlash === 'correct'        ? 'correct'
-    : answerFlash === 'wrong'                           ? 'wrong'
-    : loadingIA                                         ? 'typing'
-    : explicationIA                                     ? 'speaking'
-    : emotion === 'confusion' || emotion === 'decrochage' ? 'confused'
-    : emotion === 'frustration'                         ? 'wrong'
-    : emotion === 'ennui'                               ? 'idle'
-    : emotion === 'engagement_eleve'                    ? 'excited'
-    : resultat                                          ? 'speaking'
-    : 'question'
-
-  const alishaBubble = answerFlash === 'correct'
-    ? 'Excellent ! Continue comme ça !'
-    : answerFlash === 'wrong'
-    ? 'Pas tout à fait — tu vas y arriver !'
-    : loadingIA
-    ? 'Je cherche une explication adaptée…'
-    : explicationIA
-    ? 'Voilà une autre façon de voir les choses.'
-    : emotion === 'confusion'
-    ? 'Tu sembles perdu·e ? Les indices peuvent t\'aider.'
-    : emotion === 'frustration'
-    ? 'Prends une respiration. Tu progresses !'
-    : emotion === 'ennui'
-    ? 'Allez, encore un effort !'
-    : emotion === 'decrochage'
-    ? 'Tu es toujours là ? Fais une petite pause si besoin.'
-    : null
+  // ── État Alisha — délégué au contrôleur (BKT + engagement + diversifiers) ──
+  const { alishaState, alishaBubble } = alishaCtrl
 
   /* ── Panneau IA ─────────────────────────────────────────── */
   const PanneauIA = ({ isOverlay = false }) => (

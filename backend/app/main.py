@@ -28,6 +28,9 @@ from .routers import ws as ws_router
 from .routers import chat as chat_router
 from .routers import training as training_router
 from .routers import cours_live as cours_live_router
+from .routers import tts as tts_router
+from .routers import gamification as gamification_router
+from .models import user_stats as _user_stats_models   # noqa: F401 — registers table
 
 app = FastAPI(
     title="STI Adaptatif — API",
@@ -116,6 +119,10 @@ def create_missing_tables():
             ("learning_sessions", "score_facial",           "FLOAT"),
             ("learning_sessions", "score_audio",            "FLOAT"),
             ("learning_sessions", "score_comportemental",   "FLOAT"),
+            # user_stats — table créée via create_all, colonnes ici pour sécurité
+            ("user_stats",        "total_sessions",         "INTEGER NOT NULL DEFAULT 0"),
+            ("user_stats",        "total_exercices",        "INTEGER NOT NULL DEFAULT 0"),
+            ("user_stats",        "total_corrects",         "INTEGER NOT NULL DEFAULT 0"),
         ]
         for _t, _c, _typedef in _COLS:
             if not _col(conn, _t, _c):
@@ -217,6 +224,8 @@ app.include_router(ws_router.router)
 app.include_router(chat_router.router)
 app.include_router(training_router.router)
 app.include_router(cours_live_router.router)
+app.include_router(tts_router.router)
+app.include_router(gamification_router.router)
 
 @app.get("/health")
 def health_check():

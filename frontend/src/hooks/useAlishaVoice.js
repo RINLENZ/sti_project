@@ -1,33 +1,37 @@
 /**
- * Hook Web Speech API pour la voix d'Alisha.
+ * Hook voix Alisha — Edge TTS Neural (fr-FR-DeniseNeural ou VivienneMultilingualNeural)
+ * avec fallback Web Speech API.
  *
- * Problèmes corrigés :
- * 1. Chrome charge les voix en 2 vagues (locales d'abord, cloud ensuite).
- *    Sur mobile/serveur sans voix locale installée, lockedRef restait false
- *    → un 2ème voiceschanged arrivait après 200-500ms et changeait la voix
- *    en pleine session.
- * 2. La voix n'était pas stoppée au démontage du composant.
+ * Chaîne de priorité :
+ *   1. Edge TTS via backend /api/tts/speak (qualité neural, cache IndexedDB)
+ *   2. Web Speech API (voix locale FR si disponible, sinon cloud Google)
  *
- * Stratégie de verrouillage (stable en ligne ET hors ligne) :
- * - Si voix en localStorage → on la réutilise et on verrouille immédiatement.
- * - Si voix locale fr-FR disponible → verrouillage immédiat (stable).
- * - Sinon (voix cloud uniquement, ex. Chrome mobile sans pack) →
- *   on attend le 1er événement voiceschanged (chargement cloud terminé),
- *   puis on verrouille définitivement. Après ça, plus aucun re-pick.
+ * Fallback automatique : si Edge TTS échoue (backend hors ligne, réseau), on
+ * bascule sur Web Speech pour la session. Un flag edgeAvailable permet de
+ * réessayer Edge TTS à la prochaine session.
+ *
+ * Stratégie de verrouillage Web Speech (conservée de la v1) :
+ *   Si voix locale fr-FR disponible → verrouillage immédiat (stable).
+ *   Sinon → verrouillage après premier voiceschanged (vague cloud chargée).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { splitSpeechChunks } from '../utils/latexToSpeech'
+import { getAudio, setAudio } from '../services/ttsCache'
+import { BASE_URL } from '../services/api'
 
-const STORAGE_KEY = 'alisha_voice_name'
+const STORAGE_KEY     = 'alisha_voice_name'
+const VOICE_SETUP_KEY = 'alisha_voice_setup_done'
+const PREF_VOICE_KEY  = 'alisha_edge_voice'   // 'denise' | 'vivienne'
 
-// Score de préférence : voix locale FR féminine > voix locale FR > Google français > autres cloud FR
+// ── Web Speech — scoring de voix (logique v1 conservée) ───────────
+
 function scoreVoice(v) {
   if (!v.lang.startsWith('fr')) return -1
   let s = 0
-  if (v.localService)                                 s += 100  // local = stable, meilleure qualité
+  if (v.localService)                                 s += 100
   if (v.lang === 'fr-FR')                             s += 10
   if (/female|femme|hortense|amelie/i.test(v.name))  s += 5
-  // Parmi les voix cloud, "Google français" est la mieux notée — pitch neutre s'applique mieux
+  // Parmi les voix cloud, "Google français" est la mieux notée
   if (!v.localService && /google/i.test(v.name))      s += 8
   return s
 }
@@ -39,68 +43,59 @@ function bestFrVoice(voices) {
     .sort((a, b) => b.s - a.s)[0]?.v || null
 }
 
-const VOICE_SETUP_KEY = 'alisha_voice_setup_done'
+// ── Hook principal ────────────────────────────────────────────────
 
 export default function useAlishaVoice() {
-  const voiceRef          = useRef(null)
-  const lockedRef         = useRef(false)
-  const voicesChangedOnce = useRef(false)
-  const mountedRef        = useRef(true)
-  const readingRef        = useRef(false)
+
+  // ── Refs Web Speech ───────────────────────────────────────────────
+  const voiceRef   = useRef(null)
+  const lockedRef  = useRef(false)
+  const mountedRef = useRef(true)
+  const readingRef = useRef(false)
+
+  // ── Refs Edge TTS ─────────────────────────────────────────────────
+  const audioRef   = useRef(null)   // HTMLAudioElement courant
+
+  // ── State ─────────────────────────────────────────────────────────
+  const [edgeVoice, setEdgeVoice] = useState(
+    () => localStorage.getItem(PREF_VOICE_KEY) || 'denise'
+  )
+  const [edgeAvailable,   setEdgeAvailable]   = useState(true)
   const [isReading,       setIsReading]       = useState(false)
-  // true si l'utilisateur est sur un appareil sans voix locale fr-FR (android sans pack, etc.)
   const [needsVoiceSetup, setNeedsVoiceSetup] = useState(false)
 
+  // ── Init Web Speech (fallback) ────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true
     if (!window.speechSynthesis) return
 
     function pickVoice(fromEvent = false) {
       if (!mountedRef.current || lockedRef.current) return
-
       const voices = window.speechSynthesis.getVoices()
       if (!voices.length) return
 
-      // 1. Voix persistée en localStorage → confiance totale, verrouillage immédiat
       const savedName = localStorage.getItem(STORAGE_KEY)
       if (savedName) {
         const saved = voices.find(v => v.name === savedName)
-        if (saved) {
-          voiceRef.current = saved
-          lockedRef.current = true
-          return
-        }
-        // Nom sauvé introuvable (autre navigateur/OS) → on supprime et on repick
+        if (saved) { voiceRef.current = saved; lockedRef.current = true; return }
         try { localStorage.removeItem(STORAGE_KEY) } catch {}
       }
 
       const best = bestFrVoice(voices)
       if (!best) return
-
       voiceRef.current = best
 
-      // Signale dès la première sélection d'une voix cloud (pas de voix locale FR).
-      // Bug corrigé : l'ancien code mettait ce check dans shouldLock, donc sur les
-      // navigateurs où voiceschanged ne fire pas, le banner n'apparaissait jamais.
       if (!best.localService && !localStorage.getItem(VOICE_SETUP_KEY)) {
         setNeedsVoiceSetup(true)
       }
 
-      // Verrouiller si :
-      //   (a) voix locale trouvée (stable dès le premier appel)
-      //   (b) on est dans un voiceschanged (= vague cloud chargée, liste complète)
-      const shouldLock = best.localService || fromEvent
-      if (shouldLock) {
+      if (best.localService || fromEvent) {
         lockedRef.current = true
         try { localStorage.setItem(STORAGE_KEY, best.name) } catch {}
       }
     }
 
-    function onVoicesChanged() {
-      voicesChangedOnce.current = true
-      pickVoice(true)  // fromEvent=true → verrouillage définitif
-    }
-
+    function onVoicesChanged() { pickVoice(true) }
     pickVoice(false)
     window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged)
 
@@ -111,14 +106,60 @@ export default function useAlishaVoice() {
     }
   }, [])
 
-  const speak = useCallback((text, { onStart, onEnd, onError, rate } = {}) => {
+  // ── Edge TTS — requête backend + cache IndexedDB ──────────────────
+  const speakEdge = useCallback(async (text, { onStart, onEnd, onError } = {}) => {
+    if (!text || !edgeAvailable) return false
+    try {
+      // 1. Cache IndexedDB
+      let audioBuf = await getAudio(edgeVoice, text)
+
+      if (!audioBuf) {
+        // 2. Appel backend
+        const resp = await fetch(`${BASE_URL}/api/tts/speak`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voice: edgeVoice }),
+          signal: AbortSignal.timeout(8000),
+        })
+        if (!resp.ok) throw new Error(`TTS HTTP ${resp.status}`)
+        audioBuf = await resp.arrayBuffer()
+        // Mise en cache async — ne bloque pas la lecture
+        setAudio(edgeVoice, text, audioBuf)
+      }
+
+      // 3. Lecture HTMLAudioElement
+      const blob = new Blob([audioBuf], { type: 'audio/mpeg' })
+      const url  = URL.createObjectURL(blob)
+
+      if (audioRef.current) {
+        audioRef.current.pause()
+        URL.revokeObjectURL(audioRef.current._blobUrl)
+      }
+
+      const audio = new Audio(url)
+      audio._blobUrl  = url
+      audioRef.current = audio
+
+      audio.onplay  = onStart || null
+      audio.onended = () => { URL.revokeObjectURL(url); onEnd?.() }
+      audio.onerror = () => { URL.revokeObjectURL(url); onError?.() }
+
+      await audio.play()
+      return true
+    } catch {
+      // Un seul échec → on désactive Edge TTS pour la session
+      setEdgeAvailable(false)
+      return false
+    }
+  }, [edgeVoice, edgeAvailable])
+
+  // ── Web Speech — speak unitaire ───────────────────────────────────
+  const speakWebSpeech = useCallback((text, { onStart, onEnd, onError, rate } = {}) => {
     if (!window.speechSynthesis || !text) return
     window.speechSynthesis.cancel()
     const utt  = new SpeechSynthesisUtterance(text)
     utt.lang   = 'fr-FR'
     utt.rate   = rate ?? 0.95
-    // Voix locale (Hortense, Thomas…) : pitch 1.15 → chaleureux, naturel.
-    // Voix cloud (Google français…)  : pitch 1.0  → neutre, évite l'effet robotique/strident.
     utt.pitch  = (voiceRef.current?.localService ?? false) ? 1.15 : 1.0
     if (voiceRef.current) utt.voice = voiceRef.current
     if (onStart) utt.onstart = onStart
@@ -127,58 +168,76 @@ export default function useAlishaVoice() {
     window.speechSynthesis.speak(utt)
   }, [])
 
+  // ── API publique : speak (Edge TTS → fallback Web Speech) ─────────
+  const speak = useCallback(async (text, opts = {}) => {
+    if (!text) return
+    const ok = await speakEdge(text, opts)
+    if (!ok) speakWebSpeech(text, opts)
+  }, [speakEdge, speakWebSpeech])
+
+  // ── stop ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
     readingRef.current = false
     setIsReading(false)
+    if (audioRef.current) {
+      audioRef.current.pause()
+      if (audioRef.current._blobUrl) URL.revokeObjectURL(audioRef.current._blobUrl)
+      audioRef.current = null
+    }
     window.speechSynthesis?.cancel()
   }, [])
 
-  /**
-   * Lit un texte long (contenu de cours) phrase par phrase.
-   * Gère les formules LaTeX converties via blocksToSpeech/latexToFrench avant appel.
-   * @param {string} fullText   - texte déjà converti en français lisible
-   * @param {object} opts
-   * @param {function} opts.onDone     - callback quand lecture terminée
-   * @param {function} opts.onChunk    - callback(index, total) à chaque phrase
-   */
-  const readAloud = useCallback((fullText, { onDone, onChunk } = {}) => {
-    if (!window.speechSynthesis || !fullText) return
-    window.speechSynthesis.cancel()
+  // ── readAloud — lecture longue par chunks ─────────────────────────
+  const readAloud = useCallback(async (fullText, { onDone, onChunk } = {}) => {
+    if (!fullText) return
+    stop()
 
-    const chunks  = splitSpeechChunks(fullText, 180)
+    const chunks = splitSpeechChunks(fullText, 180)
     if (!chunks.length) return
 
     readingRef.current = true
     setIsReading(true)
 
-    let idx = 0
-
-    function readNext() {
-      if (!readingRef.current || idx >= chunks.length) {
-        readingRef.current = false
-        setIsReading(false)
-        onDone?.()
-        return
-      }
-
-      const utt   = new SpeechSynthesisUtterance(chunks[idx])
-      utt.lang    = 'fr-FR'
-      utt.rate    = 0.9    // légèrement plus lent pour la lecture de cours
-      utt.pitch   = (voiceRef.current?.localService ?? false) ? 1.1 : 1.0
-      if (voiceRef.current) utt.voice = voiceRef.current
-      utt.onend   = () => { onChunk?.(idx, chunks.length); idx++; readNext() }
-      utt.onerror = () => { idx++; readNext() }
-
-      window.speechSynthesis.speak(utt)
+    for (let i = 0; i < chunks.length; i++) {
+      if (!readingRef.current) break
+      await new Promise((resolve) => {
+        speak(chunks[i], { onEnd: resolve, onError: resolve })
+      })
+      onChunk?.(i, chunks.length)
     }
 
-    readNext()
+    readingRef.current = false
+    setIsReading(false)
+    onDone?.()
+  }, [speak, stop])
+
+  // ── Changer la voix Edge TTS préférée ────────────────────────────
+  const setPreferredVoice = useCallback((voice) => {
+    if (!['denise', 'vivienne'].includes(voice)) return
+    setEdgeVoice(voice)
+    localStorage.setItem(PREF_VOICE_KEY, voice)
+    // Réactiver Edge TTS (peut avoir été désactivé suite à une erreur temporaire)
+    setEdgeAvailable(true)
+    // Note : pas de clearAudioCache() ici — les entrées de l'ancienne voix
+    // ont une clé différente, donc elles ne seront jamais servies par erreur.
   }, [])
 
-  const dismissVoiceSetup = () => {
+  const dismissVoiceSetup = useCallback(() => {
     setNeedsVoiceSetup(false)
     try { localStorage.setItem(VOICE_SETUP_KEY, '1') } catch {}
-  }
+  }, [])
 
-  return { speak, stop, readAloud, isReading, supported: !!window.speechSynthesis, needsVoiceSetup, dismissVoiceSetup }
+  return {
+    speak,
+    stop,
+    readAloud,
+    isReading,
+    supported: !!window.speechSynthesis || edgeAvailable,
+    needsVoiceSetup,
+    dismissVoiceSetup,
+    // Edge TTS
+    edgeVoice,
+    setPreferredVoice,
+    edgeAvailable,
+  }
 }

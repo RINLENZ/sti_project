@@ -27,6 +27,7 @@ window.addEventListener('unhandledrejection', (e) => {
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { Toaster } from 'react-hot-toast'
+import { Toaster as SonnerToaster } from 'sonner'
 import App from './App.jsx'
 import { store } from './store/store.js'
 import { ThemeProvider } from './styles/theme.jsx'
@@ -44,6 +45,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <NotificationsProvider>
               <App />
               <Toaster position="top-right" />
+              <SonnerToaster position="bottom-right" richColors expand={false} closeButton />
               <OfflineBanner />
             </NotificationsProvider>
           </ErrorBoundary>

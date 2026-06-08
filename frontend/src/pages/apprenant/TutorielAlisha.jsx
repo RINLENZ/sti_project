@@ -22,6 +22,7 @@ import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import Alisha from '../../components/Alisha'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
+import useAlishaController from '../../hooks/useAlishaController'
 import { useKWSModel } from '../../hooks/useKWSModel'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { useEmotionOnnx, preloadEmotionModel } from '../../hooks/useEmotionOnnx'
@@ -617,6 +618,17 @@ export default function TutorielAlisha() {
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
 
   const { speak, stop, readAloud, isReading, supported, needsVoiceSetup, dismissVoiceSetup } = useAlishaVoice()
+
+  // Contrôleur diversifiers — gère uniquement la phase feedback (correct/wrong)
+  // Les phases intro/ressources/exercices gardent leur propre TTS via alishaMsg()
+  const alishaCtrl = useAlishaController({
+    speakFn:     speak,
+    stopFn:      stop,
+    engagement:  { score: 0.6, emotion: 'neutre' },
+    bkt:         bktResult,
+    streak:      streakSession,
+    studentName: user?.prenom ?? null,
+  })
   const { lastKeyword } = useKWSModel(audioActive, (dur) => {
     logInteraction('vad_speech', { event: 'end', duration_seconds: dur })
   })
@@ -836,6 +848,8 @@ export default function TutorielAlisha() {
   // ── Voix Alisha ───────────────────────────────────────────────
   useEffect(() => {
     if (currentStep?.type === 'intro') return  // géré par l'effet intro
+    // Phase feedback : TTS délégué au contrôleur (diversifiers) via triggerEvent dans handleReponse
+    if (phase === 'feedback') return
     const msg = alishaMsg(phase, currentStep, feedback, user)
     if (!msg || msg === prevMessageRef.current || audioMode !== 'full' || !supported) {
       if (audioMode !== 'full') stop()
@@ -920,6 +934,9 @@ export default function TutorielAlisha() {
       playTone(440, 880, 150)
       setConfettiCorrect(true)
       setTimeout(() => setConfettiCorrect(false), 800)
+      if (audioMode === 'full') {
+        alishaCtrl.triggerEvent('correct', { bkt: bktFromServer, streak: newStreak })
+      }
       // L5 — XP selon contexte
       if (isBonus)          awardXP(20, '💪 Bonus !')
       else if (timeSecs < 15) awardXP(15, '⚡ Rapide !')
@@ -930,6 +947,9 @@ export default function TutorielAlisha() {
       else consecutiveErrRef.current = 1
       setStreakSession(0)
       playTone(440, 220, 80)
+      if (audioMode === 'full') {
+        alishaCtrl.triggerEvent('wrong', { bkt: bktFromServer, hintsUsed: consecutiveErrRef.current })
+      }
     } else {
       consecutiveErrRef.current = 0
       awardXP(5, '📝 Noté')   // réponse libre
@@ -981,12 +1001,14 @@ export default function TutorielAlisha() {
       setFeedback(null); setBktResult(null); setRessourceAide(null)
       setPhase('done')
       localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
+      const nbEx = sequence.filter(s => s.type === 'exercice' && s.data?.type !== 'reponse_libre').length
       if (sessionIdRef.current) {
-        const nbEx  = sequence.filter(s => s.type === 'exercice' && s.data?.type !== 'reponse_libre').length
         const score = nbEx > 0 ? scoreCorrects / nbEx : null
         api.post(`/api/cours/session/clore/${sessionIdRef.current}`, { score_final: score }).catch(() => {})
         sessionIdRef.current = null
       }
+      const xpGagnes = 20 + (scoreCorrects * 10) + (nbEx > 0 && scoreCorrects / nbEx >= 0.8 ? 50 : 0) + (nbEx > 0 && scoreCorrects === nbEx ? 50 : 0)
+      api.post('/api/gamification/award-xp', { user_id: user.id, xp_gagnes: xpGagnes, session_terminee: true, nb_exercices: nbEx, nb_corrects: scoreCorrects }).catch(() => {}).then(() => window.__refreshXPBar?.())
       return
     }
 
@@ -1072,8 +1094,12 @@ export default function TutorielAlisha() {
   const progressPct  = totalSteps > 0 ? Math.round((stepIdx / totalSteps) * 100) : 0
   const bktNiveau    = bktResult?.niveau ?? null
   const alishaLayout = getAlishaLayout(phase, currentStep, feedback, xs)
+  // Phase feedback → état géré par le contrôleur (suit BKT + diversifiers)
+  // Autres phases → logique alishaStateFor() conservée intacte
   const alishaState  = alishaOverride
-    || (isSpeaking && phase !== 'feedback' ? 'speaking' : alishaStateFor(phase, currentStep, feedback, bktNiveau))
+    || (phase === 'feedback'
+      ? alishaCtrl.alishaState
+      : (isSpeaking ? 'speaking' : alishaStateFor(phase, currentStep, feedback, bktNiveau)))
   const message      = alishaMsg(phase, currentStep, feedback, user)
 
   // P8 — cycle mode audio

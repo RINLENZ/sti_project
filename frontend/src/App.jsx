@@ -51,6 +51,7 @@ const Corrections      = lazy(() => import('./pages/enseignant/Corrections'))
 const CreerCoursLive   = lazy(() => import('./pages/enseignant/CreerCoursLive'))
 const CoursLivePilot   = lazy(() => import('./pages/enseignant/CoursLive'))
 
+const Achievements    = lazy(() => import('./pages/apprenant/Achievements'))
 const SalleAttente    = lazy(() => import('./pages/apprenant/SalleAttente'))
 const EleveLive       = lazy(() => import('./pages/apprenant/EleveLive'))
 const TutorielAlisha  = lazy(() => import('./pages/apprenant/TutorielAlisha'))
@@ -175,6 +176,9 @@ export default function App() {
         }/>
         <Route path="/epreuve/:epreuveId" element={
           <ApprenantRoute><EpreuveSession/></ApprenantRoute>
+        }/>
+        <Route path="/achievements" element={
+          <ApprenantRoute><AppLayout><Achievements/></AppLayout></ApprenantRoute>
         }/>
 
         {/* ── Routes enseignant ── */}
