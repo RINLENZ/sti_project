@@ -145,7 +145,7 @@ export default function useAlishaVoice() {
     try {
       // 1. Cache IndexedDB
       let audioBuf = await getAudio(edgeVoice, text)
-      if (reqId !== edgeReqIdRef.current) return false  // supplanté
+      if (reqId !== edgeReqIdRef.current) return null  // supplanté → pas de fallback Web Speech
 
       if (!audioBuf) {
         // 2. Appel backend
@@ -153,19 +153,19 @@ export default function useAlishaVoice() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text, voice: edgeVoice }),
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(10000),
         })
         if (!resp.ok) throw new Error(`TTS HTTP ${resp.status}`)
-        if (reqId !== edgeReqIdRef.current) return false  // supplanté
+        if (reqId !== edgeReqIdRef.current) return null  // supplanté
 
         audioBuf = await resp.arrayBuffer()
-        if (reqId !== edgeReqIdRef.current) return false  // supplanté
+        if (reqId !== edgeReqIdRef.current) return null  // supplanté
 
         // Mise en cache async — ne bloque pas la lecture
         setAudio(edgeVoice, text, audioBuf).catch?.(() => {})
       }
 
-      if (reqId !== edgeReqIdRef.current) return false  // supplanté
+      if (reqId !== edgeReqIdRef.current) return null  // supplanté
 
       // 3. Lecture HTMLAudioElement
       const blob = new Blob([audioBuf], { type: 'audio/mpeg' })
@@ -216,7 +216,10 @@ export default function useAlishaVoice() {
     const clean = cleanForTTS(text)
     if (!clean) return
     const ok = await speakEdge(clean, opts)
-    if (!ok) speakWebSpeech(clean, opts)
+    // ok === true  → Edge TTS a joué
+    // ok === null  → supplanté par un appel plus récent, ne rien faire
+    // ok === false → vrai échec Edge TTS, basculer sur Web Speech
+    if (ok === false) speakWebSpeech(clean, opts)
   }, [speakEdge, speakWebSpeech])
 
   // ── stop ──────────────────────────────────────────────────────────

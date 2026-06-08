@@ -23,6 +23,13 @@ VOICE_LABELS = {
     "vivienne": "Vivienne — naturelle et expressive",
 }
 
+# Débits calibrés pour la lecture pédagogique (matières scientifiques)
+# Légèrement plus lent que la vitesse neutre pour laisser le temps de mémoriser
+VOICE_RATES = {
+    "denise":   "-15%",   # débit neutre Microsoft = ~175 mots/min → -15% ≈ 148 mots/min
+    "vivienne": "-10%",   # Vivienne est déjà plus posée par nature
+}
+
 
 class TTSRequest(BaseModel):
     text: str
@@ -54,8 +61,9 @@ async def speak(req: TTSRequest):
     Cache côté client géré par le header Cache-Control.
     """
     voice_id = VOICES[req.voice]
+    rate     = VOICE_RATES[req.voice]
     try:
-        communicate = edge_tts.Communicate(req.text, voice_id)
+        communicate = edge_tts.Communicate(req.text, voice_id, rate=rate)
         buf = io.BytesIO()
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":

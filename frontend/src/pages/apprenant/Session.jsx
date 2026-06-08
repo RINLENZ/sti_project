@@ -545,6 +545,10 @@ export default function Session() {
   const [submitting,     setSubmitting]     = useState(false)
   const [speaking,       setSpeaking]       = useState(false)
   const [ttsRate,        setTtsRate]        = useState(0.9)
+  // Auto-lecture de l'énoncé à chaque nouvelle question — OFF par défaut
+  const [autoRead,       setAutoRead]       = useState(
+    () => localStorage.getItem('alisha_auto_read') === 'on'
+  )
   const [noiseAdaptatif, setNoiseAdaptatif] = useState(null)  // null|'eleve'|'tres_eleve'
   const [picModal,       setPicModal]       = useState(false)
   const [vadSpeech,      setVadSpeech]      = useState(false) // parole active détectée
@@ -733,7 +737,7 @@ export default function Session() {
   // U1 — Auto-lecture de l'énoncé à chaque nouvelle question (accessibilité)
   // Délai 900ms : laisse l'animation slideInRight se terminer avant de parler
   useEffect(() => {
-    if (phase !== 'exercices') return
+    if (phase !== 'exercices' || !autoRead) return
     const ex = exercices[current]
     if (!ex?.enonce) return
     // Pour les exercices APC (JSON encodé), lire contexte + consigne
@@ -1461,7 +1465,23 @@ export default function Session() {
 
         {/* Contrôles TTS */}
         <div style={{ borderTop: `1px solid ${C.brownPale}`, paddingTop: 10, marginTop: 2 }}>
-          <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 7px' }}>Lecture vocale</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+            <p style={{ fontSize: 10, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: 0 }}>Lecture vocale</p>
+            <button
+              onClick={() => {
+                const next = !autoRead
+                setAutoRead(next)
+                localStorage.setItem('alisha_auto_read', next ? 'on' : 'off')
+                if (!next) stopTts()
+              }}
+              title={autoRead ? "Désactiver la lecture automatique des questions" : "Activer la lecture automatique des questions"}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, border: `1px solid ${autoRead ? C.brown : C.border}`, background: autoRead ? C.brownPale : 'transparent', cursor: 'pointer', fontSize: 9, fontWeight: 800, color: autoRead ? C.brown : C.textMuted, transition: 'all .15s' }}>
+              <span style={{ width: 18, height: 10, borderRadius: 5, background: autoRead ? C.brown : C.border, display: 'inline-block', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 1, left: autoRead ? 9 : 1, width: 8, height: 8, borderRadius: '50%', background: 'white', transition: 'left .15s', display: 'block' }}/>
+              </span>
+              Auto
+            </button>
+          </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               onClick={() => speaking ? stopTts() : tts(exercices[current]?.enonce)}
