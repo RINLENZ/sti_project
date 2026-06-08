@@ -567,7 +567,7 @@ export default function Session() {
   // ── Modèles ONNX africains ───────────────────────────────────────
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
   const { lastKeyword }                 = useKWSModel(audioActive)
-  const { speak: _alishaSpeak, stop: _stopAlisha } = useAlishaVoice()
+  const { speak: _alishaSpeak, stop: _stopAlisha, edgeVoice, setPreferredVoice, edgeAvailable } = useAlishaVoice()
 
   const alishaCtrl = useAlishaController({
     speakFn:      _alishaSpeak,
@@ -1481,6 +1481,18 @@ export default function Session() {
               🐇
             </button>
           </div>
+          {/* Sélecteur voix Alisha — visible uniquement si Edge TTS actif */}
+          {edgeAvailable && (
+            <div style={{ display: 'flex', gap: 5, marginTop: 7 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, alignSelf: 'center', margin: 0, whiteSpace: 'nowrap' }}>Voix :</p>
+              {[{ id: 'denise', label: 'Denise' }, { id: 'vivienne', label: 'Vivienne' }].map(v => (
+                <button key={v.id} onClick={() => setPreferredVoice(v.id)}
+                  style={{ flex: 1, padding: '4px 5px', borderRadius: 6, border: `1px solid ${edgeVoice === v.id ? C.brown : C.border}`, cursor: 'pointer', fontSize: 10, fontWeight: edgeVoice === v.id ? 800 : 600, background: edgeVoice === v.id ? C.brownPale : 'transparent', color: edgeVoice === v.id ? C.brown : C.textMuted, transition: 'all .15s' }}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <MiniGauge score={engagementScore} emotion={emotion} compact={false}/>

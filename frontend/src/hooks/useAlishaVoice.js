@@ -6,13 +6,11 @@
  *   1. Edge TTS via backend /api/tts/speak (qualité neural, cache IndexedDB)
  *   2. Web Speech API (voix locale FR si disponible, sinon cloud Google)
  *
- * Fallback automatique : si Edge TTS échoue (backend hors ligne, réseau), on
- * bascule sur Web Speech pour la session. Un flag edgeAvailable permet de
- * réessayer Edge TTS à la prochaine session.
- *
- * Stratégie de verrouillage Web Speech (conservée de la v1) :
- *   Si voix locale fr-FR disponible → verrouillage immédiat (stable).
- *   Sinon → verrouillage après premier voiceschanged (vague cloud chargée).
+ * Fixes :
+ *   - request-ID mutex : chaque appel speakEdge() annule les requêtes en vol précédentes
+ *   - cleanForTTS() : retire emojis + markdown avant de parler
+ *   - cross-cancel : Edge TTS stoppe Web Speech et vice-versa
+ *   - edgeAvailable : ne bascule sur false que si la requête N'a pas été supplantée
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { splitSpeechChunks } from '../utils/latexToSpeech'
@@ -23,6 +21,23 @@ const STORAGE_KEY     = 'alisha_voice_name'
 const VOICE_SETUP_KEY = 'alisha_voice_setup_done'
 const PREF_VOICE_KEY  = 'alisha_edge_voice'   // 'denise' | 'vivienne'
 
+// ── Nettoyage du texte avant TTS ──────────────────────────────────
+// Retire emojis, markdown, espaces multiples pour éviter que le
+// moteur ne lise "emoji celebration super" au lieu de "Super !".
+function cleanForTTS(text) {
+  if (!text) return ''
+  return text
+    // Emojis courants (plages Unicode principales)
+    .replace(/[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, '')
+    // Symboles supplémentaires
+    .replace(/[\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}]/gu, '')
+    // Markdown léger (* _ ` ~ # |)
+    .replace(/[*_`~#|]/g, '')
+    // Espaces multiples
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 // ── Web Speech — scoring de voix (logique v1 conservée) ───────────
 
 function scoreVoice(v) {
@@ -31,7 +46,6 @@ function scoreVoice(v) {
   if (v.localService)                                 s += 100
   if (v.lang === 'fr-FR')                             s += 10
   if (/female|femme|hortense|amelie/i.test(v.name))  s += 5
-  // Parmi les voix cloud, "Google français" est la mieux notée
   if (!v.localService && /google/i.test(v.name))      s += 8
   return s
 }
@@ -54,7 +68,8 @@ export default function useAlishaVoice() {
   const readingRef = useRef(false)
 
   // ── Refs Edge TTS ─────────────────────────────────────────────────
-  const audioRef   = useRef(null)   // HTMLAudioElement courant
+  const audioRef      = useRef(null)   // HTMLAudioElement courant
+  const edgeReqIdRef  = useRef(0)      // mutex : chaque appel incrémente, annule les précédents
 
   // ── State ─────────────────────────────────────────────────────────
   const [edgeVoice, setEdgeVoice] = useState(
@@ -106,12 +121,31 @@ export default function useAlishaVoice() {
     }
   }, [])
 
+  // ── Helper interne : arrêter tout audio en cours ──────────────────
+  const _stopAll = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      if (audioRef.current._blobUrl) URL.revokeObjectURL(audioRef.current._blobUrl)
+      audioRef.current = null
+    }
+    window.speechSynthesis?.cancel()
+  }, [])
+
   // ── Edge TTS — requête backend + cache IndexedDB ──────────────────
   const speakEdge = useCallback(async (text, { onStart, onEnd, onError } = {}) => {
     if (!text || !edgeAvailable) return false
+
+    // Chaque appel génère un ID unique. Si un appel plus récent arrive
+    // avant que celui-ci soit terminé, on abandonne silencieusement.
+    const reqId = ++edgeReqIdRef.current
+
+    // Stoppe immédiatement tout audio en cours (évite le double canal)
+    _stopAll()
+
     try {
       // 1. Cache IndexedDB
       let audioBuf = await getAudio(edgeVoice, text)
+      if (reqId !== edgeReqIdRef.current) return false  // supplanté
 
       if (!audioBuf) {
         // 2. Appel backend
@@ -122,19 +156,20 @@ export default function useAlishaVoice() {
           signal: AbortSignal.timeout(8000),
         })
         if (!resp.ok) throw new Error(`TTS HTTP ${resp.status}`)
+        if (reqId !== edgeReqIdRef.current) return false  // supplanté
+
         audioBuf = await resp.arrayBuffer()
+        if (reqId !== edgeReqIdRef.current) return false  // supplanté
+
         // Mise en cache async — ne bloque pas la lecture
-        setAudio(edgeVoice, text, audioBuf)
+        setAudio(edgeVoice, text, audioBuf).catch?.(() => {})
       }
+
+      if (reqId !== edgeReqIdRef.current) return false  // supplanté
 
       // 3. Lecture HTMLAudioElement
       const blob = new Blob([audioBuf], { type: 'audio/mpeg' })
       const url  = URL.createObjectURL(blob)
-
-      if (audioRef.current) {
-        audioRef.current.pause()
-        URL.revokeObjectURL(audioRef.current._blobUrl)
-      }
 
       const audio = new Audio(url)
       audio._blobUrl  = url
@@ -147,15 +182,23 @@ export default function useAlishaVoice() {
       await audio.play()
       return true
     } catch {
-      // Un seul échec → on désactive Edge TTS pour la session
-      setEdgeAvailable(false)
+      // Ne marque pas edgeAvailable=false si la requête a été supplantée
+      if (reqId === edgeReqIdRef.current) {
+        setEdgeAvailable(false)
+      }
       return false
     }
-  }, [edgeVoice, edgeAvailable])
+  }, [edgeVoice, edgeAvailable, _stopAll])
 
   // ── Web Speech — speak unitaire ───────────────────────────────────
   const speakWebSpeech = useCallback((text, { onStart, onEnd, onError, rate } = {}) => {
     if (!window.speechSynthesis || !text) return
+    // Stoppe Edge TTS avant Web Speech (cross-cancel)
+    if (audioRef.current) {
+      audioRef.current.pause()
+      if (audioRef.current._blobUrl) URL.revokeObjectURL(audioRef.current._blobUrl)
+      audioRef.current = null
+    }
     window.speechSynthesis.cancel()
     const utt  = new SpeechSynthesisUtterance(text)
     utt.lang   = 'fr-FR'
@@ -168,31 +211,28 @@ export default function useAlishaVoice() {
     window.speechSynthesis.speak(utt)
   }, [])
 
-  // ── API publique : speak (Edge TTS → fallback Web Speech) ─────────
+  // ── API publique : speak (nettoyage → Edge TTS → fallback Web Speech) ─
   const speak = useCallback(async (text, opts = {}) => {
-    if (!text) return
-    const ok = await speakEdge(text, opts)
-    if (!ok) speakWebSpeech(text, opts)
+    const clean = cleanForTTS(text)
+    if (!clean) return
+    const ok = await speakEdge(clean, opts)
+    if (!ok) speakWebSpeech(clean, opts)
   }, [speakEdge, speakWebSpeech])
 
   // ── stop ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
     readingRef.current = false
     setIsReading(false)
-    if (audioRef.current) {
-      audioRef.current.pause()
-      if (audioRef.current._blobUrl) URL.revokeObjectURL(audioRef.current._blobUrl)
-      audioRef.current = null
-    }
-    window.speechSynthesis?.cancel()
-  }, [])
+    edgeReqIdRef.current++  // invalide toute requête en vol
+    _stopAll()
+  }, [_stopAll])
 
   // ── readAloud — lecture longue par chunks ─────────────────────────
   const readAloud = useCallback(async (fullText, { onDone, onChunk } = {}) => {
     if (!fullText) return
     stop()
 
-    const chunks = splitSpeechChunks(fullText, 180)
+    const chunks = splitSpeechChunks(cleanForTTS(fullText), 180)
     if (!chunks.length) return
 
     readingRef.current = true
@@ -214,13 +254,11 @@ export default function useAlishaVoice() {
   // ── Changer la voix Edge TTS préférée ────────────────────────────
   const setPreferredVoice = useCallback((voice) => {
     if (!['denise', 'vivienne'].includes(voice)) return
+    stop()  // arrête la voix actuelle avant de changer
     setEdgeVoice(voice)
     localStorage.setItem(PREF_VOICE_KEY, voice)
-    // Réactiver Edge TTS (peut avoir été désactivé suite à une erreur temporaire)
-    setEdgeAvailable(true)
-    // Note : pas de clearAudioCache() ici — les entrées de l'ancienne voix
-    // ont une clé différente, donc elles ne seront jamais servies par erreur.
-  }, [])
+    setEdgeAvailable(true)  // réactive Edge TTS si désactivé par erreur
+  }, [stop])
 
   const dismissVoiceSetup = useCallback(() => {
     setNeedsVoiceSetup(false)
