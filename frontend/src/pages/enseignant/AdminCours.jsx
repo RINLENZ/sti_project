@@ -699,7 +699,7 @@ function TabUA({ structure, filterNiveau = 'all', filterMat = 'all', onReload })
       const { data } = await api.post(
         `/api/admin/import/pdf?famille_id=${pdfFamille}`,
         fd,
-        { timeout: 120000 }  // Claude Sonnet peut prendre jusqu'à 60-90s
+        { timeout: 180000, _retried: true }  // 2 appels Sonnet consécutifs ~120s — pas de retry (non-idempotent)
       )
       toast.success(`UA importée : ${data.titre || 'succès'} (${data.nb_exercices_crees || 0} exercice(s))`)
       setPdfModal(false); setPdfFile(null); setPdfFamille(''); onReload()
@@ -1209,7 +1209,7 @@ function TabExercices({ structure, filterNiveau = 'all', filterMat = 'all', onRe
     if (!genModal?.ua_id) return toast.error('Sélectionnez une UA')
     setGenLoading(true)
     try {
-      const { data } = await api.post(`/api/admin/generer-exercices/${genModal.ua_id}`, genForm)
+      const { data } = await api.post(`/api/admin/generer-exercices/${genModal.ua_id}`, genForm, { timeout: 90000, _retried: true })
       toast.success(data.message)
       setGenModal(null)
       loadExercices()

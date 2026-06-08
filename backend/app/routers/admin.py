@@ -647,12 +647,16 @@ async def import_from_pdf(
     _: UserModel = Depends(require_super_admin)
 ):
     """
-    Importe une fiche de préparation PDF via l'API Claude.
-    Utilise 2 appels séparés pour contourner la limite de tokens :
-      Appel 1 (avec PDF) → structure UA + contenu leçon
-      Appel 2 (sans PDF) → 9 exercices pédagogiques
+    Importe une fiche de préparation PDF.
+    Cascade par appel :
+      Appel 1 (lecture PDF + structure UA) → Claude Sonnet uniquement
+          (seul modèle capable de lire un PDF en base64)
+      Appel 2 (génération 9 exercices, texte seul) → Groq d'abord, Claude en fallback
+          (Groq : gratuit, ~3-5s ; Claude Sonnet : fallback si clé Groq absente)
     """
-    import anthropic, base64, json, os
+    import anthropic, base64, json, os, logging as _log
+
+    _logger = _log.getLogger(__name__)
 
     if not file.filename.endswith('.pdf'):
         raise HTTPException(400, "Seuls les fichiers PDF sont acceptés")
@@ -668,6 +672,7 @@ async def import_from_pdf(
 
     client = anthropic.Anthropic(api_key=api_key)
 
+    # ── Appel Claude Sonnet (avec ou sans PDF) ────────────────────────────────
     def _call_claude(messages, max_tokens, label):
         try:
             msg = client.messages.create(
@@ -686,6 +691,35 @@ async def import_from_pdf(
         if getattr(msg, "stop_reason", None) == "max_tokens":
             raise HTTPException(500, f"Réponse tronquée [{label}] — le PDF est trop dense pour ce modèle.")
         return msg.content[0].text
+
+    # ── Appel texte avec cascade Groq → Claude (appel 2 seulement) ───────────
+    def _call_text_groq_or_claude(prompt: str, max_tokens: int, label: str) -> tuple[str, str]:
+        """Tente Groq (gratuit, ~3-5s) puis bascule sur Claude Sonnet si absent/échoue."""
+        import urllib.request, urllib.error
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if groq_key:
+            try:
+                model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+                payload = json.dumps({
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": max_tokens,
+                }).encode()
+                req = urllib.request.Request(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    data=payload,
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {groq_key}"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=90) as resp:
+                    data = json.loads(resp.read())
+                    return data["choices"][0]["message"]["content"], "groq"
+            except Exception as _e:
+                _logger.warning("Groq échoué pour [%s], bascule sur Claude : %s", label, _e)
+
+        # Fallback Claude Sonnet
+        return _call_claude([{"role": "user", "content": prompt}], max_tokens, label), "claude"
 
     # ── Appel 1 : structure UA + contenu leçon (sans exercices) ──────────────
     prompt_ua = """Tu es un expert en ingénierie pédagogique APC (Approche Par Compétences) du MINESEC Cameroun.
@@ -789,15 +823,12 @@ Réponds UNIQUEMENT avec ce JSON :
   ]
 }}"""
 
-    raw_ex = _call_claude(
-        messages=[{"role": "user", "content": prompt_ex}],
-        max_tokens=6000,
-        label="exercices",
-    )
+    raw_ex, backend_ex = _call_text_groq_or_claude(prompt_ex, max_tokens=6000, label="exercices")
+    _logger.info("Exercices générés via : %s", backend_ex)
     try:
         ex_data = _repair_and_parse_json(raw_ex)
     except Exception as e:
-        raise HTTPException(500, f"Erreur JSON exercices : {str(e)[:200]}")
+        raise HTTPException(500, f"Erreur JSON exercices [{backend_ex}] : {str(e)[:200]}")
 
     # ── Enregistrement en base ────────────────────────────────────────────────
     try:
@@ -875,7 +906,8 @@ Réponds UNIQUEMENT avec ce JSON :
         "ua_id":             str(ua.id),
         "titre":             ua.titre,
         "nb_exercices_crees": exercices_crees,
-        "competences":       ua.competences
+        "competences":       ua.competences,
+        "backend_exercices": backend_ex,
     }
 
 

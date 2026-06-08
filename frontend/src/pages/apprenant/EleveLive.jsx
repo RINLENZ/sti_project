@@ -4,6 +4,7 @@ import { useTheme } from '../../styles/theme.jsx'
 import { useCoursLive } from '../../hooks/useCoursLive'
 import Alisha from '../../components/Alisha'
 import api from '../../services/api'
+import RichText from '../../components/RichText'
 
 const EMOTION_OPTIONS = [
   { valeur: 'engaged',  label: '👍 Je suis',       color: '#0D9373' },
@@ -41,14 +42,7 @@ function SlideView({ ressource, C }) {
           {ressource.titre}
         </h2>
       </div>
-      <div style={{
-        fontSize:   15,
-        color:      C.text,
-        lineHeight: 1.75,
-        whiteSpace: 'pre-wrap',
-      }}>
-        {ressource.contenu}
-      </div>
+      <RichText text={ressource.contenu} style={{ fontSize: 15 }} />
       {ressource.points_cles?.length > 0 && (
         <div style={{
           background:    C.goldPale,

@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '../styles/theme.jsx'
-import RichText from './RichText'
+import RichText, { RichTextInline } from './RichText'
 
 // ── Parsing ───────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ const ALERT_DARK = {
 
 // ── Rendu d'un bloc ───────────────────────────────────────────────
 
-export function Block({ block, C }) {
+export function Block({ block, C, idx }) {
   const { isDark } = useTheme()
   switch (block.type) {
 
@@ -65,12 +65,13 @@ export function Block({ block, C }) {
       const isH1 = block.niveau === 'h1'
       const isH2 = block.niveau === 'h2'
       return (
-        <div style={{
+        <div id={idx != null ? `h-${idx}` : undefined} style={{
           borderLeft: isH1
             ? `4px solid ${C.brown}`
             : isH2 ? `3px solid ${C.brownPale}` : 'none',
           paddingLeft: isH1 ? 12 : isH2 ? 10 : 0,
           margin: `${isH1 ? 20 : 12}px 0 4px`,
+          scrollMarginTop: 16,
         }}>
           <p style={{
             fontSize:      isH1 ? 16 : isH2 ? 14 : 13,
@@ -95,7 +96,7 @@ export function Block({ block, C }) {
           margin:     '6px 0',
           whiteSpace: 'pre-line',
         }}>
-          {block.valeur}
+          <RichTextInline text={block.valeur} />
         </p>
       )
 
@@ -145,7 +146,7 @@ export function Block({ block, C }) {
         }}>
           <span style={{ fontSize: 15, lineHeight: 1.5, flexShrink: 0 }}>{s.icon}</span>
           <p style={{ fontSize: 13, color: s.color, lineHeight: 1.7, margin: 0 }}>
-            {block.valeur}
+            <RichTextInline text={block.valeur} />
           </p>
         </div>
       )
@@ -211,7 +212,17 @@ export function Block({ block, C }) {
 // Utilisé par CoursDetail (lecture libre) et tout contexte hors tutoriel.
 
 export function StaticContent({ data, C, xs }) {
+  const [tocOpen, setTocOpen] = useState(false)
   const blocks = useMemo(() => parseBlocks(data.contenu), [data.contenu])
+
+  // Extraire les titres h1/h2 pour le sommaire auto
+  const headings = useMemo(() =>
+    blocks
+      .map((b, i) => ({ ...b, _idx: i }))
+      .filter(b => b.type === 'titre' && (b.niveau === 'h1' || b.niveau === 'h2')),
+    [blocks]
+  )
+
   return (
     <div>
       {data.titre && (
@@ -219,8 +230,42 @@ export function StaticContent({ data, C, xs }) {
           {data.titre}
         </h2>
       )}
+
+      {/* Sommaire auto — s'affiche si ≥ 3 titres dans la leçon */}
+      {headings.length >= 3 && (
+        <div style={{ background: `${C.brown}08`, border: `1px solid ${C.brownPale}`, borderRadius: 12, marginBottom: 20, overflow: 'hidden' }}>
+          <button
+            onClick={() => setTocOpen(o => !o)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.brown }}
+          >
+            <span>📋 Sommaire · {headings.length} sections</span>
+            <span style={{ fontSize: 10, transform: tocOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s', display: 'inline-block' }}>▼</span>
+          </button>
+          {tocOpen && (
+            <ul style={{ margin: 0, padding: '4px 0 10px', listStyle: 'none', borderTop: `1px solid ${C.brownPale}` }}>
+              {headings.map((h, hi) => (
+                <li key={hi}>
+                  <button
+                    onClick={() => document.getElementById(`h-${h._idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    style={{
+                      width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer',
+                      padding: `5px 14px 5px ${h.niveau === 'h2' ? 28 : 14}px`,
+                      fontSize: h.niveau === 'h1' ? 13 : 12,
+                      fontWeight: h.niveau === 'h1' ? 700 : 500,
+                      color: h.niveau === 'h1' ? C.brown : C.textSec,
+                    }}
+                  >
+                    {h.niveau === 'h1' ? '▸ ' : '· '}{h.valeur}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {blocks.map((block, i) => (
-        <Block key={block.id || i} block={block} C={C} />
+        <Block key={block.id || i} block={block} C={C} idx={i} />
       ))}
       {data.points_cles?.length > 0 && (
         <div style={{ background: C.goldPale, borderRadius: 14, padding: '14px 18px', border: `1.5px solid ${C.gold}44`, marginTop: 20 }}>
@@ -320,7 +365,7 @@ export function ProgressiveContent({ data, onDone, C, xs }) {
               transition: 'opacity 0.32s ease, transform 0.32s ease',
             }}
           >
-            <Block block={block} C={C} />
+            <Block block={block} C={C} idx={i} />
           </div>
         ))}
       </div>
