@@ -617,7 +617,7 @@ export default function TutorielAlisha() {
 
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
 
-  const { speak, stop, readAloud, isReading, supported, needsVoiceSetup, dismissVoiceSetup, edgeVoice, setPreferredVoice, edgeAvailable } = useAlishaVoice()
+  const { speak, stop, readAloud, isReading, supported, needsVoiceSetup, dismissVoiceSetup, edgeVoice, setPreferredVoice, edgeAvailable, systemVoiceName } = useAlishaVoice()
 
   // Contrôleur diversifiers — gère uniquement la phase feedback (correct/wrong)
   // Les phases intro/ressources/exercices gardent leur propre TTS via alishaMsg()
@@ -1354,13 +1354,17 @@ export default function TutorielAlisha() {
               {audioMode === 'full' ? '🔊' : audioMode === 'text' ? '📖' : '🔇'}
             </button>
           )}
-          {/* Sélecteur voix Alisha (Edge TTS) — 2 boutons inline */}
-          {edgeAvailable && audioMode !== 'silent' && (
+          {/* Sélecteur voix Alisha — toujours visible quand audio actif */}
+          {audioMode !== 'silent' && (
             <>
-              {[{ id: 'denise', label: 'D' }, { id: 'vivienne', label: 'V' }].map(v => (
+              {[
+                { id: 'denise',   label: 'D', title: 'Denise (Neural FR)' },
+                { id: 'vivienne', label: 'H', title: 'Henri (Neural FR)' },
+                { id: 'system',   label: '💻', title: systemVoiceName ? `Voix système : ${systemVoiceName}` : 'Voix système (OS)' },
+              ].map(v => (
                 <button key={v.id} onClick={() => setPreferredVoice(v.id)}
-                  title={v.id === 'denise' ? 'Voix Denise (standard)' : 'Voix Vivienne (naturelle)'}
-                  style={{ width: 22, height: 22, borderRadius: 5, border: `1.5px solid ${edgeVoice === v.id ? C.brown : C.border}`, cursor: 'pointer', fontSize: 9, fontWeight: 800, background: edgeVoice === v.id ? C.brownPale : 'transparent', color: edgeVoice === v.id ? C.brown : C.textMuted, flexShrink: 0, padding: 0 }}>
+                  title={v.title}
+                  style={{ width: 22, height: 22, borderRadius: 5, border: `1.5px solid ${edgeVoice === v.id ? C.brown : C.border}`, cursor: 'pointer', fontSize: v.id === 'system' ? 11 : 9, fontWeight: 800, background: edgeVoice === v.id ? C.brownPale : 'transparent', color: edgeVoice === v.id ? C.brown : C.textMuted, flexShrink: 0, padding: 0 }}>
                   {v.label}
                 </button>
               ))}

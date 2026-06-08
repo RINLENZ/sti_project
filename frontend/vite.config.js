@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
           // Le routing SPA est géré par netlify.toml (/* → /index.html 200).
           globPatterns: ['**/*.{js,css,svg,png,ico,woff2}'],
           globIgnores: ['**/models/**', '**/ort-wasm**', '**/vision_bundle**'],
+          navigateFallback: null,
           runtimeCaching: [
             // API : NetworkFirst — réseau prioritaire, cache en fallback uniquement
             // StaleWhileRevalidate rejeté : status 0 (ERR_NETWORK) était mis en cache

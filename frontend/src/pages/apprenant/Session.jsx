@@ -614,7 +614,7 @@ export default function Session() {
   // ── Modèles ONNX africains ───────────────────────────────────────
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
   const { lastKeyword }                 = useKWSModel(audioActive)
-  const { speak: _alishaSpeak, stop: _stopAlisha, edgeVoice, setPreferredVoice, edgeAvailable } = useAlishaVoice()
+  const { speak: _alishaSpeak, stop: _stopAlisha, edgeVoice, setPreferredVoice, edgeAvailable, systemVoiceName } = useAlishaVoice()
 
   const alishaCtrl = useAlishaController({
     speakFn:      _alishaSpeak,
@@ -1194,7 +1194,7 @@ export default function Session() {
       setIsLeaving(false)
       if (current + 1 >= exercices.length) {
         const r = scores.filter(s => s > 0).length
-        if (exercices.length > 0 && Math.round(r / exercices.length * 100) >= 80) setConfetti(true)
+        if (exercices.length > 0 && Math.round(r / exercices.length * 100) >= 50) setConfetti(true)
         if (sessionIdRef.current) {
           termineeRef.current = true
           api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
@@ -1572,18 +1572,21 @@ export default function Session() {
               🐇
             </button>
           </div>
-          {/* Sélecteur voix Alisha — visible uniquement si Edge TTS actif */}
-          {edgeAvailable && (
-            <div style={{ display: 'flex', gap: 5, marginTop: 7 }}>
-              <p style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, alignSelf: 'center', margin: 0, whiteSpace: 'nowrap' }}>Voix :</p>
-              {[{ id: 'denise', label: 'Denise' }, { id: 'vivienne', label: 'Vivienne' }].map(v => (
-                <button key={v.id} onClick={() => setPreferredVoice(v.id)}
-                  style={{ flex: 1, padding: '4px 5px', borderRadius: 6, border: `1px solid ${edgeVoice === v.id ? C.brown : C.border}`, cursor: 'pointer', fontSize: 10, fontWeight: edgeVoice === v.id ? 800 : 600, background: edgeVoice === v.id ? C.brownPale : 'transparent', color: edgeVoice === v.id ? C.brown : C.textMuted, transition: 'all .15s' }}>
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Sélecteur voix Alisha — toujours visible */}
+          <div style={{ display: 'flex', gap: 4, marginTop: 7, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, alignSelf: 'center', margin: 0, whiteSpace: 'nowrap' }}>Voix :</p>
+            {[
+              { id: 'denise',   label: 'Denise', disabled: false },
+              { id: 'vivienne', label: 'Henri',  disabled: false },
+              { id: 'system',   label: systemVoiceName ? '💻 Sys' : '💻 Sys', disabled: !window.speechSynthesis },
+            ].map(v => (
+              <button key={v.id} onClick={() => !v.disabled && setPreferredVoice(v.id)}
+                title={v.id === 'denise' ? 'Denise (Neural FR)' : v.id === 'vivienne' ? 'Henri (Neural FR)' : `Voix système${systemVoiceName ? ` : ${systemVoiceName}` : ''}`}
+                style={{ padding: '4px 6px', borderRadius: 6, border: `1px solid ${edgeVoice === v.id ? C.brown : C.border}`, cursor: v.disabled ? 'default' : 'pointer', fontSize: 10, fontWeight: edgeVoice === v.id ? 800 : 600, background: edgeVoice === v.id ? C.brownPale : 'transparent', color: edgeVoice === v.id ? C.brown : v.disabled ? C.border : C.textMuted, opacity: v.disabled ? 0.4 : 1, transition: 'all .15s' }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <MiniGauge score={engagementScore} emotion={emotion} compact={false}/>

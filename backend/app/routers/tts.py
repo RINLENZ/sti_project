@@ -1,9 +1,14 @@
 """
 TTS Neural via Microsoft Edge (gratuit, sans clé API).
-Voix disponibles : fr-FR-DeniseNeural, fr-FR-VivienneMultilingualNeural
+Voix disponibles : fr-FR-DeniseNeural, fr-FR-HenriNeural
 
 POST /api/tts/speak  → stream audio/mpeg
 GET  /api/tts/voices → liste des voix supportées
+
+Note : VivienneMultilingualNeural a été remplacée par HenriNeural.
+       La voix multilingue détectait automatiquement l'espagnol dans
+       les contenus mathématiques (sin, cos, tan…) et basculait de langue.
+       HenriNeural est monolingualement française — ce problème n'existe pas.
 """
 import io
 import edge_tts
@@ -15,19 +20,18 @@ router = APIRouter(prefix="/api/tts", tags=["tts"])
 
 VOICES = {
     "denise":   "fr-FR-DeniseNeural",
-    "vivienne": "fr-FR-VivienneMultilingualNeural",
+    "vivienne": "fr-FR-HenriNeural",      # clé conservée pour compatibilité localStorage
 }
 
 VOICE_LABELS = {
     "denise":   "Denise — claire et chaleureuse",
-    "vivienne": "Vivienne — naturelle et expressive",
+    "vivienne": "Henri — naturel et expressif",
 }
 
 # Débits calibrés pour la lecture pédagogique (matières scientifiques)
-# Légèrement plus lent que la vitesse neutre pour laisser le temps de mémoriser
 VOICE_RATES = {
-    "denise":   "-15%",   # débit neutre Microsoft = ~175 mots/min → -15% ≈ 148 mots/min
-    "vivienne": "-10%",   # Vivienne est déjà plus posée par nature
+    "denise":   "-15%",   # ~148 mots/min (neutre Microsoft ~175 mots/min)
+    "vivienne": "-12%",   # Henri parle légèrement plus vite
 }
 
 

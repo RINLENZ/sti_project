@@ -219,12 +219,17 @@ export default function useAlishaVoice() {
   const speak = useCallback(async (text, opts = {}) => {
     const clean = cleanForTTS(text)
     if (!clean) { opts.onEnd?.(); return }
+    // Mode système : bypasse Edge TTS, utilise la voix OS directement
+    if (edgeVoice === 'system') {
+      speakWebSpeech(clean, opts)
+      return
+    }
     const ok = await speakEdge(clean, opts)
     // ok === true  → Edge TTS a joué
     // ok === null  → supplanté par un appel plus récent, ne rien faire
     // ok === false → vrai échec Edge TTS, basculer sur Web Speech
     if (ok === false) speakWebSpeech(clean, opts)
-  }, [speakEdge, speakWebSpeech])
+  }, [edgeVoice, speakEdge, speakWebSpeech])
 
   // ── stop ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
@@ -258,14 +263,17 @@ export default function useAlishaVoice() {
     onDone?.()
   }, [speak, stop])
 
-  // ── Changer la voix Edge TTS préférée ────────────────────────────
+  // ── Changer la voix préférée (denise | vivienne | system) ───────
   const setPreferredVoice = useCallback((voice) => {
-    if (!['denise', 'vivienne'].includes(voice)) return
-    stop()  // arrête la voix actuelle avant de changer
+    if (!['denise', 'vivienne', 'system'].includes(voice)) return
+    stop()
     setEdgeVoice(voice)
     localStorage.setItem(PREF_VOICE_KEY, voice)
-    setEdgeAvailable(true)  // réactive Edge TTS si désactivé par erreur
+    if (voice !== 'system') setEdgeAvailable(true)
   }, [stop])
+
+  // ── Nom de la voix système disponible ────────────────────────────
+  const systemVoiceName = voiceRef.current?.name ?? null
 
   const dismissVoiceSetup = useCallback(() => {
     setNeedsVoiceSetup(false)
@@ -284,5 +292,6 @@ export default function useAlishaVoice() {
     edgeVoice,
     setPreferredVoice,
     edgeAvailable,
+    systemVoiceName,
   }
 }
