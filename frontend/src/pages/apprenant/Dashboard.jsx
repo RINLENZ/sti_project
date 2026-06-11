@@ -714,61 +714,109 @@ export default function Dashboard() {
         return
       }
       try {
-        const { data } = await api.get(
-          `/api/cours/matieres${user.niveau_id ? '?niveau_id=' + user.niveau_id : ''}`
-        )
-        setMatieres(data)
+        // ── Lancement de TOUTES les requêtes en parallèle ────────────
+        // Les requêtes qui ne dépendent que de user.id n'ont aucune raison
+        // d'attendre /matieres. On les déclenche toutes au même instant.
+        // Promise.allSettled : si une requête échoue, les autres continuent
+        // (comportement voulu — équivalent aux try/catch individuels d'avant).
+        const niveauQuery = user.niveau_id ? '?niveau_id=' + user.niveau_id : ''
+        const [
+          matieresRes,
+          progressionRes,
+          bktRes,
+          recommandeeRes,
+          statsRes,
+          sessionsRes,
+        ] = await Promise.allSettled([
+          api.get(`/api/cours/matieres${niveauQuery}`),
+          api.get(`/api/cours/progression/${user.id}`),
+          api.get(`/api/bkt/apprenant/${user.id}`),
+          api.get(`/api/cours/ua/recommandee/${user.id}`),
+          api.get(`/api/bkt/apprenant/${user.id}/stats`),
+          api.get(`/api/bkt/apprenant/${user.id}/sessions?limit=8`),
+        ])
 
-        let modulesFamillesData = []
-        if (data.length > 0) {
-          setMatActive(data[0])
-          modulesFamillesData = await loadModulesPourMatiere(data[0])
+        // Helper : extrait response.data si la promesse a réussi, sinon fallback
+        const dataOf = (res, fallback = null) =>
+          res.status === 'fulfilled' ? res.value.data : fallback
+
+        // ── Matières (requête racine, peut être vide) ────────────────
+        const matieresData = dataOf(matieresRes, [])
+        setMatieres(matieresData)
+
+        // Si /matieres a échoué, on remonte une erreur (le catch externe
+        // affichera le toast). Les autres requêtes sont déjà parties,
+        // on ne les jette pas mais on s'arrête là côté UI.
+        if (matieresRes.status === 'rejected') {
+          throw matieresRes.reason
         }
 
-        const { data: prog } = await api.get(`/api/cours/progression/${user.id}`)
+        // ── Chargement des modules de la 1re matière ─────────────────
+        // Cette étape DOIT attendre /matieres. On la déclenche dès qu'on
+        // a la donnée — sans bloquer le reste de l'UI qui se peuple déjà.
+        let modulesFamillesData = []
+        let modulesPromise = Promise.resolve([])
+        if (matieresData.length > 0) {
+          setMatActive(matieresData[0])
+          modulesPromise = loadModulesPourMatiere(matieresData[0])
+        }
+
+        // ── Progression globale ──────────────────────────────────────
+        const prog = dataOf(progressionRes)
         setProgression(prog)
-        const { data: bkt } = await api.get(`/api/bkt/apprenant/${user.id}`)
+
+        // ── BKT global (compétences) ─────────────────────────────────
+        const bkt = dataOf(bktRes)
         setBktData(bkt)
-        let recoData = null, statsData = null, sessionsData = null
-        try {
-          const { data: reco } = await api.get(`/api/cours/ua/recommandee/${user.id}`)
-          recoData = reco?.recommandee || null
-          setRecommandee(recoData)
-        } catch {}
-        try {
-          const { data: st } = await api.get(`/api/bkt/apprenant/${user.id}/stats`)
-          statsData = st
-          setStats(st)
+
+        // ── UA recommandée ───────────────────────────────────────────
+        const recoRaw = dataOf(recommandeeRes)
+        const recoData = recoRaw?.recommandee || null
+        setRecommandee(recoData)
+
+        // ── Stats BKT + déclenchement des toasts badges/streak ───────
+        const statsData = dataOf(statsRes)
+        if (statsData) {
+          setStats(statsData)
           // Détection unlock badge (compare avec localStorage)
           const storageKey = `sti_badges_${user.id}`
           const prevUnlocked = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'))
-          const nowUnlocked  = buildBadges(st).filter(b => b.unlocked).map(b => b.id)
+          const nowUnlocked  = buildBadges(statsData).filter(b => b.unlocked).map(b => b.id)
           nowUnlocked.forEach(id => {
             if (!prevUnlocked.has(id)) {
-              const badge = buildBadges(st).find(b => b.id === id)
+              const badge = buildBadges(statsData).find(b => b.id === id)
               if (badge) toast(`${badge.emoji} Badge débloqué : ${badge.label} !`, { duration: 4000, icon: '🎉' })
             }
           })
           localStorage.setItem(storageKey, JSON.stringify(nowUnlocked))
           // Milestone streak
-          const s = st.streak_jours
+          const s = statsData.streak_jours
           const milestoneKey = `sti_streak_milestone_${user.id}_${s}`
           if ([3, 7, 14, 30].includes(s) && !localStorage.getItem(milestoneKey)) {
             const msgs = { 3: '3 jours de suite ! Belle régularité 🔥', 7: '1 semaine consécutive ! Tu es en feu 🔥🔥', 14: '2 semaines ! Tu es inarrêtable 🔥🔥🔥', 30: 'Un mois entier ! Légendaire 🏆' }
             toast(msgs[s], { duration: 5000, icon: '🔥' })
             localStorage.setItem(milestoneKey, '1')
           }
-        } catch {}
-        try {
-          const { data: se } = await api.get(`/api/bkt/apprenant/${user.id}/sessions?limit=8`)
-          sessionsData = se
-          setSessions(se)
-        } catch {}
+        }
 
+        // ── Sessions récentes ────────────────────────────────────────
+        const sessionsData = dataOf(sessionsRes)
+        setSessions(sessionsData)
+
+        // ── On attend la fin de /modules/familles UNIQUEMENT pour le cache.
+        // L'UI a déjà été peuplée progressivement par loadModulesPourMatiere
+        // via son setModulesFamilles interne.
+        modulesFamillesData = await modulesPromise
+
+        // ── Mise en cache (1 seule fois, en fin de cycle) ────────────
         setCache(cacheKey, {
-          matieres: data, modulesFamilles: modulesFamillesData,
-          progression: prog, bktData: bkt,
-          recommandee: recoData, stats: statsData, sessions: sessionsData,
+          matieres:        matieresData,
+          modulesFamilles: modulesFamillesData,
+          progression:     prog,
+          bktData:         bkt,
+          recommandee:     recoData,
+          stats:           statsData,
+          sessions:        sessionsData,
         })
       } catch {
         toast.error('Erreur de chargement')
