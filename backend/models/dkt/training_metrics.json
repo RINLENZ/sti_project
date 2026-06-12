@@ -1,0 +1,45 @@
+{
+  "timestamp": "20260612_170919",
+  "dataset": "ENSET (synth\u00e9tique 200 + r\u00e9els 22)",
+  "n_sequences": 200,
+  "n_interactions": 29084,
+  "n_skills": 9,
+  "macro_kcs": [
+    "Algorithmique",
+    "Alg\u00e8bre",
+    "Analyse",
+    "Architecture-Info",
+    "BDD",
+    "Outils-Dev",
+    "Prog-C",
+    "Syst\u00e8mes-Info",
+    "Trigonom\u00e9trie"
+  ],
+  "hyperparams": {
+    "hidden_dim": 64,
+    "dropout": 0.3,
+    "lr": 0.001,
+    "batch_size": 16,
+    "patience": 10
+  },
+  "results": {
+    "vanilla": {
+      "auc": 0.6554700580433521,
+      "acc": 0.6189176898590268,
+      "f1": 0.6060178655383168,
+      "threshold": 0.45424413681030273
+    },
+    "fused": {
+      "auc": 0.6591146019516267,
+      "acc": 0.6114142792178263,
+      "f1": 0.6127351008384319,
+      "threshold": 0.4299459755420685
+    },
+    "decomposed": {
+      "auc": 0.656582167672297,
+      "acc": 0.6066393815370623,
+      "f1": 0.6152135231316725,
+      "threshold": 0.43152764439582825
+    }
+  }
+}

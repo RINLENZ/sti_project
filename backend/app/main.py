@@ -30,6 +30,7 @@ from .routers import training as training_router
 from .routers import cours_live as cours_live_router
 from .routers import tts as tts_router
 from .routers import gamification as gamification_router
+from .routers import dkt as dkt_router
 from .models import user_stats as _user_stats_models   # noqa: F401 — registers table
 
 app = FastAPI(
@@ -232,6 +233,7 @@ app.include_router(training_router.router)
 app.include_router(cours_live_router.router)
 app.include_router(tts_router.router)
 app.include_router(gamification_router.router)
+app.include_router(dkt_router.router)
 
 @app.get("/health")
 def health_check():

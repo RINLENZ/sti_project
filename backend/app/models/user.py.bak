@@ -21,10 +21,16 @@ class User(Base):
     filiere_id      = Column(UUID(as_uuid=True), ForeignKey("filieres.id"), nullable=True)
     niveau_id       = Column(UUID(as_uuid=True), ForeignKey("niveaux.id"), nullable=True)
     pays            = Column(String, nullable=True, default="Cameroun")
+    avatar          = Column(String, nullable=True)
     # Champs texte conservés pour compatibilité et affichage rapide
     niveau_label    = Column(String, nullable=True)   # "Première" — dénormalisé pour perf
     filiere_label   = Column(String, nullable=True)   # "F6 BIPE" — dénormalisé
     code_invitation = Column(String, unique=True, nullable=True, default=lambda: __import__('secrets').token_urlsafe(6).upper())
+    etablissement       = Column(String, nullable=True)
+    ville               = Column(String, nullable=True)
+    matieres_enseignees = Column(String, nullable=True)
+    niveaux_enseignes   = Column(String, nullable=True)
+    code_classe         = Column(String, nullable=True)
     actif           = Column(Boolean, default=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -41,4 +47,4 @@ class TuteurSuivi(Base):
     apprenant_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     tuteur_id    = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     actif        = Column(Boolean, default=True)
-    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())# ← Patch temporaire — sera écrasé par le vrai fichier

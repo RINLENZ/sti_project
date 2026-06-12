@@ -1,0 +1,11 @@
+{
+  "Algorithmique": 0,
+  "Algèbre": 1,
+  "Analyse": 2,
+  "Architecture-Info": 3,
+  "BDD": 4,
+  "Outils-Dev": 5,
+  "Prog-C": 6,
+  "Systèmes-Info": 7,
+  "Trigonométrie": 8
+}

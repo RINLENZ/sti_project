@@ -32,6 +32,9 @@ class User(Base):
     niveaux_enseignes   = Column(String, nullable=True)
     code_classe         = Column(String, nullable=True)
     actif           = Column(Boolean, default=True)
+    # Marqueur pour les apprenants générés par seed_dkt_simulations.py
+    # → inclus dans l'entraînement du DKT, exclus de l'évaluation finale
+    is_synthetic   = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
 
