@@ -20,6 +20,7 @@ import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 import { clearCache } from '../../services/cache'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import useAlishaController from '../../hooks/useAlishaController'
+import { AdaptationOrchestrator, useAdaptation } from '../../components/adaptation/index.js'
 
 const Alisha = lazy(() => import('../../components/Alisha'))
 
@@ -610,6 +611,15 @@ export default function Session() {
   const termineeRef      = useRef(false)
   const cnnEmotionRef    = useRef({ emotion: null, probs: null })  // dernière détection CNN (face-api.js ou ONNX)
   const triedExercices   = useRef(new Set())                       // first_attempt tracking
+  // Métriques pour le moteur d'adaptation
+  const nbResponsesRef   = useRef(0)
+  const erreursRef       = useRef(0)
+  const consErrMacroRef  = useRef(0)
+  const lastMacroRef     = useRef(null)
+  const reussitesMacroRef= useRef(0)
+  const recentTimesRef   = useRef([])
+  const engHistRef       = useRef([])
+  const lowEngStreakRef   = useRef(0)
 
   // ── Modèles ONNX africains ───────────────────────────────────────
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
@@ -627,6 +637,7 @@ export default function Session() {
     loadingIA,
     explicationIA,
   })
+  const { currentAdaptation, evaluate, dismiss } = useAdaptation()
   const faceApiIntervalRef = useRef(null)
   const audioContextRef  = useRef(null)
   const analyserRef      = useRef(null)
@@ -1166,6 +1177,45 @@ export default function Session() {
         emotion_probs,
       })
       triedExercices.current.add(ex.id)
+
+      // ── Métriques adaptation ────────────────────────────────────
+      nbResponsesRef.current += 1
+      if (!data.correct) erreursRef.current += 1
+      const _exMacro = ex.kcs?.[0] ?? ex.competence_evaluee ?? null
+      if (data.correct) {
+        consErrMacroRef.current = 0
+        reussitesMacroRef.current = _exMacro === lastMacroRef.current ? reussitesMacroRef.current + 1 : 1
+      } else {
+        consErrMacroRef.current = _exMacro === lastMacroRef.current ? consErrMacroRef.current + 1 : 1
+        reussitesMacroRef.current = 0
+      }
+      lastMacroRef.current = _exMacro
+      const _rt = recentTimesRef.current; _rt.push(tempsReponse); if (_rt.length > 5) _rt.shift()
+      const _eh = engHistRef.current; _eh.push(engagementScore); if (_eh.length > 5) _eh.shift()
+      if (engagementScore < 0.4) lowEngStreakRef.current += 1; else lowEngStreakRef.current = 0
+      const _nextEx = exercices[current + 1]
+      evaluate({
+        session_id: sid,
+        engagement: { fused: engagementScore, etat: emotion },
+        metrics: {
+          duree_session_sec:               Math.round((Date.now() - startTime) / 1000),
+          nb_responses:                    nbResponsesRef.current,
+          nb_correct:                      scores.filter(s => s > 0).length + (data.correct ? 1 : 0),
+          erreurs_consecutives_macro_kc:   consErrMacroRef.current,
+          erreurs_session:                 erreursRef.current,
+          reussites_consecutives:          data.correct ? streak + 1 : 0,
+          reussites_consecutives_macro_kc: reussitesMacroRef.current,
+          low_engagement_streak:           lowEngStreakRef.current,
+          temps_reponses_recents:          [...recentTimesRef.current],
+          temps_moyen_profil:              recentTimesRef.current.length > 0
+            ? Math.round(recentTimesRef.current.reduce((a, b) => a + b, 0) / recentTimesRef.current.length)
+            : 60,
+          engagement_recent_5:             [...engHistRef.current],
+        },
+        current_macro_kc:  _exMacro ?? undefined,
+        current_exercise:  _nextEx ? { id: _nextEx.id, difficulte: _nextEx.difficulte ?? 1, macro_kc: _nextEx.kcs?.[0] ?? _nextEx.competence_evaluee ?? undefined } : undefined,
+      }).catch(() => {})
+
       if (data.correct) {
         setStreak(s => s + 1)
         if (data.points_gagnes > 0) {
@@ -1778,25 +1828,11 @@ export default function Session() {
             </div>
           )}
 
-          {/* Bannière adaptation */}
-          {adaptation && (
-            <div style={{
-              padding: '12px 14px', borderRadius: 12, marginBottom: 14,
-              background: adaptation.priority === 'haute' ? `${C.red}12` : `${C.gold}12`,
-              border: `1px solid ${adaptation.priority === 'haute' ? `${C.red}40` : `${C.gold}40`}`,
-              animation: 'slideDown .3s ease', display: 'flex', gap: 10, alignItems: 'flex-start'
-            }}>
-              <span style={{ fontSize: 16, flexShrink: 0 }}>{adaptation.priority === 'haute' ? '⚠️' : '💡'}</span>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: adaptation.priority === 'haute' ? C.red : C.gold, margin: '0 0 4px' }}>
-                  {adaptation.message}
-                </p>
-                <button onClick={() => setAdaptation(null)} style={{ fontSize: 11, color: C.textSec, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-                  Ignorer
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Moteur d'adaptation comportementale */}
+          <AdaptationOrchestrator
+            adaptation={currentAdaptation}
+            onDismiss={(actionType) => dismiss(actionType)}
+          />
 
           {/* ── Carte question principale ── */}
           {/* U3 — slideOutLeft à la sortie, slideInRight à l'entrée */}

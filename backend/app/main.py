@@ -32,6 +32,7 @@ from .routers import tts as tts_router
 from .routers import gamification as gamification_router
 from .routers import dkt as dkt_router
 from .models import user_stats as _user_stats_models   # noqa: F401 — registers table
+from app.routers import adaptation
 
 app = FastAPI(
     title="STI Adaptatif — API",
@@ -234,6 +235,7 @@ app.include_router(cours_live_router.router)
 app.include_router(tts_router.router)
 app.include_router(gamification_router.router)
 app.include_router(dkt_router.router)
+app.include_router(adaptation.router)
 
 @app.get("/health")
 def health_check():

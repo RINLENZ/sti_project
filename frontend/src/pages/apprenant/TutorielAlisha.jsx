@@ -30,6 +30,7 @@ import { EMOTION_MODEL_READY } from '../../config/models'
 import { ProgressiveContent, parseBlocks } from '../../components/RichContent'
 import { blocksToSpeech } from '../../utils/latexToSpeech'
 import api from '../../services/api'
+import { AdaptationOrchestrator, useAdaptation } from '../../components/adaptation/index.js'
 
 // ── Suivi facial — mêmes helpers que Session.jsx ─────────────────
 // Mapping expressions CNN → états affectifs académiques (Ekman adapté)
@@ -136,7 +137,7 @@ function Confetti({ active, count = 12 }) {
 
 // ── L2 — Séquence adaptive BKT (3 niveaux) ───────────────────────
 
-function buildSequence(ua, { bktScore = null, startLevel = 1 } = {}) {
+function buildSequence(ua, { bktScore = null, startLevel = 1, dktOrder = null } = {}) {
   const level = startLevel >= 3 ? 3
     : startLevel >= 2 ? 2
     : bktScore === null ? 1
@@ -144,7 +145,18 @@ function buildSequence(ua, { bktScore = null, startLevel = 1 } = {}) {
     : bktScore >= 0.3 ? 2
     : 1
 
-  const allEx = [...(ua.exercices || [])].sort((a, b) => (a.difficulte ?? 1) - (b.difficulte ?? 1))
+  // Tri DKT ZPD si disponible, fallback difficulté croissante
+  const exercices = ua.exercices || []
+  const allEx = dktOrder && dktOrder.length > 0
+    ? (() => {
+        const pos = new Map(dktOrder.map((id, i) => [id, i]))
+        return [...exercices].sort((a, b) => {
+          const ia = pos.has(a.id) ? pos.get(a.id) : Infinity
+          const ib = pos.has(b.id) ? pos.get(b.id) : Infinity
+          return ia !== ib ? ia - ib : (a.difficulte ?? 1) - (b.difficulte ?? 1)
+        })
+      })()
+    : [...exercices].sort((a, b) => (a.difficulte ?? 1) - (b.difficulte ?? 1))
   const easy  = allEx.filter(e => (e.difficulte ?? 1) === 1)
   const mid   = allEx.filter(e => e.difficulte === 2)
   const hard  = allEx.filter(e => e.difficulte >= 3)
@@ -593,11 +605,24 @@ export default function TutorielAlisha() {
   // L4 — Intro typewriter
   const [introPhase,     setIntroPhase]     = useState(0)   // 0=bounce 1=tw 2=comps 3=cta
   const [introVisComp,   setIntroVisComp]   = useState(0)
+  // DKT — ordre ZPD recommandé par le modèle Deep Knowledge Tracing
+  const [dktOrder,       setDktOrder]       = useState(null)
+  const [dktSource,      setDktSource]      = useState(null)
 
   const sessionIdRef           = useRef(null)
   const stepStartRef           = useRef(null)
   const consecutiveErrRef      = useRef(0)
   const lastCompetenceRef      = useRef(null)
+  // Métriques pour le moteur d'adaptation
+  const sessionStartTimeRef    = useRef(null)
+  const nbResponsesTotalRef    = useRef(0)
+  const erreursSessionRef      = useRef(0)
+  const reussitesMacroRef      = useRef(0)
+  const lastFaceScoreRef       = useRef(0.6)
+  const lastFaceEmotionRef     = useRef('neutre')
+  const recentTimesRef         = useRef([])
+  const engHistoryRef          = useRef([])
+  const lowEngStreakRef         = useRef(0)
   const explicationInjectedRef = useRef(false)
   const midpointShownRef       = useRef(false)
   const bktInitialRef          = useRef(null)
@@ -629,6 +654,7 @@ export default function TutorielAlisha() {
     streak:      streakSession,
     studentName: user?.prenom ?? null,
   })
+  const { currentAdaptation, evaluate, dismiss } = useAdaptation()
   const { lastKeyword } = useKWSModel(audioActive, (dur) => {
     logInteraction('vad_speech', { event: 'end', duration_seconds: dur })
   })
@@ -675,6 +701,8 @@ export default function TutorielAlisha() {
 
     const { emotion: cnnEmotion, probs: cnnProbs, dominant: cnnDominant } = cnnEmotionRef.current
     const em = fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch)
+    lastFaceScoreRef.current = score
+    lastFaceEmotionRef.current = em
 
     const now = Date.now()
     if (now - lastFaceSendRef.current > FACE_SEND_MS) {
@@ -767,6 +795,30 @@ export default function TutorielAlisha() {
     setCameraActive(false)
   }
 
+  // ── DKT — récupère l'ordre ZPD recommandé après chargement de l'UA ─
+  useEffect(() => {
+    if (!ua?.id || !user?.id) return
+    api.get(`/api/dkt/apprenant/${user.id}/prochain-exercice?ua_id=${ua.id}`)
+      .then(r => {
+        setDktSource(r.data.source)
+        const ordered = [r.data.prochain_exercice, ...r.data.alternatives].filter(Boolean)
+        setDktOrder(ordered.map(e => e.id))
+      })
+      .catch(err => {
+        console.warn('DKT indisponible, fallback difficulté', err)
+        setDktSource('fallback_error')
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ua?.id, user?.id])
+
+  // Rebuild de la séquence quand l'ordre DKT arrive (après l'UA chargée)
+  useEffect(() => {
+    if (!ua || !dktOrder) return
+    const seq = buildSequence(ua, { bktScore: bktInitialRef.current, startLevel, dktOrder })
+    setSequence(seq)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dktOrder])
+
   // ── Chargement UA ─────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
@@ -785,6 +837,7 @@ export default function TutorielAlisha() {
         try {
           const s = await api.post('/api/cours/session/creer', { user_id: user.id, ua_id: uaId })
           sessionIdRef.current = s.data.session_id
+          sessionStartTimeRef.current = Date.now()
           // Demande de consentement si jamais accordé, sinon applique immédiatement
           const consent = localStorage.getItem('alisha_media_consent')
           if (!consent) {
@@ -808,6 +861,9 @@ export default function TutorielAlisha() {
 
   const currentStep = sequence[stepIdx] ?? null
   const totalSteps  = sequence.length
+  // Badge DKT : s'affiche uniquement sur le premier exercice quand le modèle a trié
+  const firstExoIdx         = sequence.findIndex(s => s.type === 'exercice')
+  const isFirstDktExercice  = dktSource === 'dkt_zpd' && stepIdx === firstExoIdx
 
   // ── L4 — Intro : orchestration phases (bounce→TW→compétences→CTA) ─
   useEffect(() => {
@@ -954,6 +1010,46 @@ export default function TutorielAlisha() {
       consecutiveErrRef.current = 0
       awardXP(5, '📝 Noté')   // réponse libre
     }
+
+    // ── Métriques pour le moteur d'adaptation ────────────────────
+    nbResponsesTotalRef.current += 1
+    if (result.correct === false) erreursSessionRef.current += 1
+    if (result.correct === true) {
+      reussitesMacroRef.current = competence === lastCompetenceRef.current ? reussitesMacroRef.current + 1 : 1
+    } else {
+      reussitesMacroRef.current = 0
+    }
+    const _rt = recentTimesRef.current; _rt.push(timeSecs); if (_rt.length > 5) _rt.shift()
+    const _fs = lastFaceScoreRef.current
+    const _eh = engHistoryRef.current; _eh.push(_fs); if (_eh.length > 5) _eh.shift()
+    if (_fs < 0.4) lowEngStreakRef.current += 1; else lowEngStreakRef.current = 0
+    const _nextExo = sequence[stepIdx + 1]?.type === 'exercice' ? sequence[stepIdx + 1].data : null
+    evaluate({
+      session_id:       sessionIdRef.current,
+      engagement:       { fused: _fs, etat: lastFaceEmotionRef.current },
+      metrics: {
+        duree_session_sec:               sessionStartTimeRef.current ? Math.round((Date.now() - sessionStartTimeRef.current) / 1000) : 0,
+        nb_responses:                    nbResponsesTotalRef.current,
+        nb_correct:                      scoreCorrects + (result.correct === true ? 1 : 0),
+        erreurs_consecutives_macro_kc:   consecutiveErrRef.current,
+        erreurs_session:                 erreursSessionRef.current,
+        reussites_consecutives:          result.correct === true ? streakSession + 1 : 0,
+        reussites_consecutives_macro_kc: reussitesMacroRef.current,
+        low_engagement_streak:           lowEngStreakRef.current,
+        temps_reponses_recents:          [...recentTimesRef.current],
+        temps_moyen_profil:              recentTimesRef.current.length > 0
+          ? Math.round(recentTimesRef.current.reduce((a, b) => a + b, 0) / recentTimesRef.current.length)
+          : 60,
+        engagement_recent_5:             [...engHistoryRef.current],
+      },
+      current_macro_kc:  competence ?? undefined,
+      current_exercise:  _nextExo ? {
+        id:         _nextExo.id,
+        difficulte: _nextExo.difficulte ?? 1,
+        macro_kc:   _nextExo.kcs?.[0] ?? _nextExo.competence_evaluee ?? undefined,
+      } : undefined,
+    }).catch(() => {})
+
     lastCompetenceRef.current = competence ?? null
 
     // Réexplication — BKT fourni par le serveur, guard double injection
@@ -1686,6 +1782,16 @@ export default function TutorielAlisha() {
                         )}>
                           {currentStep.data._bonus ? '🔥 Mini-défi' : '❓ Application'}
                         </span>
+                        {isFirstDktExercice && (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            background: `${C.emerald}18`, color: C.emerald,
+                            border: `1px solid ${C.emerald}35`, borderRadius: 20,
+                            fontSize: 10, fontWeight: 700, padding: '2px 9px', marginLeft: 6,
+                          }}>
+                            ✨ Recommandé pour toi
+                          </span>
+                        )}
                         <p style={{ fontSize: 15, fontWeight: 600, color: C.text, lineHeight: 1.7, margin: 0 }}>
                           {currentStep.data.enonce}
                         </p>
@@ -1899,6 +2005,12 @@ export default function TutorielAlisha() {
           50%     { box-shadow: 0 0 0 8px rgba(107,58,42,0); }
         }
       `}</style>
+
+      {/* ── Moteur d'adaptation comportementale ── */}
+      <AdaptationOrchestrator
+        adaptation={currentAdaptation}
+        onDismiss={(actionType) => dismiss(actionType)}
+      />
 
       {/* ── Toast badge débloqué ── */}
       {badgeNotif && (

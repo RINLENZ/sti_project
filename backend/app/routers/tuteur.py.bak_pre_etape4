@@ -1,28 +1,20 @@
 """
 Tuteur IA conversationnel — STI Adaptatif
-=========================================
-
-Refonte du router pour utiliser :
-  - llm_service.call_llm() avec cascade Groq → Mistral → Claude
-  - tuteur_service.expliquer() avec contexte BKT + DKT + engagement
-  - 6 registres tonaux dynamiques
-  - Anti-répétition
-
-Préserve les endpoints existants (/referentiel, /apprenant/niveau).
+Génère des explications personnalisées via l'API Claude.
+Contexte : apprenant africain, lycée camerounais, programme APC.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from uuid import UUID
-
 from ..database import get_db
 from ..models.cours import Exercice, UniteApprentissage
 from ..models.user import User, TuteurSuivi
 from ..models.referentiel import Niveau
 from ..dependencies import get_current_user
-from ..services import tuteur_service
-
+from ..utils import get_kcs
+from ..config import settings
 
 router = APIRouter(prefix="/api/tuteur", tags=["tuteur-ia"])
 
@@ -46,35 +38,73 @@ def expliquer_exercice(
     db:   Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Génère une explication pédagogique contextualisée.
-
-    Le service tuteur_service.expliquer() :
-      1. Construit le contexte (BKT + DKT + engagement + historique)
-      2. Choisit le registre tonal adapté
-      3. Appelle le LLM via cascade Groq → Mistral → Claude
-      4. Vérifie anti-répétition et régénère si trop similaire
-      5. Fallback local si aucun LLM disponible
-    """
     exercice = db.query(Exercice).filter(Exercice.id == body.exercice_id).first()
     if not exercice:
         raise HTTPException(404, "Exercice introuvable")
 
-    # Convertir la pydantic list en list[dict] pour le service
-    history = [m.model_dump() for m in (body.conversation_history or [])]
+    ua = db.query(UniteApprentissage).filter(
+        UniteApprentissage.id == exercice.ua_id
+    ).first()
 
-    return tuteur_service.expliquer(
-        db=db,
-        user=current_user,
-        exercice=exercice,
-        reponse_donnee=body.reponse_donnee,
-        conversation_history=history,
-    )
+    # ── Essaie Claude si crédits disponibles ──────────────────────
+    if settings.anthropic_api_key:
+        try:
+            import anthropic
 
+            system_prompt = f"""Tu es un tuteur pédagogique bienveillant pour un lycéen camerounais.
+L'élève est en classe de {body.niveau}, filière {body.filiere}.
 
-# ╔════════════════════════════════════════════════════════════════════╗
-# ║  Endpoints existants — préservés tels quels                         ║
-# ╚════════════════════════════════════════════════════════════════════╝
+EXERCICE : {exercice.titre}
+ÉNONCÉ : {exercice.enonce}
+OPTIONS : {', '.join(exercice.options or [])}
+BONNE RÉPONSE : {exercice.reponse_correcte}
+COMPÉTENCES VISÉES : {', '.join(get_kcs(exercice)) or ''}
+CONTEXTE : {ua.titre if ua else ''}
+
+Tu gardes la mémoire des échanges précédents pour adapter tes explications.
+Réponds toujours en français simple et direct, sans markdown, en 4-6 phrases maximum."""
+
+            # Construit les messages : historique + nouvelle question
+            history = body.conversation_history or []
+            messages = [
+                {"role": m.role, "content": m.content}
+                for m in history[-6:]  # max 3 tours (6 messages)
+            ]
+            messages.append({
+                "role": "user",
+                "content": f"J'ai répondu « {body.reponse_donnee} ». Explique-moi pourquoi c'est {'correct' if body.reponse_donnee == exercice.reponse_correcte else 'incorrect'} et aide-moi à comprendre."
+            })
+
+            client  = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            message = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=450,
+                system=system_prompt,
+                messages=messages,
+            )
+            explication = message.content[0].text.strip()
+            return {
+                "explication_ia":   explication,
+                "exercice_titre":   exercice.titre,
+                "reponse_correcte": exercice.reponse_correcte,
+                "source":           "claude",
+                # Retourne le nouveau message assistant pour que le frontend
+                # puisse l'ajouter à son historique local
+                "assistant_message": explication,
+            }
+        except Exception:
+            pass  # Fallback vers mode local
+
+    # ── Mode dégradé — explication depuis les données de l'exercice ──
+    explication = _explication_locale(exercice, body.reponse_donnee)
+    return {
+        "explication_ia":    explication,
+        "exercice_titre":    exercice.titre,
+        "reponse_correcte":  exercice.reponse_correcte,
+        "source":            "local",
+        "assistant_message": explication,
+    }
+
 
 @router.get("/referentiel")
 def get_referentiel_public(db: Session = Depends(get_db)):
@@ -170,3 +200,30 @@ def update_niveau_apprenant(
         "filiere_label": apprenant.filiere_label,
         "filiere_id":    str(apprenant.filiere_id) if apprenant.filiere_id else None,
     }
+
+
+def _explication_locale(exercice, reponse_donnee: str) -> str:
+    """Génère une explication sans LLM depuis les données de l'exercice."""
+    parties = []
+
+    if reponse_donnee:
+        parties.append(
+            f"Tu as répondu « {reponse_donnee} », "
+            f"mais la bonne réponse est « {exercice.reponse_correcte} »."
+        )
+
+    if exercice.explication:
+        parties.append(exercice.explication)
+
+    if exercice.indice_1:
+        parties.append(f"À retenir : {exercice.indice_1}.")
+
+    if exercice.indice_2:
+        parties.append(f"De plus : {exercice.indice_2}.")
+
+    parties.append(
+        "Ne te décourage pas ! Relis la leçon et réessaie — "
+        "chaque erreur est une étape vers la maîtrise. 💪"
+    )
+
+    return " ".join(parties)

@@ -91,45 +91,6 @@ def _call_ollama(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
 
 # ── Claude / Anthropic ───────────────────────────────────────────────────────
 
-
-def _call_mistral(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
-    """
-    Appel Mistral API (https://console.mistral.ai).
-    Variables d'environnement :
-      MISTRAL_API_KEY  — clé API (free tier 1B tokens/mois)
-      MISTRAL_MODEL    — défaut : mistral-small-latest
-    """
-    import requests
-    api_key = os.environ.get("MISTRAL_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("MISTRAL_API_KEY non configurée")
-
-    model = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-
-    response = requests.post(
-        "https://api.mistral.ai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type":  "application/json",
-        },
-        json={
-            "model":       model,
-            "messages":    messages,
-            "max_tokens":  max_tokens,
-            "temperature": 0.7,
-        },
-        timeout=30,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Mistral API erreur {response.status_code} : {response.text[:200]}"
-        )
-    return response.json()["choices"][0]["message"]["content"]
-
 def _call_claude(prompt: str, max_tokens: int = 8000, system: str = "") -> str:
     import anthropic as _anthropic
 
@@ -274,20 +235,14 @@ def call_llm(
         except Exception as e:
             errors.append(f"Groq: {e}")
 
-    # 2. Mistral (gratuit, free tier 1B tokens/mois, excellent en français)
-    if os.environ.get("MISTRAL_API_KEY"):
-        try:
-            return _call_mistral(prompt, max_tokens, system), "mistral"
-        except Exception as e:
-            errors.append(f"Mistral: {e}")
-    # 3. Ollama (local, si installé et joignable)
+    # 2. Ollama (local, si installé et joignable)
     if os.environ.get("OLLAMA_HOST") or _ollama_reachable():
         try:
             return _call_ollama(prompt, max_tokens, system), "ollama"
         except Exception as e:
             errors.append(f"Ollama: {e}")
 
-    # 4. Claude — fallback
+    # 3. Claude — fallback
     if os.environ.get("ANTHROPIC_API_KEY"):
         try:
             return _call_claude(prompt, max_tokens, system), "claude"
