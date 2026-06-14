@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import { parseBlocks } from '../../components/RichContent'
@@ -7,228 +7,138 @@ import { useSelector } from 'react-redux'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
-  Clock, BookOpen, ChevronRight, CheckCircle,
-  Target, ArrowLeft, Play, Lock, Star, CheckCircle2
+  Clock, BookOpen, ChevronRight, CheckCircle, Target, ArrowLeft,
+  Play, Lock, CheckCircle2, Volume2, Sparkles, Compass, Dumbbell, Trophy,
 } from 'lucide-react'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Sk } from '../../components/Skeleton'
 import { StaticContent } from '../../components/RichContent'
 import { useOnlineRetry } from '../../hooks/useOnlineRetry'
+import { useSound } from '../../hooks/useSound'
+import { AdinkraSymbol } from '../../components/adinkra/AdinkraSymbols.jsx'
 
-// ── Constantes difficulté (une seule définition) ─────────────────
+/* ── Difficulté (palette Bogolan) ──────────────────────────────── */
 const DIFF_LABEL = { 1: 'Facile', 2: 'Moyen', 3: 'Difficile' }
-const DIFF_COLOR = (C) => ({ 1: C.emerald,     2: C.orange,   3: C.red })
-const DIFF_BG    = (C) => ({ 1: C.emeraldPale, 2: C.goldPale, 3: C.redPale })
+const diffColor  = (C) => ({ 1: C.bogolanVert, 2: C.bogolanOcre, 3: '#B5462B' })
 
-// ── Skeleton de page ──────────────────────────────────────────────
+/* ── Étapes du parcours ────────────────────────────────────────── */
+const STEPS = [
+  { key: 'decouvrir', label: 'Découvrir',  short: 'Découvrir', icon: Compass  },
+  { key: 'apprendre', label: 'Apprendre',  short: 'Apprendre', icon: BookOpen },
+  { key: 'entrainer', label: "S'entraîner", short: 'Entraîner', icon: Dumbbell },
+  { key: 'valider',   label: 'Valider',    short: 'Valider',   icon: Trophy   },
+]
+
+/* ── Anneau de maîtrise BKT ────────────────────────────────────── */
+function BKTRing({ score = 0, size = 52, stroke = 5, light = false }) {
+  const { C } = useTheme()
+  const pct  = Math.round((score || 0) * 100)
+  const r    = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const off  = circ - (pct / 100) * circ
+  const track = light ? 'rgba(255,255,255,0.25)' : C.bogolanBorder
+  const fill  = light ? 'white' : pct >= 80 ? C.bogolanVert : pct >= 40 ? C.bogolanOcre : C.bogolanTerre
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={fill} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: size > 70 ? 18 : 13, fontWeight: 900, color: light ? 'white' : fill, lineHeight: 1 }}>{pct}</span>
+        <span style={{ fontSize: 7, fontWeight: 700, color: light ? 'rgba(255,255,255,.7)' : C.bogolanTextSec }}>%</span>
+      </div>
+    </div>
+  )
+}
+
+/* ── Construction des « missions » d'exercices (Concept 3) ─────── */
+function buildMissions(allEx, completed, bkt, C) {
+  const dc = diffColor(C)
+  const groupNums = [...new Set(allEx.map(e => e.groupe).filter(g => g != null))].sort((a, b) => a - b)
+
+  const withDone = (m) => ({ ...m, done: m.ex.filter(e => completed.has(e.id)).length, total: m.ex.length })
+
+  if (groupNums.length) {
+    const list = groupNums.map(g => {
+      const ex = allEx.filter(e => e.groupe === g)
+      return withDone({ key: `g${g}`, label: `Exercice ${g}${ex[0]?.groupe_titre ? ` : ${ex[0].groupe_titre}` : ''}`, color: C.bogolanTerre, ex, query: `?groupe=${g}&skip=1` })
+    })
+    const ung = allEx.filter(e => e.groupe == null)
+    if (ung.length) list.push(withDone({ key: 'libre', label: 'Exercices libres', color: C.bogolanOcre, ex: ung, query: '?skip=1' }))
+    return list
+  }
+
+  const diffs = [...new Set(allEx.map(e => e.difficulte).filter(d => d != null))].sort((a, b) => a - b)
+  if (diffs.length > 1) {
+    const recommDiff = bkt == null ? 1 : bkt < 0.4 ? 1 : bkt < 0.7 ? 2 : 3
+    return diffs.map(d => withDone({
+      key: `d${d}`, label: DIFF_LABEL[d], color: dc[d],
+      ex: allEx.filter(e => e.difficulte === d), query: `?difficulte=${d}&skip=1`, recoForce: d === recommDiff,
+    }))
+  }
+
+  // À plat : chaque exercice = un nœud
+  return allEx.map(e => withDone({
+    key: `e${e.id}`, label: e.titre, color: dc[e.difficulte] || C.bogolanTerre,
+    ex: [e], query: `?exercice_id=${e.id}&skip=1`, single: true,
+  }))
+}
+
+/* ── Squelette ─────────────────────────────────────────────────── */
 function CoursDetailSkeleton() {
   const { C } = useTheme()
   return (
-    <div style={{ background: C.bg, minHeight: '100vh' }}>
-      {/* Hero skeleton */}
-      <div style={{ background: `linear-gradient(135deg, ${C.brownDark}, ${C.brownLight})`, padding: '28px 32px' }}>
+    <div style={{ background: C.bogolanBg, minHeight: '100vh' }}>
+      <div style={{ background: `linear-gradient(140deg, #5E2F0E, ${C.bogolanOcre})`, padding: '28px 32px' }}>
         <Sk w={80} h={28} r={8} style={{ marginBottom: 20, background: 'rgba(255,255,255,.15)' }} />
         <Sk w="55%" h={24} r={8} style={{ marginBottom: 10, background: 'rgba(255,255,255,.2)' }} />
         <Sk w="30%" h={14} r={6} style={{ background: 'rgba(255,255,255,.15)' }} />
       </div>
-      {/* Body skeleton */}
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px', display: 'flex', gap: 20 }}>
-        <div style={{ flex: 1 }}>
-          <Sk h={42} r={12} style={{ marginBottom: 20 }} />
-          <Sk h={18} style={{ marginBottom: 10 }} />
-          <Sk h={14} w="90%" style={{ marginBottom: 8 }} />
-          <Sk h={14} w="75%" style={{ marginBottom: 8 }} />
-          <Sk h={14} w="80%" style={{ marginBottom: 24 }} />
-          <Sk h={52} r={14} />
-        </div>
-        <div style={{ width: 260, flexShrink: 0 }}>
-          <Sk h={180} r={16} style={{ marginBottom: 12 }} />
-          <Sk h={120} r={16} />
-        </div>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: 24 }}>
+        <Sk h={52} r={14} style={{ marginBottom: 20 }} />
+        <Sk h={18} style={{ marginBottom: 10 }} />
+        <Sk h={14} w="90%" style={{ marginBottom: 8 }} />
+        <Sk h={14} w="78%" style={{ marginBottom: 24 }} />
+        <Sk h={52} r={14} />
       </div>
     </div>
   )
 }
 
-// ── Sidebar — useNavigate directement ici ────────────────────────
-const QUIZ_LEVELS = [
-  { level: 1, emoji: '🆕', label: 'Première fois' },
-  { level: 2, emoji: '📚', label: "J'en ai entendu parler" },
-  { level: 3, emoji: '⚡', label: 'Je connais déjà' },
-]
-
-function Sidebar({ ua, uaId }) {
-  const { C }       = useTheme()
-  const navigate    = useNavigate()
-  // P9 — mini-quiz de positionnement avant démarrage
-  const [startLevel, setStartLevel] = useState(null)
-
-  return (
-    <>
-      {/* Compétences visées */}
-      <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: '18px', marginBottom: 14, boxShadow: '0 2px 10px rgba(107,58,42,0.07)', border: `1px solid ${C.brownPale}` }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: C.brown, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 12px' }}>
-          Compétences visées
-        </p>
-        {ua.competences?.map((c, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
-            <div style={{ width: 20, height: 20, borderRadius: 6, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
-              {i + 1}
-            </div>
-            <p style={{ fontSize: 12, lineHeight: 1.5, color: C.text, margin: 0 }}>{c}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Prérequis */}
-      {ua.prerequis?.length > 0 && (
-        <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: '18px', marginBottom: 14, boxShadow: '0 2px 10px rgba(107,58,42,0.07)', border: `1px solid ${C.brownPale}` }}>
-          <p style={{ fontSize: 11, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 12px' }}>
-            Prérequis
-          </p>
-          {ua.prerequis.map((p, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
-              <Lock size={11} color={C.textSec} style={{ flexShrink: 0, marginTop: 3 }} />
-              <p style={{ fontSize: 12, lineHeight: 1.5, color: C.textSec, margin: 0 }}>{p}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Résumé UA + CTAs */}
-      <div style={{ background: `linear-gradient(135deg, ${C.brownPale}, ${C.emeraldPale})`, borderRadius: 16, padding: '18px', border: `1px solid ${C.brownLight}30` }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: C.brown, margin: '0 0 12px' }}>
-          Résumé de l'unité
-        </p>
-        {[
-          { icon: <Clock size={13} />,    label: 'Durée',       value: `${ua.duree_estimee} min` },
-          { icon: <BookOpen size={13} />, label: 'Exercices',   value: ua.exercices?.length || 0 },
-          { icon: <Target size={13} />,   label: 'Compétences', value: ua.competences?.length || 0 },
-        ].map(s => (
-          <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.brownLight}20` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.textSec, fontSize: 12 }}>
-              {s.icon} {s.label}
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: C.brown }}>{s.value}</span>
-          </div>
-        ))}
-
-        {/* P9 — Mini-quiz de positionnement */}
-        {startLevel === null ? (
-          <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 10, fontWeight: 800, color: C.textMuted, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: .5 }}>
-              🎯 Ton niveau sur ce sujet ?
-            </p>
-            {QUIZ_LEVELS.map(({ level, emoji, label }) => (
-              <button
-                key={level}
-                onClick={() => { navigator.vibrate?.(15); setStartLevel(level) }}
-                style={{
-                  width: '100%', marginBottom: 5, padding: '8px 12px',
-                  background: C.bg, border: `1.5px solid ${C.border}`,
-                  borderRadius: 10, color: C.text, fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                  transition: 'border-color .15s',
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{emoji}</span>{label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div style={{ marginTop: 16, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>
-                {QUIZ_LEVELS.find(l => l.level === startLevel)?.emoji}{' '}
-                {QUIZ_LEVELS.find(l => l.level === startLevel)?.label}
-              </span>
-              <button onClick={() => setStartLevel(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, fontSize: 10, fontWeight: 600 }}>
-                Changer
-              </button>
-            </div>
-            <button
-              onClick={() => { navigator.vibrate?.(30); navigate(`/tutoriel/${uaId}?level=${startLevel}`) }}
-              style={{ width: '100%', padding: '12px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            >
-              🤖 Démarrer avec Alisha
-            </button>
-            <button
-              onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}`) }}
-              style={{ width: '100%', marginTop: 8, padding: '10px', background: 'none', color: C.brown, border: `1.5px solid ${C.brownLight}50`, borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            >
-              <Play size={12} fill={C.brown} /> Exercices seuls
-            </button>
-          </>
-        )}
-      </div>
-    </>
-  )
-}
-
-// ── ExRow : ligne d'exercice individuel ──────────────────────────
-// Extrait en composant pour éviter de recréer la référence à chaque render.
-function ExRow({ ex, idx, uaId, completed, C, isMobile, navigate }) {
-  const dc = DIFF_COLOR(C)
-  const isDone = completed
-  return (
-    <div style={{
-      backgroundColor: C.surface, borderRadius: 12,
-      padding: isMobile ? '13px 14px' : '13px 16px',
-      boxShadow: '0 2px 8px rgba(107,58,42,0.07)',
-      border: isDone ? `1.5px solid ${C.emerald}40` : `1px solid ${C.brownPale}`,
-      display: 'flex', alignItems: 'center', gap: 12,
-    }}>
-      <div style={{ width: 30, height: 30, borderRadius: 8, background: isDone ? `${C.emerald}18` : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: isDone ? C.emerald : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>
-        {isDone ? <CheckCircle2 size={16} /> : idx + 1}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.titre}</p>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ backgroundColor: DIFF_BG(C)[ex.difficulte], color: dc[ex.difficulte], padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>{DIFF_LABEL[ex.difficulte]}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: C.brownLight }}>{ex.points} pts</span>
-          {isDone && <span style={{ fontSize: 10, fontWeight: 700, color: C.emerald }}>✓ Réussi</span>}
-        </div>
-      </div>
-      <button
-        onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?exercice_id=${ex.id}&skip=1`) }}
-        style={{ padding: '8px 14px', background: isDone ? `${C.emerald}15` : `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: isDone ? C.emerald : 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, boxShadow: isDone ? 'none' : `0 2px 8px ${C.brown}30` }}
-      >
-        <Play size={11} fill={isDone ? C.emerald : 'white'} />
-        {isDone ? 'Revoir' : 'Faire'}
-      </button>
-    </div>
-  )
-}
-
-// ── Main component ────────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════════════════
+   COMPOSANT PRINCIPAL
+   ══════════════════════════════════════════════════════════════════ */
 export default function CoursDetail() {
   const { C }     = useTheme()
   const { uaId }  = useParams()
   const navigate  = useNavigate()
   const location  = useLocation()
-  const { xs, mobile: isMobile, tablet: isTablet } = useBreakpoint()
+  const { xs, mobile: isMobile } = useBreakpoint()
+  const user = useSelector(s => s.auth.user)
+  void user
 
-  // Retour intelligent : si on vient d'une session/tutoriel terminé(e), on va au dashboard
-  // plutôt que de re-déclencher la session avec navigate(-1).
+  const { stop, readAloud, isReading, supported } = useAlishaVoice()
+  const { playSound } = useSound()
+
+  const [ua,           setUA]           = useState(null)
+  const [loading,      setLoading]      = useState(true)
+  const [step,         setStep]         = useState('decouvrir')
+  const [ressourceIdx, setRessourceIdx] = useState(0)
+  const [readPct,      setReadPct]      = useState(0)
+  const lessonRef    = useRef(null)
+  const celebrated   = useRef(false)
+  const retryKey = useOnlineRetry()
+
   const handleBack = () => {
     const from = location.state?.from
     if (from === 'session' || from === 'tutoriel') return navigate('/dashboard')
-    // Si on a un historique réel ET qu'on ne vient pas d'une session → go back
     if (window.history.length > 2) return navigate(-1)
     navigate('/dashboard')
   }
-
-  const user = useSelector(s => s.auth.user)
-
-  const { speak, stop, readAloud, isReading, supported } = useAlishaVoice()
-
-  const [ua,           setUA]           = useState(null)
-  const [tab,          setTab]          = useState('lecon')
-  const [loading,      setLoading]      = useState(true)
-  const [ressourceIdx, setRessourceIdx] = useState(0)
-  const retryKey = useOnlineRetry()
 
   useEffect(() => {
     setLoading(true)
@@ -238,389 +148,429 @@ export default function CoursDetail() {
       .finally(() => setLoading(false))
   }, [uaId, retryKey])
 
-  if (loading) return <CoursDetailSkeleton />
+  // Stoppe la voix Alisha en changeant d'étape / en quittant
+  useEffect(() => { if (step !== 'apprendre' && isReading) stop() }, [step, isReading, stop])
+  useEffect(() => () => { if (isReading) stop() }, [isReading, stop])
 
+  // Progression de lecture (étape Apprendre)
+  useEffect(() => {
+    if (step !== 'apprendre') return
+    const onScroll = () => {
+      const el = lessonRef.current
+      if (!el) return
+      const rect  = el.getBoundingClientRect()
+      const total = rect.height - window.innerHeight
+      const done  = Math.min(Math.max(-rect.top, 0), Math.max(total, 1))
+      setReadPct(total > 40 ? Math.round((done / total) * 100) : 100)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [step, ressourceIdx, ua])
+
+  if (loading) return <CoursDetailSkeleton />
   if (!ua) return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: C.bg, gap: 12 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: C.bogolanBg, gap: 12 }}>
       <p style={{ fontSize: 32 }}>😕</p>
-      <p style={{ color: C.textSec, fontSize: 14, fontWeight: 600 }}>Cours introuvable</p>
+      <p style={{ color: C.bogolanTextSec, fontSize: 14, fontWeight: 600 }}>Cours introuvable</p>
     </div>
   )
 
-  const lecons     = ua.ressources?.filter(r => r.type === 'lecon') || []
-  const lecon      = lecons[ressourceIdx]
-  const completed  = new Set(ua.completed_exercise_ids || [])
-  const dc         = DIFF_COLOR(C)
+  const allEx     = ua.exercices || []
+  const completed = new Set(ua.completed_exercise_ids || [])
+  const lecons    = ua.ressources?.filter(r => r.type === 'lecon') || []
+  const lecon     = lecons[ressourceIdx]
+  const bkt       = ua.bkt_score
+  const masteryPct = bkt != null ? Math.round(bkt * 100) : 0
+  const doneCount  = allEx.filter(e => completed.has(e.id)).length
+  const mastered   = (bkt ?? 0) >= 0.8 || (allEx.length > 0 && doneCount >= allEx.length)
+  const missions   = buildMissions(allEx, completed, bkt, C)
+  const recoKey    = (missions.find(m => m.recoForce && m.done < m.total)
+                      || missions.find(m => m.done < m.total)
+                      || missions[0])?.key
 
-  const heroPad     = xs ? '14px 12px' : isMobile ? '20px 16px' : '28px 32px'
-  const contentPad  = xs ? '12px' : isMobile ? '16px' : isTablet ? '20px' : '28px 24px'
-  const sidebarWidth = isTablet ? 220 : 260
+  // Célébration de fin
+  if (step === 'valider' && mastered && !celebrated.current) {
+    celebrated.current = true
+    setTimeout(() => playSound('success'), 250)
+  }
+
+  const stepIdx = STEPS.findIndex(s => s.key === step)
+  const goStep  = (k) => { navigator.vibrate?.(15); setStep(k); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+
+  const pad     = xs ? 12 : isMobile ? 16 : 24
+  const heroPad = xs ? '14px 16px 16px' : isMobile ? '18px 20px 18px' : '20px 26px 20px'
+
+  /* CTA principal de l'étape courante (barre collante mobile) */
+  const primaryCTA = {
+    decouvrir: { label: 'Apprendre la leçon', icon: BookOpen, onClick: () => goStep('apprendre') },
+    apprendre: { label: "S'entraîner",        icon: Dumbbell, onClick: () => goStep('entrainer') },
+    entrainer: { label: 'Démarrer avec Alisha', icon: Sparkles, onClick: () => { navigator.vibrate?.(30); navigate(`/tutoriel/${uaId}`) } },
+    valider:   { label: 'Retour au parcours', icon: ChevronRight, onClick: () => navigate('/parcours') },
+  }[step]
+
+  /* ── Carte de section réutilisable ── */
+  const Card = ({ children, style }) => (
+    <div style={{ background: C.bogolanSurface, borderRadius: 16, border: `1px solid ${C.bogolanBorder}`, boxShadow: `0 2px 12px ${C.bogolanTerre}10`, padding: isMobile ? '16px' : '20px 22px', ...style }}>
+      {children}
+    </div>
+  )
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh' }}>
+    <div style={{ background: C.bogolanBg, minHeight: '100vh', padding: pad, paddingBottom: isMobile ? 84 : pad, boxSizing: 'border-box', position: 'relative' }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      {/* ── Hero ── */}
-      <div style={{ background: `linear-gradient(135deg, ${C.brown} 0%, ${C.brownLight} 100%)`, padding: heroPad, color: 'white', position: 'relative', overflow: 'hidden' }}>
-        <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.06, pointerEvents: 'none' }}>
+      {/* Filigrane Adinkra en fond (reflet, faible opacité) */}
+      <div aria-hidden="true" style={{ position: 'fixed', right: isMobile ? -60 : -40, bottom: isMobile ? 40 : -30, opacity: 0.05, pointerEvents: 'none', zIndex: 0, transform: 'rotate(-8deg)' }}>
+        <AdinkraSymbol id="adinkrahene" size={isMobile ? 280 : 460} color={C.bogolanTerre} />
+      </div>
+
+      <div style={{ maxWidth: 820, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+
+      {/* ══ HERO (carte arrondie, façon dashboard) ══ */}
+      <div style={{ background: `linear-gradient(140deg, #5E2F0E 0%, ${C.bogolanTerre} 55%, ${C.bogolanOcre} 100%)`, padding: heroPad, color: 'white', position: 'relative', overflow: 'hidden', borderRadius: xs ? 16 : 20, marginBottom: 12 }}>
+        <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.06, pointerEvents: 'none' }} aria-hidden="true">
           <defs>
-            <pattern id="adinkra-cours" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
-              <circle cx="30" cy="30" r="12" fill="none" stroke="white" strokeWidth="1.5"/>
-              <circle cx="30" cy="30" r="6"  fill="none" stroke="white" strokeWidth="1.5"/>
-              <line x1="30" y1="18" x2="30" y2="12" stroke="white" strokeWidth="1.5"/>
-              <line x1="18" y1="30" x2="12" y2="30" stroke="white" strokeWidth="1.5"/>
-              <line x1="42" y1="30" x2="48" y2="30" stroke="white" strokeWidth="1.5"/>
-              <line x1="30" y1="42" x2="30" y2="48" stroke="white" strokeWidth="1.5"/>
+            <pattern id="adk-cd" x="0" y="0" width="56" height="56" patternUnits="userSpaceOnUse">
+              <circle cx="28" cy="28" r="11" fill="none" stroke="white" strokeWidth="1.5"/>
+              <circle cx="28" cy="28" r="5"  fill="none" stroke="white" strokeWidth="1.5"/>
+              <line x1="28" y1="17" x2="28" y2="11" stroke="white" strokeWidth="1.5"/>
+              <line x1="17" y1="28" x2="11" y2="28" stroke="white" strokeWidth="1.5"/>
+              <line x1="39" y1="28" x2="45" y2="28" stroke="white" strokeWidth="1.5"/>
+              <line x1="28" y1="39" x2="28" y2="45" stroke="white" strokeWidth="1.5"/>
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#adinkra-cours)"/>
+          <rect width="100%" height="100%" fill="url(#adk-cd)"/>
         </svg>
 
         <div style={{ position: 'relative' }}>
-          <button onClick={handleBack} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'white', borderRadius: 8, padding: isMobile ? '8px 12px' : '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, marginBottom: isMobile ? 16 : 20, minHeight: isMobile ? 44 : 'auto' }}>
+          <button onClick={handleBack} style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.22)', color: 'white', borderRadius: 9, padding: isMobile ? '8px 12px' : '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
             <ArrowLeft size={14}/> Retour
           </button>
 
-          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? 14 : 20 }}>
-            <div style={{ flex: 1 }}>
-              <span style={{ background: 'rgba(255,255,255,.2)', padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, display: 'inline-block', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ background: 'rgba(255,255,255,.2)', padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, display: 'inline-block', marginBottom: 8 }}>
                 {ua.reference_ue}
               </span>
-              <h1 style={{ fontSize: xs ? 15 : isMobile ? 18 : 22, fontWeight: 900, lineHeight: 1.25, margin: '0 0 10px' }}>
+              <h1 style={{ fontSize: xs ? 16 : isMobile ? 19 : 23, fontWeight: 900, lineHeight: 1.2, margin: '0 0 8px' }}>
                 {ua.titre}
               </h1>
-              <div style={{ display: 'flex', gap: isMobile ? 10 : 16, flexWrap: 'wrap', marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, opacity: .85 }}><Clock size={12}/> {ua.duree_estimee} min</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, opacity: .85 }}><BookOpen size={12}/> {ua.exercices?.length} exercices</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, opacity: .85 }}><Target size={12}/> {ua.competences?.length} compétences</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, opacity: .85 }}><BookOpen size={12}/> {allEx.length} exercices</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, opacity: .85 }}><Target size={12}/> {ua.competences?.length || 0} compétences</span>
               </div>
+            </div>
+            {bkt != null && <BKTRing score={bkt} size={xs ? 54 : 64} stroke={6} light />}
+          </div>
 
-              {/* BKT mastery */}
-              {ua.bkt_score != null && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <span style={{ fontSize: 11, opacity: .75, fontWeight: 600 }}>Maîtrise</span>
-                    <span style={{ fontSize: 12, fontWeight: 900, opacity: .95 }}>{Math.round(ua.bkt_score * 100)}%</span>
+          {/* CTA Démarrer avec Alisha — disponible dès le début */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => { navigator.vibrate?.(30); navigate(`/tutoriel/${uaId}`) }}
+              style={{ flex: isMobile ? 1 : 'none', minWidth: isMobile ? 0 : 220, padding: '12px 22px', background: 'white', color: C.bogolanTerre, border: 'none', borderRadius: 13, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 18px rgba(0,0,0,.2)' }}
+            >
+              <Sparkles size={16} /> Démarrer avec Alisha
+            </button>
+            <button
+              onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?skip=1`) }}
+              style={{ flex: isMobile ? 1 : 'none', padding: '12px 18px', background: 'rgba(255,255,255,.14)', color: 'white', border: '1.5px solid rgba(255,255,255,.4)', borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+            >
+              <Play size={13} fill="white" /> Exercices seuls
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ STEPPER collant (carte arrondie) ══ */}
+      <div style={{ position: 'sticky', top: xs ? 8 : 12, zIndex: 20, background: C.bogolanSurface, border: `1px solid ${C.bogolanBorder}`, borderRadius: 14, boxShadow: `0 4px 16px ${C.bogolanTerre}14`, marginBottom: 14 }}>
+        <div style={{ padding: xs ? '7px 8px' : '9px 12px', display: 'flex', alignItems: 'center', gap: xs ? 4 : 8 }}>
+          {STEPS.map((s, i) => {
+            const active = s.key === step
+            const passed = i < stepIdx
+            const Icon = s.icon
+            const col  = active ? C.bogolanTerre : passed ? C.bogolanVert : C.bogolanTextSec
+            return (
+              <div key={s.key} style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                <button
+                  onClick={() => goStep(s.key)}
+                  aria-current={active ? 'step' : undefined}
+                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: xs ? '7px 4px' : '8px 6px', borderRadius: 10, cursor: 'pointer', border: active ? `1.5px solid ${C.bogolanTerre}55` : '1.5px solid transparent', background: active ? `${C.bogolanTerre}12` : 'transparent', transition: 'all .2s' }}
+                >
+                  <div style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? C.bogolanTerre : passed ? `${C.bogolanVert}1A` : C.bogolanBg, color: active ? 'white' : col }}>
+                    {passed ? <CheckCircle2 size={13} /> : <Icon size={13} />}
                   </div>
-                  <div style={{ height: 5, background: 'rgba(255,255,255,.25)', borderRadius: 5, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.round(ua.bkt_score * 100)}%`, background: 'rgba(255,255,255,.9)', borderRadius: 5, transition: 'width .8s ease' }}/>
-                  </div>
+                  {!xs && <span style={{ fontSize: 12, fontWeight: active ? 800 : 600, color: col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.short}</span>}
+                </button>
+                {i < STEPS.length - 1 && <div style={{ width: xs ? 6 : 14, height: 2, background: passed ? C.bogolanVert : C.bogolanBorder, flexShrink: 0, borderRadius: 2 }} />}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ══ CONTENU DE L'ÉTAPE ══ */}
+      <div>
+
+        {/* ── 1. DÉCOUVRIR ── */}
+        {step === 'decouvrir' && (
+          <div style={{ animation: 'fadeUp .35s ease', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {ua.situation_probleme ? (
+              <Card style={{ background: `linear-gradient(135deg, ${C.bogolanVert}12, ${C.bogolanSurface})`, border: `1.5px solid ${C.bogolanVert}33` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <Compass size={15} color={C.bogolanVert} />
+                  <p style={{ fontSize: 11, fontWeight: 800, color: C.bogolanVert, textTransform: 'uppercase', letterSpacing: .8, margin: 0 }}>Situation problème</p>
                 </div>
+                <StaticContent data={{ contenu: ua.situation_probleme, points_cles: [] }} C={C} xs={xs} />
+              </Card>
+            ) : (
+              <Card>
+                <p style={{ fontSize: 14, color: C.bogolanText, margin: 0, lineHeight: 1.6 }}>
+                  Bienvenue dans <strong>{ua.titre}</strong>. Découvre la leçon puis entraîne-toi à ton rythme.
+                </p>
+              </Card>
+            )}
+
+            {ua.competences?.length > 0 && (
+              <Card>
+                <p style={{ fontSize: 11, fontWeight: 800, color: C.bogolanTerre, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 12px' }}>Ce que tu vas savoir faire</p>
+                {ua.competences.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, background: `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
+                    <p style={{ fontSize: 13, lineHeight: 1.5, color: C.bogolanText, margin: 0 }}>{c}</p>
+                  </div>
+                ))}
+              </Card>
+            )}
+
+            {ua.prerequis?.length > 0 && (
+              <Card>
+                <p style={{ fontSize: 11, fontWeight: 800, color: C.bogolanTextSec, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 10px' }}>Prérequis</p>
+                {ua.prerequis.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+                    <Lock size={11} color={C.bogolanTextSec} style={{ flexShrink: 0, marginTop: 3 }} />
+                    <p style={{ fontSize: 12, lineHeight: 1.5, color: C.bogolanTextSec, margin: 0 }}>{p}</p>
+                  </div>
+                ))}
+              </Card>
+            )}
+
+            <StepCTA onClick={() => goStep('apprendre')} C={C} icon={BookOpen}>Apprendre la leçon</StepCTA>
+          </div>
+        )}
+
+        {/* ── 2. APPRENDRE ── */}
+        {step === 'apprendre' && (
+          <div ref={lessonRef} style={{ animation: 'fadeUp .35s ease', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Progression de lecture */}
+            <div style={{ position: 'sticky', top: xs ? 46 : 54, zIndex: 10, height: 4, background: C.bogolanBorder, borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${readPct}%`, background: `linear-gradient(90deg, ${C.bogolanTerre}, ${C.bogolanVert})`, transition: 'width .15s linear' }} />
+            </div>
+
+            {lecons.length > 1 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {lecons.map((l, i) => (
+                  <button key={l.id} onClick={() => setRessourceIdx(i)} style={{ padding: '7px 14px', borderRadius: 20, border: `1px solid ${ressourceIdx === i ? C.bogolanTerre : C.bogolanBorder}`, background: ressourceIdx === i ? C.bogolanTerre : C.bogolanSurface, color: ressourceIdx === i ? 'white' : C.bogolanTerre, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    {l.titre}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {lecon ? (
+              <Card>
+                {supported && (
+                  <button
+                    onClick={() => { if (isReading) { stop() } else { const t = blocksToSpeech(parseBlocks(lecon?.contenu)); if (t) readAloud(t) } }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${isReading ? C.bogolanOcre : C.bogolanIndigo}66`, background: isReading ? `${C.bogolanOcre}12` : `${C.bogolanIndigo}0D`, color: isReading ? C.bogolanOcre : C.bogolanIndigo, fontSize: 12, fontWeight: 700, cursor: 'pointer', marginBottom: 14 }}
+                  >
+                    <Volume2 size={13} /> {isReading ? 'Arrêter la lecture' : 'Alisha lit le cours'}
+                  </button>
+                )}
+                <StaticContent data={lecon} C={C} xs={xs} />
+              </Card>
+            ) : (
+              <Card><p style={{ color: C.bogolanTextSec, fontSize: 14, margin: 0, textAlign: 'center' }}>Aucune leçon disponible pour cette UA.</p></Card>
+            )}
+
+            {lecon?.points_cles?.length > 0 && (
+              <Card style={{ background: `${C.bogolanVert}10`, border: `1px solid ${C.bogolanVert}33` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <CheckCircle size={15} color={C.bogolanVert} />
+                  <p style={{ fontSize: 11, fontWeight: 800, color: C.bogolanVert, textTransform: 'uppercase', letterSpacing: .8, margin: 0 }}>Points clés à retenir</p>
+                </div>
+                {lecon.points_cles.map((pt, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
+                    <span style={{ color: C.bogolanVert, fontWeight: 900, flexShrink: 0 }}>✓</span>
+                    <p style={{ fontSize: 13, lineHeight: 1.6, color: C.bogolanText, margin: 0 }}>{pt}</p>
+                  </div>
+                ))}
+              </Card>
+            )}
+
+            <StepCTA onClick={() => goStep('entrainer')} C={C} icon={Dumbbell}>S'entraîner</StepCTA>
+          </div>
+        )}
+
+        {/* ── 3. S'ENTRAÎNER (chemin de mission) ── */}
+        {step === 'entrainer' && (
+          <div style={{ animation: 'fadeUp .35s ease', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: `${C.bogolanTerre}10`, border: `1px solid ${C.bogolanTerre}26`, borderRadius: 12, padding: '10px 14px' }}>
+              <Target size={15} color={C.bogolanTerre} />
+              <p style={{ fontSize: 12.5, color: C.bogolanText, fontWeight: 600, margin: 0 }}>
+                {missions.length > 1 ? 'Suis le chemin — le palier conseillé est mis en avant.' : 'Lance les exercices quand tu te sens prêt.'}
+              </p>
+            </div>
+
+            {allEx.length === 0 ? (
+              <Card><p style={{ color: C.bogolanTextSec, fontSize: 14, margin: 0, textAlign: 'center' }}>Aucun exercice pour cette UA.</p></Card>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {missions.map((m, i) => {
+                  const isDone = m.total > 0 && m.done >= m.total
+                  const isReco = m.key === recoKey && !isDone
+                  const last   = i === missions.length - 1
+                  return (
+                    <div key={m.key} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+                      {/* Colonne nœud + connecteur */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: isDone ? C.bogolanVert : isReco ? m.color : C.bogolanSurface, border: `2px solid ${isDone ? C.bogolanVert : m.color}`, color: isDone || isReco ? 'white' : m.color, fontWeight: 900, fontSize: 13, boxShadow: isReco ? `0 0 0 4px ${m.color}22` : 'none' }}>
+                          {isDone ? <CheckCircle2 size={18} /> : i + 1}
+                        </div>
+                        {!last && <div style={{ flex: 1, width: 2, background: C.bogolanBorder, minHeight: 14, marginTop: 2 }} />}
+                      </div>
+
+                      {/* Carte mission */}
+                      <div style={{ flex: 1, minWidth: 0, marginBottom: 12, background: C.bogolanSurface, borderRadius: 14, border: `1.5px solid ${isReco ? `${m.color}66` : C.bogolanBorder}`, boxShadow: isReco ? `0 6px 18px ${m.color}22` : `0 2px 10px ${C.bogolanTerre}0D`, overflow: 'hidden' }}>
+                        <div style={{ padding: isMobile ? '13px 14px' : '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
+                              <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.bogolanText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{m.label}</p>
+                              {isReco && <span style={{ fontSize: 9, fontWeight: 800, color: 'white', background: m.color, borderRadius: 20, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Sparkles size={8} /> Conseillé</span>}
+                              {m.done > 0 && !isDone && <span style={{ fontSize: 9, fontWeight: 800, color: C.bogolanVert, background: `${C.bogolanVert}15`, borderRadius: 20, padding: '2px 7px' }}>{m.done}/{m.total}</span>}
+                              {isDone && <span style={{ fontSize: 9, fontWeight: 800, color: C.bogolanVert, background: `${C.bogolanVert}15`, borderRadius: 20, padding: '2px 7px' }}>✓ Réussi</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 11, color: C.bogolanTextSec, fontWeight: 600 }}>{m.total} question{m.total > 1 ? 's' : ''}</span>
+                              <span style={{ fontSize: 11, color: C.bogolanOcre, fontWeight: 700 }}>★ {m.ex.reduce((s, e) => s + (e.points || 0), 0)} pts</span>
+                            </div>
+                            {m.total > 1 && (
+                              <div style={{ marginTop: 8, height: 4, background: C.bogolanBorder, borderRadius: 4, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.round(m.done / m.total * 100)}%`, background: C.bogolanVert, transition: 'width .6s ease' }} />
+                              </div>
+                            )}
+                          </div>
+                          <button onClick={() => { navigator.vibrate?.(25); navigate(`/session/${uaId}${m.query}`) }} style={{ padding: isMobile ? '10px 13px' : '11px 18px', background: isDone ? `${C.bogolanVert}15` : `linear-gradient(135deg, ${m.color}, ${m.color}cc)`, color: isDone ? C.bogolanVert : 'white', border: 'none', borderRadius: 11, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap', boxShadow: isDone ? 'none' : `0 3px 12px ${m.color}33` }}>
+                            <Play size={13} fill={isDone ? C.bogolanVert : 'white'} /> {isDone ? 'Revoir' : m.done > 0 ? 'Continuer' : 'Démarrer'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Démarrage global */}
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+              <button onClick={() => { navigator.vibrate?.(30); navigate(`/tutoriel/${uaId}`) }} style={{ flex: 1, padding: '13px', background: `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`, color: 'white', border: 'none', borderRadius: 13, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 16px ${C.bogolanTerre}40` }}>
+                <Sparkles size={15} /> Démarrer avec Alisha
+              </button>
+              {allEx.length > 1 && (
+                <button onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?skip=1`) }} style={{ flex: 1, padding: '13px', background: 'none', color: C.bogolanTerre, border: `1.5px solid ${C.bogolanTerre}40`, borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  Tout faire d'un coup · {allEx.length}
+                </button>
               )}
             </div>
 
-            {/* CTAs hero — Alisha en primary */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: isMobile ? '100%' : 'auto' }}>
-              <button
-                onClick={() => { navigator.vibrate?.(30); navigate(`/tutoriel/${uaId}`) }}
-                style={{ background: 'white', border: 'none', borderRadius: 14, padding: isMobile ? '13px 20px' : '14px 28px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: isMobile ? 14 : 15, fontWeight: 800, color: C.brown, boxShadow: '0 4px 20px rgba(0,0,0,.2)', width: '100%', justifyContent: 'center', minHeight: 44 }}
-              >
-                🤖 Démarrer avec Alisha
-              </button>
-              <button
-                onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}`) }}
-                style={{ background: 'rgba(255,255,255,.15)', border: '1.5px solid rgba(255,255,255,.4)', borderRadius: 12, padding: '9px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.9)', width: '100%', justifyContent: 'center', minHeight: 40 }}
-              >
-                <Play size={12} fill="rgba(255,255,255,.9)"/> Exercices seuls
-              </button>
-            </div>
+            <StepCTA onClick={() => goStep('valider')} C={C} icon={Trophy} variant="ghost">Voir mon bilan</StepCTA>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* ── Body ── */}
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: contentPad }}>
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 16 : 20, alignItems: 'flex-start' }}>
+        {/* ── 4. VALIDER (bilan + célébration) ── */}
+        {step === 'valider' && (
+          <div style={{ animation: 'fadeUp .35s ease', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Card style={{ textAlign: 'center', background: mastered ? `linear-gradient(135deg, ${C.bogolanVert}14, ${C.bogolanSurface})` : C.bogolanSurface, border: `1.5px solid ${mastered ? C.bogolanVert + '40' : C.bogolanBorder}` }}>
+              {mastered ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+                    <AdinkraSymbol id="nyame_nti" size={72} color={C.bogolanVert} animate />
+                  </div>
+                  <h2 style={{ fontSize: 18, fontWeight: 900, color: C.bogolanVert, margin: '0 0 4px' }}>Unité maîtrisée ! 🎉</h2>
+                  <p style={{ fontSize: 13, color: C.bogolanTextSec, margin: 0 }}>Bravo, tu as atteint la maîtrise de cette unité.</p>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                    <BKTRing score={bkt || 0} size={88} stroke={8} />
+                  </div>
+                  <h2 style={{ fontSize: 17, fontWeight: 900, color: C.bogolanText, margin: '0 0 4px' }}>Tu progresses bien</h2>
+                  <p style={{ fontSize: 13, color: C.bogolanTextSec, margin: 0 }}>
+                    Maîtrise actuelle : {masteryPct}% — continue pour atteindre 80%.
+                  </p>
+                </>
+              )}
+            </Card>
 
-          {/* ── Colonne principale ── */}
-          <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
-
-            {/* Situation problème */}
-            {ua.situation_probleme && (
-              <div style={{ background: `linear-gradient(135deg, ${C.brownPale}, ${C.emeraldPale})`, borderRadius: 14, padding: isMobile ? '16px' : '20px 24px', marginBottom: 20, border: `1px solid ${C.brownLight}30`, animation: 'fadeUp .4s ease' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <Star size={14} color={C.gold} fill={C.gold}/>
-                  <p style={{ fontSize: 11, fontWeight: 800, color: C.brown, textTransform: 'uppercase', letterSpacing: .8, margin: 0 }}>Situation problème</p>
-                </div>
-                {/* Délégué à StaticContent pour interpréter le Markdown éventuel */}
-                <StaticContent data={{ contenu: ua.situation_probleme, points_cles: [] }} C={C} xs={xs} />
-              </div>
-            )}
-
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: C.brownPale, padding: 4, borderRadius: 12 }}>
+            <Card>
+              <p style={{ fontSize: 11, fontWeight: 800, color: C.bogolanTerre, textTransform: 'uppercase', letterSpacing: .8, margin: '0 0 12px' }}>Ta progression</p>
               {[
-                { key: 'lecon',     label: '📖 Leçon' },
-                { key: 'exercices', label: '✏️ Exercices' },
-              ].map(t => (
-                <button key={t.key} onClick={() => setTab(t.key)} style={{ flex: 1, padding: isMobile ? '11px 8px' : '10px 16px', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: isMobile ? 13 : 14, fontWeight: tab === t.key ? 800 : 500, background: tab === t.key ? C.surface : 'transparent', color: tab === t.key ? C.brown : C.textSec, boxShadow: tab === t.key ? '0 2px 8px rgba(107,58,42,0.12)' : 'none', transition: 'all .2s', minHeight: 44 }}>
-                  {t.label}
-                  {t.key === 'exercices' && completed.size > 0 && (
-                    <span style={{ marginLeft: 6, fontSize: 10, background: C.emeraldPale, color: C.emerald, borderRadius: 10, padding: '1px 6px', fontWeight: 800 }}>
-                      {completed.size}/{ua.exercices?.length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Leçon — StaticContent au lieu de ContentRenderer ── */}
-            {tab === 'lecon' && (
-              <div style={{ animation: 'fadeUp .3s ease' }}>
-                {lecons.length > 1 && (
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-                    {lecons.map((l, i) => (
-                      <button key={l.id} onClick={() => setRessourceIdx(i)} style={{ padding: '7px 14px', borderRadius: 20, border: 'none', background: ressourceIdx === i ? C.brown : C.brownPale, color: ressourceIdx === i ? 'white' : C.brown, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 36 }}>
-                        {l.titre}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {lecon ? (
-                  <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: isMobile ? '18px 16px' : '24px 28px', boxShadow: '0 2px 12px rgba(107,58,42,0.08)', border: `1px solid ${C.brownPale}`, marginBottom: 16 }}>
-                    {/* Bouton lecture Alisha */}
-                    {supported && (
-                      <button
-                        onClick={() => {
-                          if (isReading) {
-                            stop()
-                          } else {
-                            const blocks = parseBlocks(lecon?.contenu)
-                            const text   = blocksToSpeech(blocks)
-                            if (text) readAloud(text)
-                          }
-                        }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          padding: '7px 14px', borderRadius: 20,
-                          border: `1.5px solid ${isReading ? C.accent + '80' : C.purple + '50'}`,
-                          background: isReading ? `${C.accent}10` : `${C.purple}08`,
-                          color: isReading ? C.accent : C.purple,
-                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                          marginBottom: 14, transition: 'all .2s',
-                        }}
-                      >
-                        {isReading ? '⏹ Arrêter la lecture' : '📖 Alisha lit le cours'}
-                      </button>
-                    )}
-                    {/* StaticContent gère JSON structuré ET Markdown brut */}
-                    <StaticContent data={lecon} C={C} xs={xs} />
-                  </div>
-                ) : (
-                  <div style={{ backgroundColor: C.surface, borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${C.brownPale}` }}>
-                    <p style={{ color: C.textSec, fontSize: 14 }}>Aucune leçon disponible pour cette UA.</p>
-                  </div>
-                )}
-
-                {/* Points clés */}
-                {lecon?.points_cles?.length > 0 && (
-                  <div style={{ backgroundColor: C.emeraldPale, borderRadius: 14, padding: isMobile ? '16px' : '18px 22px', border: `1px solid ${C.emerald}30`, marginBottom: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                      <CheckCircle size={15} color={C.emerald}/>
-                      <p style={{ fontSize: 11, fontWeight: 800, color: C.emerald, textTransform: 'uppercase', letterSpacing: .8, margin: 0 }}>Points clés à retenir</p>
-                    </div>
-                    {lecon.points_cles.map((pt, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
-                        <span style={{ color: C.emerald, fontWeight: 900, flexShrink: 0 }}>✓</span>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: C.text, margin: 0 }}>{pt}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => { navigator.vibrate?.(25); setTab('exercices') }}
-                  style={{ width: '100%', padding: '15px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 14, fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52 }}
-                >
-                  Voir les exercices <ChevronRight size={15}/>
-                </button>
-              </div>
-            )}
-
-            {/* ── Exercices ── */}
-            {tab === 'exercices' && (() => {
-              const allEx     = ua.exercices || []
-              const groupNums = [...new Set(allEx.map(e => e.groupe).filter(g => g != null))].sort((a,b) => a-b)
-              const hasGroups = groupNums.length > 0
-
-              if (!hasGroups) {
-                const diffLevels = [...new Set(allEx.map(e => e.difficulte).filter(d => d != null))].sort((a,b) => a-b)
-                const DIFF_ICONS = { 1: '▲', 2: '▲▲', 3: '▲▲▲' }
-                const totalPts   = (list) => list.reduce((s,e) => s + (e.points||0), 0)
-                const bkt        = ua.bkt_score
-                const recommDiff = bkt == null ? 1 : bkt < 0.4 ? 1 : bkt < 0.7 ? 2 : 3
-
-                if (diffLevels.length > 1) {
-                  return (
-                    <div style={{ animation: 'fadeUp .3s ease' }}>
-                      <div style={{ background: C.brownPale, borderRadius: 10, padding: '9px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Target size={13} color={C.brown}/>
-                        <p style={{ fontSize: 12, color: C.brown, fontWeight: 700, margin: 0 }}>
-                          {diffLevels.length} niveaux disponibles — choisis ton niveau de départ.
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                        {diffLevels.map(d => {
-                          const dEx = allEx.filter(e => e.difficulte === d)
-                          const tp  = totalPts(dEx)
-                          const doneDiff = dEx.filter(e => completed.has(e.id)).length
-                          return (
-                            <div key={d} style={{ backgroundColor: C.surface, borderRadius: 16, border: `1.5px solid ${dc[d]}30`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.08)' }}>
-                              <div style={{ padding: isMobile ? '14px 16px' : '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${dc[d]}, ${dc[d]}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 4px 12px ${dc[d]}30` }}>
-                                  <span style={{ fontSize: 13, fontWeight: 900, color: 'white' }}>{DIFF_ICONS[d]}</span>
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.text }}>{DIFF_LABEL[d]}</p>
-                                    {d === recommDiff && (
-                                      <span style={{ fontSize: 9, fontWeight: 800, color: 'white', background: C.emerald, borderRadius: 20, padding: '2px 7px', letterSpacing: .3 }}>✦ Recommandé</span>
-                                    )}
-                                    {doneDiff > 0 && (
-                                      <span style={{ fontSize: 9, fontWeight: 800, color: C.emerald, background: `${C.emerald}15`, borderRadius: 20, padding: '2px 7px' }}>{doneDiff}/{dEx.length} réussis</span>
-                                    )}
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 10 }}>
-                                    <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{dEx.length} question{dEx.length > 1 ? 's' : ''}</span>
-                                    <span style={{ fontSize: 11, color: C.brownLight, fontWeight: 600 }}>★ {tp} pts</span>
-                                  </div>
-                                </div>
-                                <button onClick={() => { navigator.vibrate?.(25); navigate(`/session/${uaId}?difficulte=${d}&skip=1`) }} style={{ padding: isMobile ? '10px 14px' : '11px 20px', background: `linear-gradient(135deg, ${dc[d]}, ${dc[d]}cc)`, color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 12px ${dc[d]}30`, whiteSpace: 'nowrap' }}>
-                                  <Play size={13} fill="white"/> Démarrer
-                                </button>
-                              </div>
-                              <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                {dEx.map((ex, i) => (
-                                  <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    {completed.has(ex.id)
-                                      ? <CheckCircle2 size={14} color={C.emerald} style={{ flexShrink: 0 }} />
-                                      : <span style={{ width: 18, height: 18, borderRadius: 5, background: C.brownPale, color: C.textSec, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, flexShrink: 0 }}>{i+1}</span>
-                                    }
-                                    <span style={{ fontSize: 12, color: C.text, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: completed.has(ex.id) ? 'line-through' : 'none', opacity: completed.has(ex.id) ? .55 : 1 }}>{ex.titre}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      <button onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?skip=1`) }} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        Tout faire en une session · {allEx.length} questions
-                      </button>
-                    </div>
-                  )
-                }
-
-                // Un seul niveau → liste individuelle avec indicateurs de complétion
-                return (
-                  <div style={{ animation: 'fadeUp .3s ease' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                      {allEx.map((ex, i) => (
-                        <ExRow
-                          key={ex.id}
-                          ex={ex} idx={i} uaId={uaId}
-                          completed={completed.has(ex.id)}
-                          C={C} isMobile={isMobile} navigate={navigate}
-                        />
-                      ))}
-                    </div>
-                    {allEx.length > 1 && (
-                      <button onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?skip=1`) }} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        Tout faire en une session · {allEx.length} exercices
-                      </button>
-                    )}
-                  </div>
-                )
-              }
-
-              // Mode groupes
-              const ungrouped  = allEx.filter(e => e.groupe == null)
-              const avgDiff    = (list) => list.length ? Math.round(list.reduce((s,e) => s + (e.difficulte||1), 0) / list.length) : 1
-              const totalPts   = (list) => list.reduce((s,e) => s + (e.points||0), 0)
-
-              return (
-                <div style={{ animation: 'fadeUp .3s ease' }}>
-                  <div style={{ background: C.brownPale, borderRadius: 10, padding: '9px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Target size={13} color={C.brown}/>
-                    <p style={{ fontSize: 12, color: C.brown, fontWeight: 700, margin: 0 }}>
-                      Ce cours contient {groupNums.length} exercice{groupNums.length > 1 ? 's' : ''} — choisis par où commencer.
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                    {groupNums.map(g => {
-                      const gEx    = allEx.filter(e => e.groupe === g)
-                      const ad     = avgDiff(gEx)
-                      const tp     = totalPts(gEx)
-                      const gTitre = gEx[0]?.groupe_titre || null
-                      const doneG  = gEx.filter(e => completed.has(e.id)).length
-                      return (
-                        <div key={g} style={{ backgroundColor: C.surface, borderRadius: 16, border: `1.5px solid ${C.brownPale}`, overflow: 'hidden', boxShadow: '0 2px 10px rgba(107,58,42,0.08)' }}>
-                          <div style={{ padding: isMobile ? '14px 16px' : '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                            <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 4px 12px ${C.brown}30` }}>
-                              <span style={{ fontSize: 18, fontWeight: 900, color: 'white' }}>{g}</span>
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                                <p style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 800, color: C.text }}>Exercice {g}{gTitre ? ` : ${gTitre}` : ''}</p>
-                                {doneG > 0 && (
-                                  <span style={{ fontSize: 9, fontWeight: 800, color: C.emerald, background: `${C.emerald}15`, borderRadius: 20, padding: '2px 7px' }}>{doneG}/{gEx.length} réussis</span>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>{gEx.length} question{gEx.length > 1 ? 's' : ''}</span>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: dc[ad] }}>{'▲'.repeat(ad)} {ad === 1 ? 'Facile' : ad === 2 ? 'Moyen' : 'Difficile'}</span>
-                                <span style={{ fontSize: 11, color: C.brownLight, fontWeight: 600 }}>★ {tp} pts</span>
-                              </div>
-                            </div>
-                            <button onClick={() => { navigator.vibrate?.(25); navigate(`/session/${uaId}?groupe=${g}&skip=1`) }} style={{ padding: isMobile ? '10px 14px' : '11px 20px', background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`, color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 12px ${C.brown}30`, whiteSpace: 'nowrap' }}>
-                              <Play size={13} fill="white"/> Démarrer
-                            </button>
-                          </div>
-                          <div style={{ borderTop: `1px solid ${C.brownPale}`, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {gEx.map((ex, i) => (
-                              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                {completed.has(ex.id)
-                                  ? <CheckCircle2 size={14} color={C.emerald} style={{ flexShrink: 0 }} />
-                                  : <span style={{ width: 18, height: 18, borderRadius: 5, background: C.brownPale, color: C.textSec, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, flexShrink: 0 }}>{i+1}</span>
-                                }
-                                <span style={{ fontSize: 12, color: C.text, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: completed.has(ex.id) ? 'line-through' : 'none', opacity: completed.has(ex.id) ? .55 : 1 }}>{ex.titre}</span>
-                                <span style={{ fontSize: 10, color: dc[ex.difficulte], fontWeight: 700 }}>{'▲'.repeat(ex.difficulte)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-
-                    {ungrouped.length > 0 && (
-                      <div style={{ backgroundColor: C.surface, borderRadius: 14, border: `1px dashed ${C.brownLight}`, padding: isMobile ? '12px 14px' : '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: C.text }}>Exercices libres</p>
-                          <p style={{ margin: 0, fontSize: 11, color: C.textSec }}>{ungrouped.length} exercice{ungrouped.length > 1 ? 's' : ''} sans groupe assigné</p>
-                        </div>
-                        <button onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?skip=1`) }} style={{ padding: '9px 16px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <Play size={12} fill={C.brown}/> Faire
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <button onClick={() => { navigator.vibrate?.(20); navigate(`/session/${uaId}?skip=1`) }} style={{ width: '100%', padding: '13px', background: C.brownPale, color: C.brown, border: `1.5px solid ${C.brownLight}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    Tout faire en une session · {allEx.length} exercices
-                  </button>
+                { label: 'Exercices réussis', value: `${doneCount}/${allEx.length}` },
+                { label: 'Maîtrise (BKT)',    value: `${masteryPct}%` },
+                { label: 'Compétences visées', value: ua.competences?.length || 0 },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.bogolanBorder}` }}>
+                  <span style={{ fontSize: 13, color: C.bogolanTextSec }}>{s.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.bogolanTerre }}>{s.value}</span>
                 </div>
-              )
-            })()}
-          </div>
+              ))}
+            </Card>
 
-          {/* ── Sidebar ── */}
-          <div style={{ width: isMobile ? '100%' : sidebarWidth, flexShrink: 0 }}>
-            <Sidebar ua={ua} uaId={uaId} />
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+              {!mastered && (
+                <button onClick={() => goStep('entrainer')} style={{ flex: 1, padding: '13px', background: `linear-gradient(135deg, ${C.bogolanVert}, #3C6749)`, color: 'white', border: 'none', borderRadius: 13, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 16px ${C.bogolanVert}40` }}>
+                  <Dumbbell size={15} /> Continuer à m'entraîner
+                </button>
+              )}
+              <button onClick={() => navigate('/parcours')} style={{ flex: 1, padding: '13px', background: mastered ? `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})` : 'none', color: mastered ? 'white' : C.bogolanTerre, border: mastered ? 'none' : `1.5px solid ${C.bogolanTerre}40`, borderRadius: 13, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: mastered ? `0 4px 16px ${C.bogolanTerre}40` : 'none' }}>
+                Retour au parcours <ChevronRight size={15} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      </div>{/* fin conteneur maxWidth */}
+
+      {/* ══ CTA collant (mobile, au-dessus du MobileNav) ══ */}
+      {isMobile && primaryCTA && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 68, zIndex: 30, padding: '8px 12px', background: `${C.bogolanBg}F2`, backdropFilter: 'blur(8px)', borderTop: `1px solid ${C.bogolanBorder}` }}>
+          <button onClick={primaryCTA.onClick} style={{ width: '100%', padding: '13px', background: `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`, color: 'white', border: 'none', borderRadius: 13, fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 16px ${C.bogolanTerre}45`, animation: 'breath 3s ease-in-out infinite' }}>
+            <primaryCTA.icon size={16} /> {primaryCTA.label}
+          </button>
+        </div>
+      )}
     </div>
+  )
+}
+
+/* ── Bouton CTA d'étape (in-flow, desktop + mobile) ── */
+function StepCTA({ onClick, C, icon: Icon, children, variant = 'solid' }) {
+  const solid = variant === 'solid'
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%', padding: '14px', borderRadius: 14, cursor: 'pointer',
+        border: solid ? 'none' : `1.5px solid ${C.bogolanTerre}40`,
+        background: solid ? `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})` : 'none',
+        color: solid ? 'white' : C.bogolanTerre, fontSize: 15, fontWeight: 800,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+        boxShadow: solid ? `0 4px 18px ${C.bogolanTerre}40` : 'none',
+      }}
+    >
+      {Icon && <Icon size={16} />} {children} <ChevronRight size={16} />
+    </button>
   )
 }
