@@ -144,3 +144,16 @@ code {
 @keyframes streakPop     { 0%{transform:scale(.5);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
 @keyframes goldGlow      { 0%,100%{box-shadow:0 0 0 0 #F59E0B00} 50%{box-shadow:0 0 28px 6px #F59E0B55} }
 @keyframes scoreCount    { from{opacity:0;transform:scale(.4) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+
+/* ── Identité Adinkra / Bogolan (dashboard apprenant 5.2) ─────────── */
+/* Animation de tracé progressif des symboles Adinkra (le symbole se dessine) */
+.adinkra-draw path,
+.adinkra-draw line,
+.adinkra-draw circle {
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
+  animation: adinkra-trace 1.2s ease forwards;
+}
+@keyframes adinkra-trace { to { stroke-dashoffset: 0; } }
+/* Respiration douce — bouton "Reprends où tu en étais" */
+@keyframes breath { 0%,100%{transform:scale(1)} 50%{transform:scale(1.02)} }

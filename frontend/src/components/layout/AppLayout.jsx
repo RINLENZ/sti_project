@@ -5,7 +5,6 @@ import MobileNav from './MobileNav'
 import ProgressionMap from '../../pages/apprenant/ProgressionMap'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { useTheme } from '../../styles/theme.jsx'
-import XPBar from '../gamification/XPBar'
 
 export default function AppLayout({ children }) {
   const [activeView, setActiveView] = useState('main') // 'main' | 'parcours'
@@ -41,7 +40,9 @@ export default function AppLayout({ children }) {
         }}
       >
         <style>{`@keyframes pageFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}`}</style>
-        <XPBar />
+        {/* Barre XP retirée de la coque : le niveau/XP/streak vit dans le hero
+            du dashboard. Les pages Session/Tutoriel rafraîchissent via
+            window.__refreshXPBar?.() (no-op si la barre est absente). */}
         {activeView === 'parcours'
           ? <ProgressionMap />
           : children

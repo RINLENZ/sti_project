@@ -6,7 +6,11 @@ import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { ArrowLeft, ChevronRight, BookOpen, ClipboardList,
-         CheckCircle2, FileText, Clock, Award, ShieldAlert } from 'lucide-react'
+         CheckCircle2, FileText, Clock, Award, ShieldAlert, Brain } from 'lucide-react'
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  PolarRadiusAxis, ResponsiveContainer, Tooltip
+} from 'recharts'
 import { useTheme } from '../../styles/theme.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
@@ -132,6 +136,7 @@ export default function ProgressionMap() {
   const [recommandee, setRecommandee] = useState(null)
   const [activeTab,   setActiveTab]   = useState('cours')  // 'cours' | 'epreuves'
   const [epreuves,    setEpreuves]    = useState([])
+  const [bktData,     setBktData]     = useState(null)     // maîtrise par compétence (radar)
   const retryKey = useOnlineRetry()
 
   // ── Chargement avec cache ─────────────────────────────────────────
@@ -143,6 +148,7 @@ export default function ProgressionMap() {
       setProgramme(hit.programme)
       setRecommandee(hit.recommandee)
       setEpreuves(hit.epreuves || [])
+      setBktData(hit.bktData || null)
       setLoading(false)
     }
 
@@ -156,13 +162,15 @@ export default function ProgressionMap() {
         const prog = progRes.data || []
         setProgramme(prog)
 
-        let reco = null, ep = []
+        let reco = null, ep = [], bkt = null
         try { const { data: r } = await api.get(`/api/cours/ua/recommandee/${user.id}`); reco = r?.recommandee || null } catch {}
         try { const { data: e } = await api.get('/api/examens/disponibles'); ep = e } catch {}
+        try { const { data: b } = await api.get(`/api/bkt/apprenant/${user.id}`); bkt = b } catch {}
         setRecommandee(reco)
         setEpreuves(ep)
+        setBktData(bkt)
 
-        setCache(cacheKey, { programme: prog, recommandee: reco, epreuves: ep }, 2 * 60 * 1000)
+        setCache(cacheKey, { programme: prog, recommandee: reco, epreuves: ep, bktData: bkt }, 2 * 60 * 1000)
       } catch {}
       finally { setLoading(false) }
     }
@@ -462,6 +470,33 @@ export default function ProgressionMap() {
       {/* ══ ONGLET COURS ══ */}
       {activeTab === 'cours' && (
         <div style={{ maxWidth: 860, margin: '0 auto', padding: xs ? '16px' : '24px 32px' }}>
+          {/* ── Maîtrise par compétence (radar BKT) — déplacé depuis le Dashboard ── */}
+          {bktData && Object.keys(bktData.competences || {}).length > 0 && filtre === 'all' && (
+            <div style={{ backgroundColor: C.surface, borderRadius: 16, padding: '16px 18px', marginBottom: 28, border: `1px solid ${C.border}`, boxShadow: `0 2px 12px ${C.brown}10`, animation: 'fadeUp .5s ease' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Brain size={15} color={C.brown} />
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0 }}>Maîtrise par compétence</h3>
+                {bktData.nb_competences_maitrisees > 0 && (
+                  <span style={{ fontSize: 11, color: C.emerald, fontWeight: 700, marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircle2 size={12} /> {bktData.nb_competences_maitrisees} maîtrisée{bktData.nb_competences_maitrisees > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={xs ? 200 : 250}>
+                <RadarChart data={Object.entries(bktData.competences).map(([comp, val]) => ({
+                  subject: comp.length > 14 ? comp.substring(0, 14) + '…' : comp,
+                  A: val.pourcentage, fullName: comp,
+                }))} margin={{ top: 12, right: 24, bottom: 12, left: 24 }}>
+                  <PolarGrid stroke={C.border} />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: C.textSec, fontSize: xs ? 9 : 11, fontWeight: 700 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar dataKey="A" stroke={C.brown} fill={C.brown} fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: C.brown }} />
+                  <Tooltip formatter={(v, _, p) => [`${v}%`, p.payload.fullName]} contentStyle={{ backgroundColor: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           {programme.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: C.textSec }}>
               <p style={{ fontSize: 40 }}>📭</p>

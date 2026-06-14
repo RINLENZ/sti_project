@@ -21,6 +21,12 @@ import { getAvatarEmoji } from '../../utils/avatars'
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const RAIL_W = 64
 
+// Motif Adinkra (cercles + croix) en filigrane, encodé en data-URI pour servir
+// de texture de fond au rail (identité Bogolan / griot).
+const ADINKRA_RAIL_BG = `url("data:image/svg+xml,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='56' height='56'><g fill='none' stroke='rgba(255,255,255,0.045)' stroke-width='1.5'><circle cx='28' cy='28' r='11'/><circle cx='28' cy='28' r='5'/><line x1='28' y1='17' x2='28' y2='11'/><line x1='17' y1='28' x2='11' y2='28'/><line x1='39' y1='28' x2='45' y2='28'/><line x1='28' y1='39' x2='28' y2='45'/></g></svg>"
+)}")`
+
 const ROLE_INFO = {
   super_admin: { label: 'Super Admin', color: '#D4A853' },
   enseignant:  { label: 'Enseignant',  color: '#0D9373' },
@@ -167,15 +173,17 @@ function RailItemWithTooltip({ icon: Icon, label, active, onClick, accentColor, 
           alignItems:     'center',
           justifyContent: 'center',
           background:     active
-            ? `${col}22`
+            ? `radial-gradient(circle at 50% 50%, ${col}33, ${col}1A)`
             : hovered
             ? 'rgba(255,255,255,0.07)'
             : 'transparent',
           border:         'none',
           borderRadius:   radius.md,
           cursor:         'pointer',
-          transition:     `background ${motion.fast_out}`,
+          transition:     `background ${motion.fast_out}, box-shadow ${motion.fast_out}`,
           outline:        'none',
+          // Lueur « lanterne » griot autour de l'item actif
+          boxShadow:      active ? `inset 0 0 0 1px ${col}40, 0 0 18px ${col}3A` : 'none',
         }}
       >
         {active && (
@@ -186,6 +194,7 @@ function RailItemWithTooltip({ icon: Icon, label, active, onClick, accentColor, 
             width:        3, height: 24,
             borderRadius: `0 ${radius.sm}px ${radius.sm}px 0`,
             background:  `linear-gradient(180deg, ${col}, ${col}88)`,
+            boxShadow:   `0 0 10px ${col}`,
           }} aria-hidden="true" />
         )}
 
@@ -193,7 +202,7 @@ function RailItemWithTooltip({ icon: Icon, label, active, onClick, accentColor, 
           <Icon
             size={18}
             color={active ? col : hovered ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.42)'}
-            style={{ transition: `color ${motion.fast_out}`, display: 'block' }}
+            style={{ transition: `color ${motion.fast_out}`, display: 'block', filter: active ? `drop-shadow(0 0 5px ${col}AA)` : 'none' }}
           />
           {badge > 0 && (
             <span style={{
@@ -584,7 +593,11 @@ export default function NavRail({ activeView, onViewChange }) {
         width:          RAIL_W,
         minHeight:     '100vh',
         height:        '100vh',
-        background:     C.sidebarBg,
+        backgroundColor: C.sidebarBg,
+        // Texture Adinkra + dégradé terre chaud (identité Bogolan / griot)
+        backgroundImage: `${ADINKRA_RAIL_BG}, linear-gradient(180deg, rgba(139,69,19,0.16) 0%, rgba(139,69,19,0) 42%, rgba(199,123,60,0.10) 100%)`,
+        backgroundRepeat: 'repeat, no-repeat',
+        backgroundSize:  '56px 56px, 100% 100%',
         borderRight:   '1px solid rgba(255,255,255,0.06)',
         display:       'flex',
         flexDirection: 'column',

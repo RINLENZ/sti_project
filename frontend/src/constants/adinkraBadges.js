@@ -2,6 +2,11 @@
  * Définition des 10 badges thématiques Adinkra.
  * Les conditions humaines sont affichées à l'utilisateur.
  * La logique de déverrouillage réelle est côté serveur (/api/gamification/award-xp).
+ *
+ * NOTE (étape 5.2) : le champ `symbole` (emoji) n'est plus le rendu principal.
+ * Le frontend utilise désormais <AdinkraSymbol id={badge.id} /> (vrais SVG
+ * vectoriels, voir src/components/adinkra/AdinkraSymbols.jsx). L'emoji est
+ * conservé en fallback (anciens écrans, accessibilité de secours).
  */
 
 export const ADINKRA_BADGES = [

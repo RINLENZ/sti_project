@@ -1,5 +1,35 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 
+// ── Palette Bogolan (textiles ouest-africains) ───────────────────
+// Identité visuelle du dashboard apprenant refondu (étape 5.2).
+// Couleurs fixes (indépendantes du dark mode) — terre, ocre, indigo.
+export const BOGOLAN = {
+  bogolanBg:      '#FAF5EB',  // ivoire chaud — fond global
+  bogolanSurface: '#FFFFFF',
+  bogolanTerre:   '#8B4513',  // terre brûlée — accent primaire
+  bogolanVert:    '#4A7C59',  // vert mousse — succès (non Duolingo)
+  bogolanOcre:    '#C77B3C',  // ocre — attention
+  bogolanIndigo:  '#1E4D6B',  // indigo — évolution
+  bogolanText:    '#2C1810',  // brun très foncé
+  bogolanTextSec: '#6B5744',
+  bogolanBorder:  '#EDE3D2',  // bordures / séparateurs (discrets)
+  bogolanLocked:  '#CBBFA8',  // symbole Adinkra verrouillé
+}
+
+// ── Palette Bogolan sombre (mêmes rôles, tons chauds nocturnes) ──
+export const BOGOLAN_DARK = {
+  bogolanBg:      '#1B130B',  // brun-noir chaud
+  bogolanSurface: '#251A10',  // surface chaude sombre
+  bogolanTerre:   '#D2925E',  // terracotta clair (accent lisible sur sombre)
+  bogolanVert:    '#6FA67E',  // vert mousse clair
+  bogolanOcre:    '#E0A05A',  // ocre clair
+  bogolanIndigo:  '#5E96BC',  // indigo clair
+  bogolanText:    '#F2E7D8',  // crème chaud
+  bogolanTextSec: '#B59C82',
+  bogolanBorder:  '#3A2B1C',
+  bogolanLocked:  '#5A4A38',
+}
+
 // ── Palette claire (identique à theme.js) ─────────────────────────
 export const C_LIGHT = {
   brown:        '#6B3A2A',
@@ -37,6 +67,8 @@ export const C_LIGHT = {
 
   sidebarBg:    '#1A0F0A',
   sidebarBorder:'rgba(255,255,255,0.08)',
+
+  ...BOGOLAN,
 }
 
 // ── Palette sombre (tons café / crème) ───────────────────────────
@@ -76,6 +108,8 @@ export const C_DARK = {
 
   sidebarBg:    '#110B04',
   sidebarBorder:'rgba(255,255,255,0.08)',
+
+  ...BOGOLAN_DARK,
 }
 
 // Export statique pour les fichiers qui importent C directement
