@@ -6,10 +6,12 @@ import toast from 'react-hot-toast'
 import {
   Camera, Lightbulb, CheckCircle, XCircle,
   ChevronRight, Home, ArrowLeft, Zap, Mic,
-  X, Activity, Clock, Target, Award
+  X, Activity, Clock, Target, Award, Volume2, VolumeX,
+  GripVertical, ChevronUp, ChevronDown
 } from 'lucide-react'
 
 import { useTheme } from '../../styles/theme.jsx'
+import { AdinkraSymbol } from '../../components/adinkra/AdinkraSymbols.jsx'
 import { useBreakpoint } from '../../hooks/useBreakpoint'
 import { Spinner } from '../../components/Skeleton'
 import RichText, { RichTextInline } from '../../components/RichText'
@@ -20,9 +22,46 @@ import { MODELS_READY, EMOTION_MODEL_READY } from '../../config/models'
 import { clearCache } from '../../services/cache'
 import useAlishaVoice from '../../hooks/useAlishaVoice'
 import useAlishaController from '../../hooks/useAlishaController'
+import { useSound } from '../../hooks/useSound'
 import { AdaptationOrchestrator, useAdaptation } from '../../components/adaptation/index.js'
 
 const Alisha = lazy(() => import('../../components/Alisha'))
+
+/* ── Remappage palette ancienne → Bogolan (clair + sombre) ──────
+   Évite de réécrire des centaines de styles : on remappe les tokens
+   historiques (brown/emerald/gold/blue…) vers la palette Bogolan,
+   en conservant tous les styles inline existants. */
+function bogolanize(C) {
+  return {
+    ...C,
+    brown:       C.bogolanTerre,
+    brownDark:   C.bogolanText,
+    brownMid:    C.bogolanOcre,
+    brownLight:  C.bogolanOcre,
+    brownPale:   `${C.bogolanTerre}14`,
+    brownGhost:  `${C.bogolanTerre}0A`,
+    emerald:     C.bogolanVert,
+    emeraldDark: '#3C6749',
+    emeraldPale: `${C.bogolanVert}1A`,
+    gold:        C.bogolanOcre,
+    goldPale:    `${C.bogolanOcre}1A`,
+    orange:      C.bogolanOcre,
+    accent:      C.bogolanOcre,
+    blue:        C.bogolanIndigo,
+    bluePale:    `${C.bogolanIndigo}16`,
+    purple:      C.bogolanIndigo,
+    purplePale:  `${C.bogolanIndigo}16`,
+    red:         '#C0563A',
+    redPale:     'rgba(192,86,58,0.12)',
+    bg:          C.bogolanBg,
+    surface:     C.bogolanSurface,
+    surfaceAlt:  `${C.bogolanTerre}0A`,
+    text:        C.bogolanText,
+    textSec:     C.bogolanTextSec,
+    textMuted:   C.bogolanTextSec,
+    border:      C.bogolanBorder,
+  }
+}
 
 /* ── Engagement helpers ──────────────────────────────────────── */
 const engColor = (s, C) =>
@@ -84,7 +123,7 @@ function fusionnerEmotion(cnnEmotion, cnnProbs, ear, yaw, pitch) {
 
 /* ── Gauge component ─────────────────────────────────────────── */
 const MiniGauge = ({ score, emotion, compact = false }) => {
-  const { C } = useTheme()
+  const { C: _Craw } = useTheme(); const C = bogolanize(_Craw)
   const ETATS = getETATS(C)   // dynamique — suit le thème courant
   const color = engColor(score, C)
   const em = ETATS[emotion] || ETATS.neutre
@@ -139,24 +178,39 @@ const MiniGauge = ({ score, emotion, compact = false }) => {
 }
 
 /* ── Option QCM ──────────────────────────────────────────────── */
-const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }) => {
-  const { C } = useTheme()
-  let bg = C.surface, border = `1.5px solid ${C.brownPale}`, textColor = C.text
-  let lBg = C.border, lColor = C.textSec
+const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, answered, onClick }) => {
+  const { C: _Craw } = useTheme(); const C = bogolanize(_Craw)
+  const [hov, setHov] = useState(false)
+  const interactive = !answered
+  // États visuels
+  let bg = C.surface, border = `1.5px solid ${C.border}`, textColor = C.text
+  let lBg = `${C.bogolanTerre}1A`, lColor = C.bogolanTerre
+  let dim = false
   if (selected && !correct && !incorrect) {
-    bg = C.brownPale; border = `2px solid ${C.brown}`
-    textColor = C.brown; lBg = C.brown; lColor = 'white'
+    bg = `${C.bogolanTerre}12`; border = `2px solid ${C.bogolanTerre}`
+    textColor = C.bogolanTerre; lBg = C.bogolanTerre; lColor = 'white'
   }
-  if (correct)   { bg = C.emeraldPale; border = `2px solid ${C.emerald}`; textColor = C.emerald; lBg = C.emerald; lColor = 'white' }
-  if (incorrect) { bg = C.redPale;     border = `2px solid ${C.red}`;     textColor = C.red;     lBg = C.red;     lColor = 'white' }
+  if (correct)   { bg = `${C.bogolanVert}1A`; border = `2px solid ${C.bogolanVert}`; textColor = C.bogolanVert; lBg = C.bogolanVert; lColor = 'white' }
+  if (incorrect) { bg = C.redPale;            border = `2px solid ${C.red}`;        textColor = C.red;          lBg = C.red;        lColor = 'white' }
+  if (answered && !correct && !incorrect && !selected) dim = true  // options écartées
 
   return (
-    <button onClick={onClick} style={{
-      width: '100%', padding: '13px 15px', backgroundColor: bg, border,
-      borderRadius: 14, cursor: correct || incorrect ? 'default' : 'pointer',
-      textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
-      transition: 'all .15s ease', color: textColor, minHeight: 52
-    }}>
+    <button
+      onClick={onClick}
+      onMouseEnter={() => interactive && setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: '100%', padding: '13px 15px', backgroundColor: bg,
+        border: interactive && hov && !selected ? `2px solid ${C.bogolanTerre}66` : border,
+        borderRadius: 14, cursor: interactive ? 'pointer' : 'default',
+        textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
+        transition: 'all .16s ease', color: textColor, minHeight: 52,
+        transform: interactive && hov ? 'translateY(-2px)' : 'none',
+        boxShadow: interactive && hov ? `0 6px 16px ${C.bogolanTerre}1F` : 'none',
+        opacity: dim ? 0.5 : 1,
+        textDecoration: incorrect ? 'line-through' : 'none',
+      }}
+    >
       <span style={{
         width: 30, height: 30, borderRadius: 9, flexShrink: 0,
         backgroundColor: lBg, color: lColor,
@@ -164,15 +218,15 @@ const ExerciceOption = ({ lettre, texte, selected, correct, incorrect, onClick }
         fontSize: 13, fontWeight: 900
       }}>{lettre}</span>
       <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5, flex: 1 }}><RichTextInline text={texte}/></span>
-      {correct   && <CheckCircle size={17} color={C.emerald} style={{ flexShrink: 0 }}/>}
-      {incorrect && <XCircle     size={17} color={C.red}     style={{ flexShrink: 0 }}/>}
+      {correct   && <CheckCircle size={18} color={C.bogolanVert} style={{ flexShrink: 0, animation: 'popIn .3s ease' }}/>}
+      {incorrect && <XCircle     size={18} color={C.red}         style={{ flexShrink: 0, animation: 'popIn .3s ease' }}/>}
     </button>
   )
 }
 
 /* ── Confetti ────────────────────────────────────────────────── */
 const CONFETTI_COLORS = ['#6B3A2A', '#C4865A', '#0D9373', '#D4A853', '#FCD34D', '#EC4899', '#60A5FA', '#A78BFA', '#34D399', '#F87171']
-const CONFETTI_PIECES = Array.from({ length: 70 }, (_, i) => {
+const CONFETTI_PIECES = Array.from({ length: 28 }, (_, i) => {
   const shape = i % 3  // 0=square, 1=circle, 2=diamond
   const anim  = i % 3 === 0 ? 'confettiFall' : i % 3 === 1 ? 'confettiFallL' : 'confettiFallR'
   return {
@@ -298,7 +352,7 @@ const AlishaPermissionDialog = ({ onChoice, C, xs }) => {
 // LECON READER
 
 function LeconReader({ ua, ressources, onStart, onResourceView }) {
-  const { C } = useTheme()
+  const { C: _Craw } = useTheme(); const C = bogolanize(_Craw)
   const [idx, setIdx] = useState(0)
   const readStartRef  = useRef(Date.now())
   const res = ressources[idx]
@@ -532,8 +586,9 @@ function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)] }
 
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Session() {
-  const { C } = useTheme()
+  const { C: _Craw } = useTheme(); const C = bogolanize(_Craw)
   const ETATS = getETATS(C)   // recalculé à chaque render — suit le thème courant
+  const { playSound } = useSound()
   const { uaId }   = useParams()
   const navigate   = useNavigate()
   const [searchParams] = useSearchParams()
@@ -559,6 +614,15 @@ export default function Session() {
   const [resultat, setResultat]   = useState(null)
   const [indices, setIndices]     = useState(0)
   const [termine, setTermine]     = useState(false)
+  // Son de feedback doux à la correction (réussite / erreur)
+  const lastSoundRef = useRef(null)
+  useEffect(() => {
+    if (!resultat) { lastSoundRef.current = null; return }
+    const sig = `${current}:${resultat.correct}`
+    if (lastSoundRef.current === sig) return
+    lastSoundRef.current = sig
+    playSound(resultat.correct ? 'success' : 'error')
+  }, [resultat, current, playSound])
   const [scores, setScores]       = useState([])
   const [startTime]               = useState(Date.now())
   const [questionTime, setQuestionTime] = useState(Date.now())
@@ -1329,9 +1393,13 @@ export default function Session() {
                 :             { emoji: '💪', label: 'Continue comme ça !', bg: `linear-gradient(135deg,${C.purple},${C.purple}CC)`,    anim: undefined }
 
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto', position: 'relative' }}>
         {confetti && <Confetti/>}
-        <div style={{ maxWidth: 520, width: '100%', animation: 'fadeUp .5s ease' }}>
+        {/* Filigrane Adinkra (reflet) */}
+        <div aria-hidden="true" style={{ position: 'fixed', right: -50, bottom: -40, opacity: 0.05, pointerEvents: 'none', zIndex: 0, transform: 'rotate(-8deg)' }}>
+          <AdinkraSymbol id="adinkrahene" size={isMobile ? 300 : 480} color={C.bogolanTerre} />
+        </div>
+        <div style={{ maxWidth: 520, width: '100%', animation: 'fadeUp .5s ease', position: 'relative', zIndex: 1 }}>
 
           {/* ── Carte principale ── */}
           <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? '24px 20px' : '36px 40px', boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, textAlign: 'center', marginBottom: 14 }}>
@@ -1664,7 +1732,11 @@ export default function Session() {
 
   /* ── Rendu principal ────────────────────────────────────── */
   return (
-    <div style={{ minHeight: '100vh', background: C.bg }}>
+    <div style={{ minHeight: '100vh', background: C.bg, position: 'relative' }}>
+      {/* Filigrane Adinkra en fond (reflet, faible opacité) */}
+      <div aria-hidden="true" style={{ position: 'fixed', right: isMobile ? -60 : -40, bottom: isMobile ? 40 : -30, opacity: 0.045, pointerEvents: 'none', zIndex: 0, transform: 'rotate(-8deg)' }}>
+        <AdinkraSymbol id="adinkrahene" size={isMobile ? 280 : 460} color={C.bogolanTerre} />
+      </div>
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none', position: 'absolute' }}/>
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
 
@@ -1803,7 +1875,7 @@ export default function Session() {
       )}
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 1060, margin: '0 auto', padding: `${xs ? 10 : 16}px ${xs ? 8 : isMobile ? 12 : 20}px`, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      <div style={{ maxWidth: 1060, margin: '0 auto', padding: `${xs ? 10 : 16}px ${xs ? 8 : isMobile ? 12 : 20}px`, display: 'flex', gap: 20, alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
 
           {/* Bannière bruit adaptatif */}
@@ -1918,7 +1990,7 @@ export default function Session() {
                   <p style={{ margin: 0, fontSize: isMobile ? 13 : 14, fontWeight: 600, color: C.text, lineHeight: 1.8, whiteSpace: 'pre-wrap', paddingRight: 36 }}>{apcData.consigne}</p>
                   <button onClick={() => speaking ? stopTts() : tts(apcData.contexte + '\n' + apcData.consigne)}
                     style={{ position: 'absolute', top: 10, right: 10, width: 28, height: 28, borderRadius: '50%', background: speaking ? C.red : C.brown, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                    {speaking ? '⏹' : '🔊'}
+                    {speaking ? <VolumeX size={14} color="white"/> : <Volume2 size={14} color="white"/>}
                   </button>
                 </div>
                 {apcData.criteres && (
@@ -1940,7 +2012,7 @@ export default function Session() {
                 <button onClick={() => speaking ? stopTts() : tts(ex.enonce)}
                   title={speaking ? 'Arrêter la lecture' : 'Lire l\'énoncé'}
                   style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: '50%', background: speaking ? C.red : C.brown, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, transition: 'background .2s', boxShadow: speaking ? `0 0 0 3px ${C.red}30` : 'none', animation: speaking ? 'pulse 1.5s infinite' : 'none' }}>
-                  {speaking ? '⏹' : '🔊'}
+                  {speaking ? <VolumeX size={14} color="white"/> : <Volume2 size={14} color="white"/>}
                 </button>
               </div>
             ) : null}
@@ -1962,25 +2034,32 @@ export default function Session() {
                   const isSel = reponse === opt
                   const isOk  = !!resultat && opt === resultat.reponse_correcte
                   const isKo  = !!resultat && isSel && !resultat.correct
+                  const accent = isOk ? C.bogolanVert : isKo ? C.red : isSel ? C.bogolanTerre : C.bogolanTextSec
+                  const Icon   = isV ? CheckCircle : XCircle
                   return (
                     <button key={i} onClick={() => !resultat && setReponse(opt)} style={{
-                      padding: isMobile ? '22px 10px' : '30px 16px',
-                      borderRadius:20, cursor: resultat ? 'default' : 'pointer',
-                      border: `3px solid ${isOk ? C.emerald : isKo ? C.red : isSel ? C.brown : C.brownPale}`,
-                      background: isOk ? C.emeraldPale : isKo ? C.redPale : isSel ? C.brownPale : C.surface,
+                      padding: isMobile ? '20px 10px' : '28px 16px',
+                      borderRadius:18, cursor: resultat ? 'default' : 'pointer',
+                      border: `2.5px solid ${isOk ? C.bogolanVert : isKo ? C.red : isSel ? C.bogolanTerre : C.border}`,
+                      background: isOk ? `${C.bogolanVert}1A` : isKo ? C.redPale : isSel ? `${C.bogolanTerre}12` : C.surface,
                       transition:'all .18s ease',
-                      transform: isSel && !resultat ? 'scale(1.05)' : 'scale(1)',
-                      boxShadow: isSel && !resultat ? `0 8px 24px ${C.brown}30` : 'none',
+                      transform: isSel && !resultat ? 'scale(1.04)' : 'scale(1)',
+                      boxShadow: isSel && !resultat ? `0 8px 22px ${C.bogolanTerre}2E` : 'none',
                       display:'flex', flexDirection:'column', alignItems:'center', gap:10,
                       animation: isOk ? 'popIn .35s ease' : undefined,
                     }}>
-                      <span style={{ fontSize: isMobile ? 40 : 52 }}>{isV ? '✅' : '❌'}</span>
-                      <span style={{ fontSize: isMobile ? 17 : 20, fontWeight:900,
-                        color: isOk ? C.emerald : isKo ? C.red : isSel ? C.brown : C.text }}>
+                      <span style={{
+                        width: isMobile ? 50 : 62, height: isMobile ? 50 : 62, borderRadius:'50%',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        background: (isOk || isKo || isSel) ? accent : `${C.bogolanTextSec}1A`,
+                        color: (isOk || isKo || isSel) ? 'white' : accent,
+                        transition:'all .18s ease',
+                      }}>
+                        <Icon size={isMobile ? 26 : 34} />
+                      </span>
+                      <span style={{ fontSize: isMobile ? 17 : 20, fontWeight:900, color: accent }}>
                         {opt}
                       </span>
-                      {isOk && <CheckCircle size={20} color={C.emerald}/>}
-                      {isKo && <XCircle     size={20} color={C.red}/>}
                     </button>
                   )
                 })}
@@ -1996,6 +2075,7 @@ export default function Session() {
                     selected={reponse === opt}
                     correct={!!resultat && opt === resultat.reponse_correcte}
                     incorrect={!!resultat && reponse === opt && !resultat.correct}
+                    answered={!!resultat}
                     onClick={() => !resultat && setReponse(opt)}/>
                 ))}
               </div>
@@ -2016,7 +2096,7 @@ export default function Session() {
                   <button onClick={() => speaking ? stopTts() : tts(ex.enonce)}
                     title={speaking ? 'Arrêter' : 'Lire l\'énoncé'}
                     style={{ width:28, height:28, borderRadius:'50%', background: speaking ? C.red : C.brown, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}>
-                    {speaking ? '⏹' : '🔊'}
+                    {speaking ? <VolumeX size={14} color="white"/> : <Volume2 size={14} color="white"/>}
                   </button>
                 </div>
 
@@ -2237,30 +2317,32 @@ export default function Session() {
                     return (
                       <div key={item + i} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        background: resultat ? (isCorrect ? C.emeraldPale : C.redPale) : C.surface,
-                        border: `2px solid ${resultat ? (isCorrect ? C.emerald : C.red) + '60' : C.brownPale}`,
-                        borderRadius: 12, padding: '10px 14px', transition: 'all .2s',
+                        background: resultat ? (isCorrect ? `${C.bogolanVert}1A` : C.redPale) : C.surface,
+                        border: `2px solid ${resultat ? (isCorrect ? C.bogolanVert : C.red) + '66' : C.border}`,
+                        borderRadius: 14, padding: '10px 12px', transition: 'all .2s',
+                        boxShadow: resultat ? 'none' : `0 2px 8px ${C.bogolanTerre}10`,
                       }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: C.brown, minWidth: 24, flexShrink: 0 }}>{i + 1}.</span>
-                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: resultat ? (isCorrect ? C.emerald : C.red) : C.text, lineHeight: 1.4 }}>{item}</span>
+                        {!resultat && <GripVertical size={16} color={C.bogolanTextSec} style={{ flexShrink: 0, opacity: .6 }} />}
+                        <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: resultat ? (isCorrect ? C.bogolanVert : C.red) : `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900 }}>{i + 1}</span>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: resultat ? (isCorrect ? C.bogolanVert : C.red) : C.text, lineHeight: 1.4 }}>{item}</span>
                         {!resultat && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
-                            <button onClick={() => {
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
+                            <button aria-label="Monter" onClick={() => {
                               if (i === 0) return
                               const arr = [...ordreUser];
                               [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]
                               setOrdreUser(arr); setReponse(JSON.stringify(arr))
-                            }} style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', fontSize: 15, lineHeight: 1, padding: '1px 4px', opacity: i === 0 ? 0.2 : 0.7 }}>▲</button>
-                            <button onClick={() => {
+                            }} disabled={i === 0} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 22, borderRadius: 7, background: i === 0 ? 'transparent' : `${C.bogolanTerre}14`, border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: C.bogolanTerre, opacity: i === 0 ? 0.25 : 1 }}><ChevronUp size={15} /></button>
+                            <button aria-label="Descendre" onClick={() => {
                               if (i === ordreUser.length - 1) return
                               const arr = [...ordreUser];
                               [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]
                               setOrdreUser(arr); setReponse(JSON.stringify(arr))
-                            }} style={{ background: 'none', border: 'none', cursor: i === ordreUser.length - 1 ? 'default' : 'pointer', fontSize: 15, lineHeight: 1, padding: '1px 4px', opacity: i === ordreUser.length - 1 ? 0.2 : 0.7 }}>▼</button>
+                            }} disabled={i === ordreUser.length - 1} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 22, borderRadius: 7, background: i === ordreUser.length - 1 ? 'transparent' : `${C.bogolanTerre}14`, border: 'none', cursor: i === ordreUser.length - 1 ? 'default' : 'pointer', color: C.bogolanTerre, opacity: i === ordreUser.length - 1 ? 0.25 : 1 }}><ChevronDown size={15} /></button>
                           </div>
                         )}
                         {resultat && (isCorrect
-                          ? <CheckCircle size={16} color={C.emerald} style={{ flexShrink: 0 }}/>
+                          ? <CheckCircle size={16} color={C.bogolanVert} style={{ flexShrink: 0 }}/>
                           : <XCircle    size={16} color={C.red}     style={{ flexShrink: 0 }}/>)}
                       </div>
                     )
