@@ -27,6 +27,11 @@ import { AdaptationOrchestrator, useAdaptation } from '../../components/adaptati
 
 const Alisha = lazy(() => import('../../components/Alisha'))
 
+/* ── Persistance de progression (reprise de session) ───────────── */
+function readSessionProgress(key)  { try { return JSON.parse(localStorage.getItem(key) || 'null') } catch { return null } }
+function writeSessionProgress(key, data) { try { localStorage.setItem(key, JSON.stringify(data)) } catch {} }
+function clearSessionProgress(key) { try { localStorage.removeItem(key) } catch {} }
+
 /* ── Remappage palette ancienne → Bogolan (clair + sombre) ──────
    Évite de réécrire des centaines de styles : on remappe les tokens
    historiques (brown/emerald/gold/blue…) vers la palette Bogolan,
@@ -597,6 +602,8 @@ export default function Session() {
   const exerciceIdParam = searchParams.get('exercice_id') || null
   const rateesParam     = searchParams.get('ratees')     || null   // IDs séparés par virgule
   const skipLecon       = searchParams.get('skip') === '1'
+  // Clé de persistance de la progression (propre à cette UA + variante de session)
+  const sessKey = `sti_sess_${uaId}_${rateesParam || ''}_${exerciceIdParam || ''}_${groupeParam ?? ''}_${difficulteParam ?? ''}`
   const { user }   = useSelector(s => s.auth)
   const { xs, mobile: isMobile, tablet } = useBreakpoint()
   const sessionIdRef = useRef(null)
@@ -614,6 +621,8 @@ export default function Session() {
   const [resultat, setResultat]   = useState(null)
   const [indices, setIndices]     = useState(0)
   const [termine, setTermine]     = useState(false)
+  const [dragIdx, setDragIdx]     = useState(null)   // ordre_elements : glisser-déposer
+  const [resumeData, setResumeData] = useState(null) // progression sauvegardée à reprendre
   // Son de feedback doux à la correction (réussite / erreur)
   const lastSoundRef = useRef(null)
   useEffect(() => {
@@ -724,23 +733,61 @@ export default function Session() {
         data: { keyword: lastKeyword.keyword, confidence: Math.round(lastKeyword.confidence * 100) / 100 }
       }).catch(() => {})
     }
-    // Réponses TTS aux commandes vocales
-    if (lastKeyword.keyword === 'aide') {
-      tts('Je t\'envoie une explication.')
+    // ── Commandes vocales → actions réelles ───────────────────────
+    const k        = lastKeyword.keyword
+    // Retour visuel : confirme à l'élève que la commande a été entendue
+    toast(`🎙️ « ${k} »`, { id: 'kws-cmd', duration: 1100 })
+    const exVoc    = exercices[current]
+    const enonceV  = exVoc?.enonce
+    const isIdentV = exVoc?.type === 'qcm' && !!exVoc?.options?.[0]?.startsWith?.('__img__:')
+    const isVF     = !isIdentV && exVoc?.options?.length === 2 &&
+                     (exVoc.options.includes('Vrai') || exVoc.options.includes('Faux'))
+    // Révèle l'indice suivant (statique) + fait réagir Alisha
+    const revealHintVoice = () => {
+      if (indices === 0 && exVoc?.indice_1)      { setIndices(1); sendEvent('help_requested', { level: 1, via: 'voice' }) }
+      else if (indices === 1 && exVoc?.indice_2) { setIndices(2); sendEvent('help_requested', { level: 2, via: 'voice' }) }
+      alishaCtrl.triggerEvent('hint_requested')
     }
-    if (lastKeyword.keyword === 'repeter') {
-      // Annonce puis relit effectivement l'énoncé (après ~2s pour laisser finir la phrase)
-      const _enonce = exercices[current]?.enonce
-      tts('Je répète la question.')
-      if (_enonce) setTimeout(() => tts(_enonce), 2000)
+
+    switch (k) {
+      // « aide » / « incompris » → indice avant réponse, explication IA après une erreur
+      case 'aide':
+      case 'incompris':
+        if (resultat) { if (!resultat.correct) demanderExplication() }
+        else          { revealHintVoice() }
+        break
+
+      // « oui » → Vrai (si Vrai/Faux non répondu) · sinon valide / passe à la suite
+      case 'oui':
+        if (!resultat && isVF)      setReponse('Vrai')
+        else if (!resultat && reponse) soumettre()
+        else if (resultat)          suivant()
+        else                        tts('D\'accord.')
+        break
+
+      // « non » → Faux (si Vrai/Faux non répondu) · sinon demande une explication
+      case 'non':
+        if (!resultat && isVF)            setReponse('Faux')
+        else if (resultat && !resultat.correct) demanderExplication()
+        else                              tts('D\'accord.')
+        break
+
+      // « répéter » → relit l'énoncé
+      case 'repeter':
+        tts('Je répète la question.')
+        if (enonceV) setTimeout(() => tts(enonceV), 1800)
+        break
+
+      // « lentement » → relit l'énoncé à vitesse réduite
+      case 'lentement':
+        tts('D\'accord, je vais plus lentement.')
+        if (enonceV) setTimeout(() => tts(enonceV, 0.65), 2000)
+        break
+
+      default:
+        break
     }
-    if (lastKeyword.keyword === 'lentement') {
-      // Relit l'énoncé à vitesse réduite 0.65 (au lieu de juste dire "D'accord")
-      const _enonce = exercices[current]?.enonce
-      tts('D\'accord, je vais plus lentement.')
-      if (_enonce) setTimeout(() => tts(_enonce, 0.65), 2200)
-    }
-  }, [lastKeyword])
+  }, [lastKeyword])  // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Afficher le dialog caméra 4s après le chargement (tous appareils) */
   useEffect(() => {
@@ -767,6 +814,11 @@ export default function Session() {
         else if (groupeParam != null)     filtered = allEx.filter(e => e.groupe === groupeParam)
         else if (difficulteParam != null) filtered = allEx.filter(e => e.difficulte === difficulteParam)
         setExercices(filtered)
+        // Reprise : si une progression incomplète existe pour cette variante, on propose
+        const saved = readSessionProgress(sessKey)
+        if (filtered.length > 1 && saved?.scores?.length > 0 && saved.scores.length < filtered.length) {
+          setResumeData({ scores: saved.scores })
+        }
         const resos = uaData.ressources || []
         setRessources(resos)
         if (resos.length === 0 || skipLecon) setPhase('exercices')
@@ -778,6 +830,64 @@ export default function Session() {
     init()
   }, [uaId, user.id])
 
+  // Sauvegarde la progression après chaque réponse/skip (pour reprise ultérieure)
+  useEffect(() => {
+    if (resumeData || termine) return
+    if (scores.length > 0 && exercices.length > 0 && scores.length < exercices.length) {
+      writeSessionProgress(sessKey, { scores, ts: Date.now() })
+    }
+  }, [scores, termine, resumeData])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  function reprendreSession() {
+    if (!resumeData) return
+    setScores(resumeData.scores)
+    setCurrent(resumeData.scores.length)
+    setResumeData(null)
+    setQuestionTime(Date.now())
+  }
+  function recommencerSession() {
+    clearSessionProgress(sessKey)
+    setResumeData(null)
+    setScores([]); setCurrent(0)
+    setQuestionTime(Date.now())
+  }
+
+  // ── Alisha proactive : refs "live" + garde « bon moment » ─────────
+  const aliveRef       = useRef({})
+  const welcomedRef    = useRef(false)
+  const proactiveCdRef = useRef(0)
+  const lowEngRef      = useRef(0)
+  // Synchronise les valeurs courantes (évite les stale closures dans les timers)
+  useEffect(() => {
+    aliveRef.current = {
+      hasResult:      !!resultat,
+      phase,
+      loadingIA,
+      ttsSpeaking:    speaking,
+      alishaSpeaking: alishaCtrl.isSpeaking,
+    }
+  })
+  // Alisha n'intervient QUE si : pas de correction à l'écran, en phase exercices,
+  // ni l'IA ni la voix (TTS / Alisha) en cours, et hors période de cooldown.
+  function canAlishaIntervene(minGapMs = 30000) {
+    const L = aliveRef.current || {}
+    if (L.hasResult) return false
+    if (L.phase !== 'exercices') return false
+    if (L.loadingIA || L.ttsSpeaking || L.alishaSpeaking) return false
+    if (Date.now() - proactiveCdRef.current < minGapMs) return false
+    return true
+  }
+  function markAlishaSpoke() { proactiveCdRef.current = Date.now() }
+
+  // Accueil parlé — une seule fois, à l'entrée en phase exercices
+  useEffect(() => {
+    if (welcomedRef.current || phase !== 'exercices' || exercices.length === 0) return
+    welcomedRef.current = true
+    const t = setTimeout(() => { alishaCtrl.triggerEvent('welcome'); markAlishaSpoke() }, 800)
+    return () => clearTimeout(t)
+  }, [phase, exercices.length])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Inactivité → log backend + nudge Alisha (au bon moment)
   useEffect(() => {
     let timer = null
     function reset() {
@@ -785,12 +895,30 @@ export default function Session() {
       timer = setTimeout(() => {
         const sid = sessionIdRef.current
         if (sid) api.post('/api/interaction', { session_id: sid, user_id: user.id, type: 'idle', data: { duration_seconds: 30 } }).catch(() => {})
+        if (canAlishaIntervene(30000)) { alishaCtrl.triggerEvent('idle_detected'); markAlishaSpoke() }
       }, 30000)
     }
     const evts = ['mousedown', 'mousemove', 'keydown', 'scroll', 'click', 'touchstart']
     evts.forEach(e => window.addEventListener(e, reset)); reset()
     return () => { clearTimeout(timer); evts.forEach(e => window.removeEventListener(e, reset)) }
-  }, [user.id])
+  }, [user.id])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Baisse d'engagement soutenue → relance (seulement si proctoring actif → score réel)
+  useEffect(() => {
+    if (engagementScore == null) return
+    if (engagementScore < 0.35) lowEngRef.current += 1
+    else                        lowEngRef.current = 0
+    if (lowEngRef.current >= 2 && canAlishaIntervene(60000)) {
+      alishaCtrl.triggerEvent('engagement_drop'); markAlishaSpoke(); lowEngRef.current = 0
+    }
+  }, [engagementScore])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Nouvelle question affichée → Alisha redevient attentive (silencieux)
+  useEffect(() => {
+    if (phase === 'exercices' && exercices.length > 0 && !resultat) {
+      alishaCtrl.triggerEvent('question_shown')
+    }
+  }, [current, phase])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (audioIntervalRef.current)   clearInterval(audioIntervalRef.current)
@@ -1314,6 +1442,7 @@ export default function Session() {
           api.post(`/api/cours/session/clore/${sessionIdRef.current}`).catch(() => {})
         }
         clearCache('dashboard_' + user.id)
+        clearSessionProgress(sessKey)   // session terminée → plus rien à reprendre
         // Marque le défi du jour comme accompli
         localStorage.setItem(`sti_defi_${new Date().toDateString()}`, 'done')
         const nb = exercices.length
@@ -1341,6 +1470,7 @@ export default function Session() {
         conversation_history: iaHistory,
       })
       setExplicationIA(data.explication_ia)
+      alishaCtrl.triggerEvent('reexplain_ready')   // Alisha annonce l'explication
       // Conserve l'échange pour les relances suivantes sur le même exercice
       if (data.assistant_message) {
         setIaHistory(prev => [
@@ -1381,154 +1511,95 @@ export default function Session() {
     />
   }
 
-  /* ── Fin de session ──────────────────────────────────────── */
+  /* ── Fin de session (refonte complète) ───────────────────── */
   if (termine) {
     const total = scores.length, reussis = scores.filter(s => s > 0).length
     const pct = total > 0 ? Math.round(reussis / total * 100) : 0
     const rateesIds = exercices.filter((_, i) => scores[i] === 0).map(e => e.id)
     const totalPtsGagnes = scores.reduce((a, b) => a + b, 0)
-    const grade = pct >= 90 ? { emoji: '🏆', label: 'Excellent !',       bg: `linear-gradient(135deg,${C.gold},${C.brownMid})`,   anim: 'goldGlow 2s ease infinite' }
-                : pct >= 70 ? { emoji: '🌟', label: 'Très bien !',        bg: `linear-gradient(135deg,${C.emerald},${C.emeraldDark})`, anim: undefined }
-                : pct >= 50 ? { emoji: '👍', label: 'Bien joué !',        bg: `linear-gradient(135deg,${C.brown},${C.brownLight})`,    anim: undefined }
-                :             { emoji: '💪', label: 'Continue comme ça !', bg: `linear-gradient(135deg,${C.purple},${C.purple}CC)`,    anim: undefined }
+    const ringColor = pct >= 70 ? C.bogolanVert : pct >= 50 ? C.bogolanOcre : C.red
+    const grade = pct >= 90 ? { label: 'Excellent !',        adk: 'nyame_nti',  color: C.bogolanOcre, glow: true }
+                : pct >= 70 ? { label: 'Très bien !',         adk: 'gye_nyame',  color: C.bogolanVert, glow: false }
+                : pct >= 50 ? { label: 'Bien joué !',         adk: 'aya',        color: C.bogolanTerre, glow: false }
+                :             { label: 'Continue comme ça !', adk: 'dwennimmen', color: C.bogolanIndigo, glow: false }
+    // Anneau de score
+    const RING = isMobile ? 158 : 188
+    const rr   = (RING - 16) / 2
+    const rc   = 2 * Math.PI * rr
+    const resetSession = () => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null); setOrdreUser([]); setCorrPairs({}); setSelectedGauche(null); setDroitesMelangees([]); setBktHistory({}); setIsLeaving(false) }
 
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto', position: 'relative' }}>
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? 12 : 20, overflowY: 'auto', position: 'relative' }}>
         {confetti && <Confetti/>}
         {/* Filigrane Adinkra (reflet) */}
         <div aria-hidden="true" style={{ position: 'fixed', right: -50, bottom: -40, opacity: 0.05, pointerEvents: 'none', zIndex: 0, transform: 'rotate(-8deg)' }}>
           <AdinkraSymbol id="adinkrahene" size={isMobile ? 300 : 480} color={C.bogolanTerre} />
         </div>
-        <div style={{ maxWidth: 520, width: '100%', animation: 'fadeUp .5s ease', position: 'relative', zIndex: 1 }}>
 
-          {/* ── Carte principale ── */}
-          <div style={{ backgroundColor: C.surface, borderRadius: 24, padding: isMobile ? '24px 20px' : '36px 40px', boxShadow: '0 8px 48px rgba(107,58,42,0.14)', border: `1px solid ${C.brownPale}`, textAlign: 'center', marginBottom: 14 }}>
+        <div style={{ maxWidth: 410, width: '100%', margin: 'auto', animation: 'fadeUp .5s ease', position: 'relative', zIndex: 1 }}>
+          <div style={{ background: C.surface, borderRadius: 24, padding: isMobile ? '24px 20px' : '30px 28px', border: `1px solid ${C.border}`, boxShadow: `0 8px 40px ${C.bogolanTerre}1A`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
 
-            {/* ── Hero : Alisha remplace l'emoji ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-              <div style={{ animation: 'trophyPop .65s cubic-bezier(.22,1,.36,1) .1s both' }}>
-                <Suspense fallback={<div style={{ width: 110, height: 130 }} />}>
-                  <Alisha
-                    state={pct >= 90 ? 'excited' : pct >= 70 ? 'correct' : pct >= 50 ? 'welcome' : 'idle'}
-                    size={isMobile ? 90 : 110}
-                  />
-                </Suspense>
-              </div>
-              <span style={{
-                background: grade.bg, color: 'white',
-                fontWeight: 900, fontSize: isMobile ? 15 : 17,
-                padding: '6px 22px', borderRadius: 30,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                animation: grade.anim || 'scaleIn .4s ease .35s both',
-                display: 'inline-block',
-              }}>{grade.emoji} {grade.label}</span>
-              <p style={{ color: C.textSec, fontSize: 12, margin: 0 }}>{ua.titre}</p>
+            {/* Alisha + grade */}
+            <div style={{ animation: 'trophyPop .65s cubic-bezier(.22,1,.36,1) .1s both' }}>
+              <Suspense fallback={<div style={{ width: 76, height: 92 }} />}>
+                <Alisha state={pct >= 90 ? 'excited' : pct >= 70 ? 'correct' : pct >= 50 ? 'welcome' : 'idle'} size={isMobile ? 70 : 82} />
+              </Suspense>
             </div>
+            <span style={{ background: `${grade.color}1A`, color: grade.color, fontWeight: 900, fontSize: isMobile ? 15 : 17, padding: '5px 18px', borderRadius: 30, animation: grade.glow ? 'goldGlow 2s ease infinite' : undefined }}>
+              {grade.label}
+            </span>
 
-            {/* Score animé central */}
-            <div style={{ margin: '20px 0', position: 'relative' }}>
-              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: C.brownPale, borderRadius: 20, padding: isMobile ? '16px 28px' : '20px 40px' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }}>Score global</span>
-                <span style={{ fontSize: isMobile ? 52 : 68, fontWeight: 900, color: pct >= 70 ? C.emerald : pct >= 50 ? C.brown : C.red, lineHeight: 1, animation: 'scoreCount .5s cubic-bezier(.22,1,.36,1) .3s both' }}>
-                  {displayPct}<span style={{ fontSize: isMobile ? 24 : 32, color: C.textSec }}>%</span>
+            {/* Anneau de score */}
+            <div style={{ position: 'relative', width: RING, height: RING, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width={RING} height={RING} style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+                <circle cx={RING/2} cy={RING/2} r={rr} fill="none" stroke={C.border} strokeWidth={10}/>
+                <circle cx={RING/2} cy={RING/2} r={rr} fill="none" stroke={ringColor} strokeWidth={10}
+                  strokeDasharray={rc} strokeDashoffset={rc - (displayPct/100)*rc} strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset .9s cubic-bezier(.22,1,.36,1)' }}/>
+              </svg>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <AdinkraSymbol id={grade.adk} size={24} color={ringColor} animate />
+                <span style={{ fontSize: isMobile ? 38 : 46, fontWeight: 900, color: ringColor, lineHeight: 1, marginTop: 2 }}>
+                  {displayPct}<span style={{ fontSize: 18, color: C.textSec }}>%</span>
                 </span>
-                <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{reussis} / {total} réussis · {totalPtsGagnes} pts</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.textSec }}>{reussis}/{total} réussis</span>
               </div>
             </div>
 
-            {/* Timeline des réponses */}
-            {scores.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', letterSpacing: .5, margin: '0 0 8px' }}>Détail des réponses</p>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {scores.map((s, i) => (
-                    <div key={i} title={`Q${i+1} : ${s > 0 ? '+'+s+' pts' : 'faux'}`} style={{
-                      width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: s > 0 ? C.emeraldPale : C.redPale,
-                      border: `1.5px solid ${s > 0 ? C.emerald : C.red}50`,
-                      fontSize: 10, fontWeight: 900, color: s > 0 ? C.emerald : C.red,
-                      animation: `scaleIn .3s ease ${i * 0.045}s both`,
-                    }}>
-                      {s > 0 ? '✓' : '✗'}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Ligne de stats compacte */}
+            <p style={{ fontSize: 12, color: C.textSec, fontWeight: 600, margin: 0, display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13}/> {elapsedMin} min</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.bogolanOcre }}><Award size={13}/> {totalPtsGagnes} pts</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: engColor(engagementScore, C) }}><Activity size={13}/> {Math.round(engagementScore * 100)}%</span>
+            </p>
 
-
-            {/* Stats en 3 colonnes */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
-              {[
-                { label: 'Engagement',  value: `${Math.round(engagementScore * 100)}%`, color: engColor(engagementScore, C), icon: <Activity size={13}/> },
-                { label: 'Durée',       value: `${elapsedMin}min`,                       color: C.textSec,                icon: <Clock size={13}/>   },
-                { label: 'Pts gagnés',  value: `${totalPtsGagnes}`,                      color: C.gold,                   icon: <Award size={13}/>   },
-              ].map((s, i) => (
-                <div key={s.label} style={{ backgroundColor: C.brownPale, borderRadius: 12, padding: '12px 8px', animation: `scaleIn .35s ease ${.5 + i * .08}s both` }}>
-                  <div style={{ color: s.color, marginBottom: 3, display: 'flex', justifyContent: 'center' }}>{s.icon}</div>
-                  <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 900, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: 10, color: C.textSec, fontWeight: 600 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Message motivant */}
-            <div style={{ background: pct >= 70 ? C.emeraldPale : C.brownPale, borderRadius: 12, padding: '10px 14px', marginBottom: 20, border: `1px solid ${pct >= 70 ? C.emerald : C.brownLight}30` }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: pct >= 70 ? C.emerald : C.brown, margin: 0, lineHeight: 1.6 }}>
-                {pct === 100 ? '🎉 Score parfait ! Tu maîtrises cette unité à 100% !'
-                  : pct >= 90 ? '🌟 Excellent résultat ! Tes compétences progressent très bien.'
-                  : pct >= 70 ? '👏 Bien joué ! Quelques points à revoir pour atteindre la maîtrise.'
-                  : pct >= 50 ? '📚 Bon effort ! Revoir les exercices ratés avant de continuer.'
-                  : '🎯 Continue à pratiquer — chaque tentative renforce la mémoire !'}
-              </p>
-            </div>
-
-            {/* Boutons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-              {/* Revoir les ratées — visible seulement si ≥1 question ratée et pas déjà en mode ratées */}
+            {/* Actions */}
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 9, marginTop: 4 }}>
               {rateesIds.length > 0 && !rateesParam && (
                 <button onClick={() => navigate(`/session/${uaId}?ratees=${rateesIds.join(',')}&skip=1`)} style={{
-                  width: '100%', padding: '14px',
-                  background: `linear-gradient(135deg, ${C.red}, ${C.red}CC)`,
-                  color: 'white', border: 'none', borderRadius: 14,
-                  fontSize: isMobile ? 13 : 14, fontWeight: 800, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
-                  boxShadow: `0 4px 16px ${C.red}59`
+                  width: '100%', padding: '13px', background: `${C.red}14`, color: C.red, border: `1.5px solid ${C.red}40`,
+                  borderRadius: 13, fontSize: isMobile ? 13 : 14, fontWeight: 800, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 46,
                 }}>
-                  🔁 Revoir les {rateesIds.length} question{rateesIds.length > 1 ? 's' : ''} ratée{rateesIds.length > 1 ? 's' : ''}
+                  🔁 Revoir les {rateesIds.length} ratée{rateesIds.length > 1 ? 's' : ''}
                 </button>
               )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'session' } })} style={{
-                  padding: '13px', background: C.brownPale,
-                  color: C.brown, border: `1.5px solid ${C.brownLight}40`,
-                  borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
-                }}>
-                  <ArrowLeft size={15}/> Retour au cours
+              <button onClick={() => navigate('/dashboard')} style={{
+                width: '100%', padding: '14px', background: `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`,
+                color: 'white', border: 'none', borderRadius: 13, fontSize: isMobile ? 14 : 15, fontWeight: 800,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: `0 4px 18px ${C.bogolanTerre}40`, minHeight: 50,
+              }}>
+                <Home size={17}/> Tableau de bord
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 2 }}>
+                <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'session' } })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.bogolanTextSec, fontSize: 12.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, padding: 4 }}>
+                  <ArrowLeft size={14}/> Au cours
                 </button>
-                <button onClick={() => { setTermine(false); setCurrent(0); setReponse(null); setResultat(null); setScores([]); setIndices(0); setAdaptation(null); setExplicationIA(null); setConfetti(false); setStreak(0); setDisplayPct(0); setBlanks([]); setActiveBlank(null); setOrdreUser([]); setCorrPairs({}); setSelectedGauche(null); setDroitesMelangees([]); setBktHistory({}); setIsLeaving(false) }} style={{
-                  padding: '13px', background: C.brownPale,
-                  color: C.brown, border: `1.5px solid ${C.brownLight}40`,
-                  borderRadius: 14, fontSize: isMobile ? 13 : 14, fontWeight: 700,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48
-                }}>
+                <button onClick={resetSession} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.bogolanTextSec, fontSize: 12.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, padding: 4 }}>
                   🔄 Refaire
                 </button>
               </div>
-              <button onClick={() => navigate('/dashboard')} style={{
-                width: '100%', padding: '15px',
-                background: `linear-gradient(135deg, ${C.brown}, ${C.brownLight})`,
-                color: 'white', border: 'none', borderRadius: 14,
-                fontSize: isMobile ? 14 : 15, fontWeight: 800, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                boxShadow: `0 4px 20px ${C.brown}40`, minHeight: 52
-            }}>
-              <Home size={17}/> Tableau de bord
-            </button>
-          </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1740,6 +1811,36 @@ export default function Session() {
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none', position: 'absolute' }}/>
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
 
+      {/* ── Reprise de session ── */}
+      {resumeData && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(44,24,16,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'fadeIn .2s ease' }}>
+          <div style={{ background: C.bogolanSurface, borderRadius: 22, padding: '26px 22px', maxWidth: 360, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(44,24,16,0.3)', border: `1px solid ${C.bogolanBorder}`, animation: 'scaleIn .25s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <div style={{ background: `${C.bogolanTerre}12`, borderRadius: 16, padding: 14 }}>
+                <AdinkraSymbol id="sankofa" size={56} color={C.bogolanTerre} animate />
+              </div>
+            </div>
+            <h3 style={{ fontSize: 17, fontWeight: 900, color: C.bogolanText, margin: '0 0 6px' }}>Reprendre ta session ?</h3>
+            <p style={{ fontSize: 13, color: C.bogolanTextSec, margin: '0 0 18px', lineHeight: 1.5 }}>
+              Tu t'étais arrêté à la question <strong style={{ color: C.bogolanTerre }}>{resumeData.scores.length + 1}</strong> sur {exercices.length}.
+            </p>
+            <button onClick={reprendreSession} style={{
+              width: '100%', padding: '13px', background: `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`,
+              color: 'white', border: 'none', borderRadius: 13, fontSize: 14, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 16px ${C.bogolanTerre}40`,
+            }}>
+              ↩ Reprendre où je me suis arrêté
+            </button>
+            <button onClick={recommencerSession} style={{
+              width: '100%', marginTop: 9, padding: '11px', background: 'none', color: C.bogolanTextSec,
+              border: `1.5px solid ${C.bogolanBorder}`, borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}>
+              🔄 Recommencer depuis le début
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Floating +pts overlay ── */}
       {floatingPts && (
         <div key={floatingPts.id} style={{
@@ -1777,8 +1878,12 @@ export default function Session() {
         position: 'sticky', top: 0, zIndex: 100,
         boxShadow: '0 2px 12px rgba(107,58,42,0.07)'
       }}>
-        {/* Bouton retour */}
-        <button onClick={() => navigate(`/cours/${uaId}`, { state: { from: 'session' } })} style={{
+        {/* Bouton retour — confirmation si session en cours */}
+        <button onClick={() => {
+          const enCours = !termine && (current > 0 || !!resultat || !!reponse)
+          if (enCours && !window.confirm('Quitter la session en cours ? Ta progression déjà validée est conservée, mais tu sortiras des exercices.')) return
+          navigate(`/cours/${uaId}`, { state: { from: 'session' } })
+        }} style={{
           background: C.brownPale, border: 'none', borderRadius: 9,
           padding: isMobile ? '8px 10px' : '7px 14px', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 5,
@@ -2308,19 +2413,36 @@ export default function Session() {
             {isOrdreElements && (
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontSize: 11, fontWeight: 800, color: C.textSec, textTransform: 'uppercase', letterSpacing: .6, margin: '0 0 10px' }}>
-                  {resultat ? 'Ordre soumis' : 'Remets ces étapes dans l\'ordre correct :'}
+                  {resultat ? 'Ordre soumis' : 'Glisse les étapes (ou ▲▼) dans l\'ordre correct :'}
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {ordreUser.map((item, i) => {
                     const correctOrder = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
                     const isCorrect = !!resultat && _normaliserFront(item) === _normaliserFront(correctOrder[i])
+                    const isDragging = dragIdx === i
+                    const moveItem = (from, to) => {
+                      if (from == null || to == null || from === to) return
+                      const arr = [...ordreUser]
+                      const [moved] = arr.splice(from, 1)
+                      arr.splice(to, 0, moved)
+                      setOrdreUser(arr); setReponse(JSON.stringify(arr))
+                    }
                     return (
-                      <div key={item + i} style={{
+                      <div
+                        key={item + i}
+                        draggable={!resultat}
+                        onDragStart={() => setDragIdx(i)}
+                        onDragOver={e => { if (!resultat) e.preventDefault() }}
+                        onDrop={e => { e.preventDefault(); moveItem(dragIdx, i); setDragIdx(null) }}
+                        onDragEnd={() => setDragIdx(null)}
+                        style={{
                         display: 'flex', alignItems: 'center', gap: 10,
                         background: resultat ? (isCorrect ? `${C.bogolanVert}1A` : C.redPale) : C.surface,
-                        border: `2px solid ${resultat ? (isCorrect ? C.bogolanVert : C.red) + '66' : C.border}`,
-                        borderRadius: 14, padding: '10px 12px', transition: 'all .2s',
-                        boxShadow: resultat ? 'none' : `0 2px 8px ${C.bogolanTerre}10`,
+                        border: `2px solid ${resultat ? (isCorrect ? C.bogolanVert : C.red) + '66' : isDragging ? C.bogolanTerre : C.border}`,
+                        borderRadius: 14, padding: '10px 12px', transition: 'border-color .15s, box-shadow .15s, opacity .15s',
+                        boxShadow: isDragging ? `0 10px 24px ${C.bogolanTerre}33` : resultat ? 'none' : `0 2px 8px ${C.bogolanTerre}10`,
+                        opacity: isDragging ? 0.6 : 1,
+                        cursor: resultat ? 'default' : 'grab',
                       }}>
                         {!resultat && <GripVertical size={16} color={C.bogolanTextSec} style={{ flexShrink: 0, opacity: .6 }} />}
                         <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: resultat ? (isCorrect ? C.bogolanVert : C.red) : `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900 }}>{i + 1}</span>
@@ -2640,7 +2762,7 @@ export default function Session() {
             {!resultat && (
               <div style={{ marginBottom: 14 }}>
                 {indices === 0 ? (
-                  <button onClick={() => { setIndices(1); sendEvent('help_requested', { level: 1 }) }} style={{
+                  <button onClick={() => { setIndices(1); sendEvent('help_requested', { level: 1 }); alishaCtrl.triggerEvent('hint_requested') }} style={{
                     backgroundColor: 'transparent',
                     border: `1.5px dashed ${C.brownLight}`,
                     borderRadius: 9, padding: '8px 14px', cursor: 'pointer',
@@ -2659,7 +2781,7 @@ export default function Session() {
                       {indices === 1 ? ex.indice_1 : ex.indice_2}
                     </p>
                     {indices === 1 && ex.indice_2 && (
-                      <button onClick={() => { setIndices(2); sendEvent('help_requested', { level: 2 }) }} style={{
+                      <button onClick={() => { setIndices(2); sendEvent('help_requested', { level: 2 }); alishaCtrl.triggerEvent('hint_requested') }} style={{
                         marginTop: 8, backgroundColor: 'transparent', border: `1px dashed ${C.orange}`,
                         borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
                         color: C.orange, fontSize: 11, fontWeight: 700, minHeight: 32
@@ -2674,6 +2796,7 @@ export default function Session() {
 
             {/* Bouton action principal */}
             {!resultat ? (
+              <>
               <button onClick={soumettre} disabled={!reponse || submitting} style={{
                 width: '100%', padding: '16px',
                 background: reponse && !submitting
@@ -2692,6 +2815,22 @@ export default function Session() {
                   ? <><Spinner size={14} color={C.textSec}/> Vérification…</>
                   : <>{reponse ? 'Valider' : 'Choisir…'}</>}
               </button>
+              {/* Passer la question (comptée comme non réussie, garde l'alignement) */}
+              {!submitting && (
+                <button onClick={() => {
+                  if (!window.confirm('Passer cette question ? Elle sera comptée comme non réussie.')) return
+                  setScores(prev => [...prev, 0])
+                  setStreak(0)
+                  sendEvent('skip', { exercice_id: exercices[current]?.id })
+                  suivant()
+                }} style={{
+                  width: '100%', marginTop: 8, padding: '9px', background: 'none', border: 'none',
+                  color: C.textSec, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                }}>
+                  Passer cette question →
+                </button>
+              )}
+              </>
             ) : (
               <button onClick={suivant} style={{
                 width: '100%', padding: '16px',

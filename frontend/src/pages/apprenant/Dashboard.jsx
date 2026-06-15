@@ -16,6 +16,7 @@ import { useOnlineRetry } from '../../hooks/useOnlineRetry'
 import { useSound } from '../../hooks/useSound'
 import { AdinkraSymbol } from '../../components/adinkra/AdinkraSymbols.jsx'
 import { ADINKRA_BADGES, BADGES_BY_ID } from '../../constants/adinkraBadges'
+import { notifyAdinkraBadge } from '../../components/adinkra/badgeToast.jsx'
 const Alisha = lazy(() => import('../../components/Alisha'))
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
@@ -577,7 +578,7 @@ export default function Dashboard() {
         unlockedIds.forEach(id => {
           if (!isFirstLoad && !prevAdk.has(id)) {
             const meta = BADGES_BY_ID[id]
-            if (meta) { toast(`Symbole Adinkra débloqué : ${meta.nom} !`, { duration: 4500, icon: '✨' }); playSound('unlockBadge') }
+            if (meta) { notifyAdinkraBadge(id); playSound('unlockBadge') }
           }
         })
         localStorage.setItem(adkKey, JSON.stringify(unlockedIds))

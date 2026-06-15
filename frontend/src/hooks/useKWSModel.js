@@ -13,9 +13,9 @@ import { KWS_MODEL_READY } from '../config/models'
 const N_MELS_V4          = 80
 const TEMPERATURE        = 0.9513642191886902  // calibration temperature scaling
 const LABELS             = ['aide','oui','non','repeter','incompris','lentement','bruit_silence']
-const CONFIDENCE_THRESHOLD = 0.68
-const ENTROPY_THRESHOLD    = 1.55
-const ENERGY_THRESHOLD     = 0.03
+const CONFIDENCE_THRESHOLD = 0.55   // assoupli (était 0.68) — commandes plus faciles à valider
+const ENTROPY_THRESHOLD    = 1.75   // assoupli (était 1.55) — tolère des prédictions moins tranchées
+const ENERGY_THRESHOLD     = 0.02   // assoupli (était 0.03) — capte la parole plus faible
 const COLLECT_MS           = 1500   // 1.5s → ~149 frames, padded à 150
 
 let _session   = null
@@ -119,6 +119,8 @@ export function useKWSModel(audioActive, onVadActivity) {
   const vadActiveRef   = useRef(false)
   const vadStartRef    = useRef(0)
   const vadFramesRef   = useRef(0)   // frames consécutives au-dessus du seuil
+  // Anti-rebond : évite la ré-émission du même mot sur fenêtres qui se recouvrent
+  const lastEmitRef    = useRef({ keyword: null, t: 0 })
 
   useEffect(() => { onVadRef.current = onVadActivity }, [onVadActivity])
 
@@ -144,56 +146,82 @@ export function useKWSModel(audioActive, onVadActivity) {
       proc.connect(silencer)
       silencer.connect(ctx.destination)
 
-      // Buffer glissant : évalue toutes les 500ms sur la dernière fenêtre de 1500ms
-      // → garantit que chaque mot est capturé dans au moins une fenêtre
+      // Inférence KWS déclenchée à la FIN d'une parole (VAD) → mot complet & bien aligné.
+      // Repli périodique (HOP_MS) quand AUCUNE parole n'est en cours → capte les mots
+      // très courts qui n'arment pas le VAD, sans inférer sur des mots partiels.
       const HOP_MS    = 500
       let lastHopTime = 0
+      let inferring   = false
 
-      proc.onaudioprocess = async (e) => {
+      // Anti-rebond : un même mot ne se redéclenche pas tant qu'il persiste
+      // (refractaire ~1.5s). Un mot DIFFÉRENT passe immédiatement.
+      const emitDebounced = (result) => {
+        const t  = Date.now()
+        const le = lastEmitRef.current
+        const REFRACTORY_MS = 1500
+        if (result.keyword !== le.keyword || t - le.t > REFRACTORY_MS) {
+          lastEmitRef.current = { keyword: result.keyword, t }
+          setLastKeyword({ ...result, timestamp: t })
+        } else {
+          lastEmitRef.current.t = t
+        }
+      }
+
+      const runInference = async () => {
+        if (inferring || !KWS_MODEL_READY) return
+        const needed = Math.ceil(srRef.current * COLLECT_MS / 1000)
+        if (bufferRef.current.length < needed) return
+        inferring = true
+        try {
+          const pcm    = new Float32Array(bufferRef.current.slice(-needed))
+          const result = await inferKWS(pcm, srRef.current)
+          if (result) emitDebounced(result)
+        } finally {
+          inferring = false
+        }
+      }
+
+      proc.onaudioprocess = (e) => {
         if (!activeRef.current) return
         const chunk = e.inputBuffer.getChannelData(0)
         bufferRef.current.push(...chunk)
 
         const needed = Math.ceil(srRef.current * COLLECT_MS / 1000)
-
-        // Garde le buffer à taille max = 2 × fenêtre pour éviter croissance infinie
         if (bufferRef.current.length > needed * 2)
           bufferRef.current = bufferRef.current.slice(-needed)
 
-        // ── VAD énergie — indépendant du KWS ─────────────────────
-        if (onVadRef.current) {
-          const rms = Math.sqrt(chunk.reduce((s, v) => s + v * v, 0) / chunk.length)
-          const isSpeech = rms > VAD_RMS_THRESHOLD
+        // ── VAD énergie (toujours actif : sert au déclenchement KWS + au log engagement) ──
+        const rms       = Math.sqrt(chunk.reduce((s, v) => s + v * v, 0) / chunk.length)
+        const isSpeech  = rms > VAD_RMS_THRESHOLD
+        let speechEnded = false
 
-          if (isSpeech) {
-            vadFramesRef.current += 1
-            if (!vadActiveRef.current && vadFramesRef.current >= VAD_CONFIRM_FRAMES) {
-              vadActiveRef.current = true
-              vadStartRef.current  = Date.now()
-            }
-          } else {
-            if (vadActiveRef.current) {
-              // Parole terminée — émet seulement si durée >= 1s
-              const dur = Math.round((Date.now() - vadStartRef.current) / 1000)
-              if (dur >= 1) onVadRef.current(dur)
-            }
-            vadActiveRef.current = false
-            vadFramesRef.current = 0
+        if (isSpeech) {
+          vadFramesRef.current += 1
+          if (!vadActiveRef.current && vadFramesRef.current >= VAD_CONFIRM_FRAMES) {
+            vadActiveRef.current = true
+            vadStartRef.current  = Date.now()
           }
+        } else {
+          if (vadActiveRef.current) {
+            const durMs = Date.now() - vadStartRef.current
+            const dur   = Math.round(durMs / 1000)
+            if (dur >= 1 && onVadRef.current) onVadRef.current(dur)   // log engagement
+            if (durMs >= 300 && durMs <= 1700) speechEnded = true     // mot exploitable
+          }
+          vadActiveRef.current = false
+          vadFramesRef.current = 0
         }
 
-        // ── KWS inference ─────────────────────────────────────────
-        if (bufferRef.current.length < needed) return
-
-        const now = Date.now()
-        if (now - lastHopTime < HOP_MS) return
-        lastHopTime = now
-
-        const pcm = new Float32Array(bufferRef.current.slice(-needed))
-
-        if (!KWS_MODEL_READY) return
-        const result = await inferKWS(pcm, srRef.current)
-        if (result) setLastKeyword({ ...result, timestamp: Date.now() })
+        // ── Déclenchement ──
+        if (speechEnded) {
+          runInference()                                   // cas principal : aligné sur la parole
+        } else if (!vadActiveRef.current) {
+          const now = Date.now()
+          if (now - lastHopTime >= HOP_MS) {               // repli mots ultra-courts / ambiance
+            lastHopTime = now
+            runInference()
+          }
+        }
       }
 
       getKWSSession().then(s => setKwsReady(!!s))
