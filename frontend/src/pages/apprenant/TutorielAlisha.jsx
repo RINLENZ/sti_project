@@ -844,7 +844,15 @@ export default function TutorielAlisha() {
             setShowConsent(true)
           } else {
             if (consent === 'full' || consent === 'camera') startCamera()
-            if (consent === 'full') setAudioActive(true)
+            if (consent === 'full') {
+              // L'AudioContext ne peut démarrer QUE sur un geste utilisateur.
+              // Au rechargement avec consentement mémorisé, il n'y a pas de geste
+              // → on diffère l'activation micro à la 1ère interaction.
+              if (cancelled) return
+              const armAudio = () => { setAudioActive(true) }
+              window.addEventListener('pointerdown', armAudio, { once: true })
+              window.addEventListener('keydown',    armAudio, { once: true })
+            }
           }
         } catch {}
       })
@@ -1138,7 +1146,7 @@ export default function TutorielAlisha() {
   useEffect(() => {
     if (!lastKeyword) return
     const { keyword } = lastKeyword
-    if (keyword === 'aide' && phase === 'step' && currentStep?.type === 'exercice') {
+    if ((keyword === 'aide' || keyword === 'incompris') && phase === 'step' && currentStep?.type === 'exercice') {
       const details = document.querySelector('details')
       if (details && !details.open) details.open = true
       speak("Voici un indice pour t'aider.", {})

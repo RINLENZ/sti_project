@@ -359,14 +359,28 @@ const AlishaPermissionDialog = ({ onChoice, C, xs }) => {
 function LeconReader({ ua, ressources, onStart, onResourceView }) {
   const { C: _Craw } = useTheme(); const C = bogolanize(_Craw)
   const [idx, setIdx] = useState(0)
+  const [readPct, setReadPct] = useState(0)
   const readStartRef  = useRef(Date.now())
   const res = ressources[idx]
+
+  // Barre de progression de lecture (suit le scroll de la page)
+  useEffect(() => {
+    const onScroll = () => {
+      const h = document.documentElement
+      const max = h.scrollHeight - h.clientHeight
+      setReadPct(max > 40 ? Math.min(100, Math.round((h.scrollTop / max) * 100)) : 0)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [idx])
 
   function logAndGo(newIdx) {
     const secs = Math.round((Date.now() - readStartRef.current) / 1000)
     onResourceView?.(res.id, secs)
     readStartRef.current = Date.now()
     setIdx(newIdx)
+    window.scrollTo({ top: 0, behavior: 'smooth' })   // navigation : on remonte en haut
   }
 
   const typeLabel = {
@@ -382,15 +396,20 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
       display: 'flex', flexDirection: 'column',
       fontFamily: 'system-ui, sans-serif',
     }}>
-      {/* Header */}
+      {/* Header — collant */}
       <div style={{
         background: `linear-gradient(135deg, ${C.brownDark}, ${C.brown})`,
-        padding: '20px 24px', color: 'white',
+        padding: '14px 24px', color: 'white',
+        position: 'sticky', top: 0, zIndex: 20,
+        boxShadow: '0 2px 14px rgba(0,0,0,0.15)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <span style={{ fontSize: 11, opacity: .7, fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5 }}>
+          <span style={{ fontSize: 11, opacity: .7, fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {ua?.reference_ue} · {ua?.titre}
           </span>
+          <button onClick={onStart} style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.3)', color: 'white', borderRadius: 20, padding: '5px 13px', fontSize: 11, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            Passer aux exercices →
+          </button>
         </div>
         {ressources.length > 1 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -410,6 +429,10 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
             })}
           </div>
         )}
+        {/* Progression de lecture */}
+        <div style={{ height: 3, borderRadius: 3, background: 'rgba(255,255,255,.22)', marginTop: 12, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${readPct}%`, background: 'white', transition: 'width .15s linear' }}/>
+        </div>
       </div>
 
       {/* Contenu */}
@@ -481,10 +504,10 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
           </div>
         )}
 
-        {/* Navigation + bouton démarrer */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {/* Navigation + bouton démarrer — barre collante en bas */}
+        <div style={{ position: 'sticky', bottom: 0, display: 'flex', gap: 10, alignItems: 'center', padding: '12px 0 14px', marginTop: 8, background: `linear-gradient(${C.bg}00, ${C.bg} 28%)` }}>
           {idx > 0 && (
-            <button onClick={() => logAndGo(idx - 1)} style={{ padding: '12px 20px', background: C.brownPale, color: C.brown, border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => logAndGo(idx - 1)} style={{ padding: '12px 20px', background: C.bogolanSurface, color: C.bogolanTerre, border: `1.5px solid ${C.bogolanTerre}40`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               ← Précédent
             </button>
           )}
@@ -512,6 +535,7 @@ function LeconReader({ ua, ressources, onStart, onResourceView }) {
 function _normaliserFront(s) {
   if (s == null) return ''
   return String(s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/^[\s.,;:!?…"«»()[\]]+|[\s.,;:!?…"«»()[\]]+$/g, '')   // ponctuation de bord
 }
 
 // Fanfare jouée dès que la session se termine, indépendamment du TTS.
@@ -623,6 +647,8 @@ export default function Session() {
   const [termine, setTermine]     = useState(false)
   const [dragIdx, setDragIdx]     = useState(null)   // ordre_elements : glisser-déposer
   const [resumeData, setResumeData] = useState(null) // progression sauvegardée à reprendre
+  const [showWhy, setShowWhy]       = useState(false) // B1 — déplie l'explication détaillée
+  const [confirmModal, setConfirmModal] = useState(null) // { title, message, confirmLabel, danger, onConfirm }
   // Son de feedback doux à la correction (réussite / erreur)
   const lastSoundRef = useRef(null)
   useEffect(() => {
@@ -692,11 +718,13 @@ export default function Session() {
   const reussitesMacroRef= useRef(0)
   const recentTimesRef   = useRef([])
   const engHistRef       = useRef([])
+  const dktRankRef       = useRef([])   // R1 — classement DKT (ids d'exos par zpd_score)
   const lowEngStreakRef   = useRef(0)
 
   // ── Modèles ONNX africains ───────────────────────────────────────
+  const micStreamRef     = useRef(null)   // piste micro partagée (VAD Session + KWS)
   const { predict: predictEmotionOnnx } = useEmotionOnnx()
-  const { lastKeyword }                 = useKWSModel(audioActive)
+  const { lastKeyword }                 = useKWSModel(audioActive, undefined, micStreamRef)
   const { speak: _alishaSpeak, stop: _stopAlisha, edgeVoice, setPreferredVoice, edgeAvailable, systemVoiceName } = useAlishaVoice()
 
   const alishaCtrl = useAlishaController({
@@ -742,11 +770,12 @@ export default function Session() {
     const isIdentV = exVoc?.type === 'qcm' && !!exVoc?.options?.[0]?.startsWith?.('__img__:')
     const isVF     = !isIdentV && exVoc?.options?.length === 2 &&
                      (exVoc.options.includes('Vrai') || exVoc.options.includes('Faux'))
-    // Révèle l'indice suivant (statique) + fait réagir Alisha
+    // Révèle l'indice suivant (statique) + Alisha lit le VRAI indice (A1)
     const revealHintVoice = () => {
-      if (indices === 0 && exVoc?.indice_1)      { setIndices(1); sendEvent('help_requested', { level: 1, via: 'voice' }) }
-      else if (indices === 1 && exVoc?.indice_2) { setIndices(2); sendEvent('help_requested', { level: 2, via: 'voice' }) }
-      alishaCtrl.triggerEvent('hint_requested')
+      let hintText = null
+      if (indices === 0 && exVoc?.indice_1)      { setIndices(1); hintText = exVoc.indice_1; sendEvent('help_requested', { level: 1, via: 'voice' }) }
+      else if (indices === 1 && exVoc?.indice_2) { setIndices(2); hintText = exVoc.indice_2; sendEvent('help_requested', { level: 2, via: 'voice' }) }
+      alishaCtrl.triggerEvent('hint_requested', { text: hintText })
     }
 
     switch (k) {
@@ -1138,7 +1167,14 @@ export default function Session() {
 
   async function startAudio() {
     try {
+      // Réglages audio par défaut (AEC/NS/AGC) — conditions d'entraînement du KWS
       const stream   = await navigator.mediaDevices.getUserMedia({ audio: true })
+      micStreamRef.current = stream   // partagé avec le hook KWS (évite une 2e capture muette)
+      // Avertit si la piste micro démarre muette (micro coupé / pris ailleurs)
+      const _tr = stream.getAudioTracks?.()[0]
+      if (_tr?.muted) {
+        toast('🎤 Micro silencieux — vérifie qu\'il n\'est pas coupé (système / autre appli).', { icon: '⚠️', duration: 5000 })
+      }
       const ctx      = new (window.AudioContext || window.webkitAudioContext)()
       const source   = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
@@ -1346,6 +1382,7 @@ export default function Session() {
         bkt:       data.bkt ?? null,
         streak:    data.correct ? streak + 1 : 0,
         hintsUsed: indices,
+        kc:        ex.kcs?.[0] || ex.competence_evaluee || null,   // A3 — contexte compétence
       })
       setTimeout(() => setAnswerFlash(null), 750)
       const p = cnnEmotionRef.current?.probs || {}
@@ -1408,6 +1445,15 @@ export default function Session() {
         current_exercise:  _nextEx ? { id: _nextEx.id, difficulte: _nextEx.difficulte ?? 1, macro_kc: _nextEx.kcs?.[0] ?? _nextEx.competence_evaluee ?? undefined } : undefined,
       }).catch(() => {})
 
+      // R1 — préfetch du classement DKT (zpd_score) pendant le feedback, pour
+      // choisir la prochaine question sans latence à la transition.
+      api.get(`/api/dkt/apprenant/${user.id}/prochain-exercice`, { params: { ua_id: uaId } })
+        .then(({ data: d }) => {
+          dktRankRef.current = [d.prochain_exercice, ...(d.alternatives || [])]
+            .filter(Boolean).map(e => String(e.id))
+        })
+        .catch(() => { dktRankRef.current = [] })
+
       if (data.correct) {
         setStreak(s => s + 1)
         if (data.points_gagnes > 0) {
@@ -1417,12 +1463,17 @@ export default function Session() {
         toast.success(`+${data.points_gagnes} points !`, { icon: '🎯' })
       } else {
         setStreak(0)
-        // Si BKT indique que la compétence est à renforcer, charger l'extrait de cours
-        if (data.bkt?.niveau === 'a_renforcer') {
+        // D3+D4 — adaptation SANS caméra : on charge l'extrait de cours dès qu'on a
+        // une compétence (le backend renvoie une ressource s'il en a une pour ce point),
+        // et on déplie l'aide automatiquement quand l'élève bloque (≥2 erreurs d'affilée).
+        const struggling = consErrMacroRef.current >= 2
+        const comp = data.bkt?.competence || ex.kcs?.[0] || ex.competence_evaluee
+        if (comp) {
           api.get(`/api/cours/ua/${uaId}/ressource-aide`, {
-            params: { competence: data.bkt.competence }
-          }).then(r => setRessourceAide(r.data)).catch(() => {})
+            params: { competence: comp }
+          }).then(r => setRessourceAide(r.data?.titre ? r.data : null)).catch(() => {})
         }
+        if (struggling) setShowWhy(true)
       }
     } catch { toast.error('Erreur de vérification') }
     finally { setSubmitting(false) }
@@ -1450,9 +1501,45 @@ export default function Session() {
         api.post('/api/gamification/award-xp', { user_id: user.id, xp_gagnes: xpGagnes, session_terminee: true, nb_exercices: nb, nb_corrects: r }).catch(() => {}).then(() => window.__refreshXPBar?.())
         setTermine(true)
       } else {
+        // ── D1 — Séquencement adaptatif (ZPD) ──────────────────────────
+        // On réordonne UNIQUEMENT les questions NON encore jouées (indices > current)
+        // → l'alignement scores ↔ exercices déjà répondus reste intact.
+        // Heuristique : 2 bonnes d'affilée → question plus difficile ; une erreur →
+        // plus facile ; sinon même niveau. On choisit la question restante dont la
+        // difficulté est la plus proche de la cible.
+        const rest = exercices.slice(current + 1)
+        if (rest.length > 1) {
+          let bestI = -1
+          // R1 — séquencement DKT : 1re question restante la mieux classée par zpd_score
+          for (const id of (dktRankRef.current || [])) {
+            const idx = rest.findIndex(e => String(e.id) === id)
+            if (idx !== -1) { bestI = idx; break }
+          }
+          // Fallback D1 — heuristique difficulté côté client (si DKT indisponible)
+          if (bestI < 0) {
+            const lastOk = scores[scores.length - 1] > 0
+            const prevOk = scores[scores.length - 2] > 0
+            const curDiff = exercices[current]?.difficulte || 1
+            let target = curDiff
+            if (lastOk && prevOk) target = Math.min(curDiff + 1, 3)
+            else if (!lastOk)     target = Math.max(curDiff - 1, 1)
+            let bestD = Infinity; bestI = 0
+            rest.forEach((e, i) => {
+              const d = Math.abs((e.difficulte || 1) - target)
+              if (d < bestD) { bestD = d; bestI = i }
+            })
+          }
+          if (bestI > 0) {
+            const reordered = [...rest]
+            const [chosen] = reordered.splice(bestI, 1)
+            reordered.unshift(chosen)
+            setExercices([...exercices.slice(0, current + 1), ...reordered])
+          }
+        }
         setCurrent(c => c + 1); setReponse(null); setResultat(null); setBlanks([]); setActiveBlank(null)
         setOrdreUser([]); setCorrPairs({}); setSelectedGauche(null); setDroitesMelangees([])
         setIndices(0); setAdaptation(null); setExplicationIA(null); setIaHistory([]); setRessourceAide(null)
+        setShowWhy(false)
         setAnswerFlash(null); setFeedbackMsg('')
         setQuestionTime(Date.now())
       }
@@ -1482,6 +1569,16 @@ export default function Session() {
     } catch { toast.error('Tuteur IA indisponible') }
     finally { setLoadingIA(false) }
   }
+
+  // R3 — Fluidité : quand l'élève bloque (≥2 erreurs d'affilée sur la même
+  // compétence), Alisha génère AUTOMATIQUEMENT une explication LLM contextuelle
+  // (au lieu d'une phrase figée), sans appeler le LLM à chaque réponse.
+  useEffect(() => {
+    if (resultat && !resultat.correct && consErrMacroRef.current >= 2 && !explicationIA && !loadingIA) {
+      demanderExplication()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultat])
 
   /* ── Chargement ──────────────────────────────────────────── */
   if (loading) return (
@@ -1811,6 +1908,31 @@ export default function Session() {
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none', position: 'absolute' }}/>
       <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute' }}/>
 
+      {/* ── Modale de confirmation (Bogolan) — remplace window.confirm ── */}
+      {confirmModal && (
+        <div onClick={() => setConfirmModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 320, background: 'rgba(44,24,16,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'fadeIn .2s ease' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.bogolanSurface, borderRadius: 20, padding: '24px 22px', maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(44,24,16,0.3)', border: `1px solid ${C.bogolanBorder}`, animation: 'scaleIn .25s ease' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 900, color: C.bogolanText, margin: '0 0 6px' }}>{confirmModal.title}</h3>
+            <p style={{ fontSize: 13, color: C.bogolanTextSec, margin: '0 0 20px', lineHeight: 1.55 }}>{confirmModal.message}</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmModal(null)} style={{
+                flex: 1, padding: '12px', background: 'none', color: C.bogolanTextSec,
+                border: `1.5px solid ${C.bogolanBorder}`, borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}>
+                Annuler
+              </button>
+              <button onClick={() => { const cb = confirmModal.onConfirm; setConfirmModal(null); cb?.() }} style={{
+                flex: 1, padding: '12px', color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                background: confirmModal.danger ? 'linear-gradient(135deg, #C0563A, #9E3F28)' : `linear-gradient(135deg, ${C.bogolanTerre}, ${C.bogolanOcre})`,
+                boxShadow: confirmModal.danger ? '0 4px 16px rgba(192,86,58,0.4)' : `0 4px 16px ${C.bogolanTerre}40`,
+              }}>
+                {confirmModal.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Reprise de session ── */}
       {resumeData && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(44,24,16,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'fadeIn .2s ease' }}>
@@ -1881,8 +2003,16 @@ export default function Session() {
         {/* Bouton retour — confirmation si session en cours */}
         <button onClick={() => {
           const enCours = !termine && (current > 0 || !!resultat || !!reponse)
-          if (enCours && !window.confirm('Quitter la session en cours ? Ta progression déjà validée est conservée, mais tu sortiras des exercices.')) return
-          navigate(`/cours/${uaId}`, { state: { from: 'session' } })
+          const go = () => navigate(`/cours/${uaId}`, { state: { from: 'session' } })
+          if (enCours) {
+            setConfirmModal({
+              title: 'Quitter la session ?',
+              message: 'Ta progression déjà validée est conservée, mais tu sortiras des exercices.',
+              confirmLabel: 'Quitter',
+              danger: true,
+              onConfirm: go,
+            })
+          } else go()
         }} style={{
           background: C.brownPale, border: 'none', borderRadius: 9,
           padding: isMobile ? '8px 10px' : '7px 14px', cursor: 'pointer',
@@ -2009,6 +2139,7 @@ export default function Session() {
           <AdaptationOrchestrator
             adaptation={currentAdaptation}
             onDismiss={(actionType) => dismiss(actionType)}
+            uaId={uaId}
           />
 
           {/* ── Carte question principale ── */}
@@ -2037,15 +2168,16 @@ export default function Session() {
               {/* Bulle contextuelle */}
               {alishaBubble && (
                 <div style={{
-                  background:    C.goldPale,
-                  border:       `1.5px solid ${C.accent}`,
+                  background:    C.bogolanSurface,
+                  border:       `1.5px solid ${C.bogolanOcre}`,
                   borderRadius:  10,
-                  padding:      '5px 11px',
+                  padding:      '6px 11px',
                   fontSize:      11,
                   fontWeight:    700,
-                  color:        C.brownDark,
-                  maxWidth:      180,
+                  color:        C.bogolanText,
+                  maxWidth:      200,
                   lineHeight:    1.4,
+                  boxShadow:    `0 4px 14px ${C.bogolanTerre}22`,
                   animation:    'slideDown .25s ease',
                 }}>
                   {alishaBubble}
@@ -2211,7 +2343,7 @@ export default function Session() {
                     const correctArr = (() => { try { return JSON.parse(resultat?.reponse_correcte || '[]') } catch { return [] } })()
                     const filled = (blanks.length === multiNbBlanks ? blanks[i] : null) ?? null
                     const isActive      = !resultat && activeBlank === i
-                    const isCorrectSlot = resultat && filled?.toLowerCase() === (correctArr[i] || '').toLowerCase()
+                    const isCorrectSlot = resultat && _normaliserFront(filled) === _normaliserFront(correctArr[i] || '')
                     const isWrongSlot   = resultat && filled !== null && !isCorrectSlot
                     return (
                       <span key={i}>
@@ -2658,11 +2790,20 @@ export default function Session() {
                     <p style={{ margin: '0 0 5px', fontSize: 14, fontWeight: 800, color: resultat.correct ? C.emerald : C.red, animation:'popIn .3s ease' }}>
                       {resultat.msg || (resultat.correct ? 'Bravo ! 🎉' : 'Pas cette fois…')}
                     </p>
-                    <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{resultat.explication}</p>
                     {!resultat.correct && (
-                      <p style={{ fontSize: 13, color: C.emerald, margin: '7px 0 0' }}>
+                      <p style={{ fontSize: 13, color: C.emerald, margin: '4px 0 0' }}>
                         <strong>Bonne réponse :</strong> {resultat.reponse_correcte}
                       </p>
+                    )}
+                    {/* B1 — explication détaillée repliée par défaut (« Pourquoi ? ») */}
+                    {resultat.explication && (
+                      showWhy ? (
+                        <p style={{ margin: '8px 0 0', fontSize: 13, color: C.text, lineHeight: 1.6, animation: 'slideDown .2s ease' }}>{resultat.explication}</p>
+                      ) : (
+                        <button onClick={() => setShowWhy(true)} style={{ marginTop: 7, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: resultat.correct ? C.emerald : C.red, fontSize: 12.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          Pourquoi ? ▾
+                        </button>
+                      )
                     )}
                     {/* BKT mastery bar */}
                     {resultat.bkt && (
@@ -2680,8 +2821,8 @@ export default function Session() {
                       </div>
                     )}
 
-                    {/* Extrait de cours Alisha — BKT < 0.4 */}
-                    {ressourceAide && !resultat.correct && (
+                    {/* Extrait de cours Alisha — BKT < 0.4 (déplié avec « Pourquoi ? ») */}
+                    {ressourceAide && !resultat.correct && showWhy && (
                       <div style={{
                         marginTop: 10, borderRadius: 12, overflow: 'hidden',
                         border: `1px solid ${C.brownLight}40`, animation: 'slideDown .3s ease'
@@ -2732,9 +2873,11 @@ export default function Session() {
                         {explicationIA && (
                           <div style={{
                             marginTop: 10,
-                            background: `linear-gradient(135deg, ${C.brownPale}, ${C.goldPale})`,
+                            background: C.bogolanSurface,
                             borderRadius: 14, padding: '14px 16px',
-                            border: `1px solid ${C.gold}40`,
+                            border: `1.5px solid ${C.bogolanOcre}66`,
+                            borderLeft: `4px solid ${C.bogolanOcre}`,
+                            boxShadow: `0 6px 20px ${C.bogolanTerre}1A`,
                             animation: 'slideDown .3s ease'
                           }}>
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 10 }}>
@@ -2742,8 +2885,8 @@ export default function Session() {
                                 <Alisha state="speaking" size={44} />
                               </Suspense>
                               <div style={{ flex: 1 }}>
-                                <span style={{ fontSize: 11, fontWeight: 800, color: C.brown, display: 'block' }}>Alisha explique</span>
-                                <RichText text={explicationIA} style={{ fontSize: 13, lineHeight: 1.7, margin: '4px 0 0' }} />
+                                <span style={{ fontSize: 11, fontWeight: 800, color: C.bogolanOcre, display: 'block' }}>Alisha explique</span>
+                                <RichText text={explicationIA} style={{ fontSize: 13, lineHeight: 1.7, margin: '4px 0 0', color: C.bogolanText }} />
                               </div>
                             </div>
                             <button onClick={() => setExplicationIA(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.textSec, textDecoration: 'underline', padding: 0 }}>
@@ -2762,7 +2905,7 @@ export default function Session() {
             {!resultat && (
               <div style={{ marginBottom: 14 }}>
                 {indices === 0 ? (
-                  <button onClick={() => { setIndices(1); sendEvent('help_requested', { level: 1 }); alishaCtrl.triggerEvent('hint_requested') }} style={{
+                  <button onClick={() => { setIndices(1); sendEvent('help_requested', { level: 1 }); alishaCtrl.triggerEvent('hint_requested', { text: ex.indice_1 }) }} style={{
                     backgroundColor: 'transparent',
                     border: `1.5px dashed ${C.brownLight}`,
                     borderRadius: 9, padding: '8px 14px', cursor: 'pointer',
@@ -2772,16 +2915,16 @@ export default function Session() {
                     <Lightbulb size={13}/> Voir un indice
                   </button>
                 ) : (
-                  <div style={{ backgroundColor: C.goldPale, borderRadius: 12, padding: 14, border: `1px solid ${C.gold}30`, animation: 'slideDown .3s ease' }}>
+                  <div style={{ backgroundColor: C.bogolanSurface, borderRadius: 12, padding: 14, border: `1.5px solid ${C.bogolanOcre}66`, borderLeft: `4px solid ${C.bogolanOcre}`, boxShadow: `0 4px 14px ${C.bogolanTerre}14`, animation: 'slideDown .3s ease' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-                      <Lightbulb size={14} color={C.orange}/>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: C.orange }}>Indice {indices}</span>
+                      <Lightbulb size={14} color={C.bogolanOcre}/>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.bogolanOcre }}>Indice {indices}</span>
                     </div>
                     <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
                       {indices === 1 ? ex.indice_1 : ex.indice_2}
                     </p>
                     {indices === 1 && ex.indice_2 && (
-                      <button onClick={() => { setIndices(2); sendEvent('help_requested', { level: 2 }); alishaCtrl.triggerEvent('hint_requested') }} style={{
+                      <button onClick={() => { setIndices(2); sendEvent('help_requested', { level: 2 }); alishaCtrl.triggerEvent('hint_requested', { text: ex.indice_2 }) }} style={{
                         marginTop: 8, backgroundColor: 'transparent', border: `1px dashed ${C.orange}`,
                         borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
                         color: C.orange, fontSize: 11, fontWeight: 700, minHeight: 32
@@ -2817,13 +2960,18 @@ export default function Session() {
               </button>
               {/* Passer la question (comptée comme non réussie, garde l'alignement) */}
               {!submitting && (
-                <button onClick={() => {
-                  if (!window.confirm('Passer cette question ? Elle sera comptée comme non réussie.')) return
-                  setScores(prev => [...prev, 0])
-                  setStreak(0)
-                  sendEvent('skip', { exercice_id: exercices[current]?.id })
-                  suivant()
-                }} style={{
+                <button onClick={() => setConfirmModal({
+                  title: 'Passer cette question ?',
+                  message: 'Elle sera comptée comme non réussie. Tu pourras la revoir en fin de session.',
+                  confirmLabel: 'Passer',
+                  danger: false,
+                  onConfirm: () => {
+                    setScores(prev => [...prev, 0])
+                    setStreak(0)
+                    sendEvent('skip', { exercice_id: exercices[current]?.id })
+                    suivant()
+                  },
+                })} style={{
                   width: '100%', marginTop: 8, padding: '9px', background: 'none', border: 'none',
                   color: C.textSec, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
                 }}>

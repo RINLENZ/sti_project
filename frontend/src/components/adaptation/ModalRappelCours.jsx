@@ -1,16 +1,27 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTheme } from '../../styles/theme.jsx'
+import api from '../../services/api'
 
-export default function ModalRappelCours({ adaptation, onDismiss }) {
+export default function ModalRappelCours({ adaptation, onDismiss, uaId }) {
   const { C } = useTheme()
   const lienCours = adaptation.params?.lien_cours
   const isRemediation = adaptation.action === 'modal_remediation'
+  const [extrait, setExtrait] = useState(null)   // { titre, extrait, points_cles } réel
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onDismiss('escape') }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onDismiss])
+
+  // Récupère le VRAI extrait de cours (le backend n'envoie qu'un drapeau lien_cours)
+  useEffect(() => {
+    if (!lienCours || !uaId) return
+    const comp = adaptation.params?.macro_kc || adaptation.params?.competence || ''
+    api.get(`/api/cours/ua/${uaId}/ressource-aide`, { params: { competence: comp } })
+      .then(({ data }) => { if (data?.titre) setExtrait(data) })
+      .catch(() => {})
+  }, [lienCours, uaId, adaptation.params])
 
   return (
     <div
@@ -58,18 +69,27 @@ export default function ModalRappelCours({ adaptation, onDismiss }) {
           </p>
         </div>
 
-        {lienCours && (
+        {lienCours && extrait && (
           <div style={{
             background: C.brownPale, borderRadius: 12,
             padding: '12px 14px', marginBottom: 20,
             border: `1px solid ${C.brownLight}30`,
           }}>
-            <p style={{ margin: '0 0 4px', fontSize: 11, color: C.textSec, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4 }}>
-              📖 Extrait de cours
+            <p style={{ margin: '0 0 6px', fontSize: 11, color: C.brown, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4 }}>
+              📖 {extrait.titre || 'Extrait de cours'}
             </p>
-            <p style={{ margin: 0, fontSize: 12, color: C.textMuted, fontStyle: 'italic', lineHeight: 1.5 }}>
-              {lienCours}
+            <p style={{ margin: 0, fontSize: 12.5, color: C.text, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {extrait.extrait}
             </p>
+            {extrait.points_cles?.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                {extrait.points_cles.map((pt, i) => (
+                  <span key={i} style={{ background: `${C.brown}18`, color: C.brown, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
+                    {pt}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

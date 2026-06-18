@@ -13,9 +13,9 @@ import { KWS_MODEL_READY } from '../config/models'
 const N_MELS_V4          = 80
 const TEMPERATURE        = 0.9513642191886902  // calibration temperature scaling
 const LABELS             = ['aide','oui','non','repeter','incompris','lentement','bruit_silence']
-const CONFIDENCE_THRESHOLD = 0.55   // assoupli (était 0.68) — commandes plus faciles à valider
-const ENTROPY_THRESHOLD    = 1.75   // assoupli (était 1.55) — tolère des prédictions moins tranchées
-const ENERGY_THRESHOLD     = 0.02   // assoupli (était 0.03) — capte la parole plus faible
+const CONFIDENCE_THRESHOLD = 0.60   // équilibre : assez bas pour valider, assez haut pour éviter le bruit
+const ENTROPY_THRESHOLD    = 1.55   // strict (valeur d'origine) — rejette les prédictions incertaines (bruit)
+const ENERGY_THRESHOLD     = 0.02   // capte aussi la parole un peu plus faible
 const COLLECT_MS           = 1500   // 1.5s → ~149 frames, padded à 150
 
 let _session   = null
@@ -105,7 +105,7 @@ async function inferKWS(pcmFloat32, nativeSR) {
 const VAD_RMS_THRESHOLD = 0.008
 const VAD_CONFIRM_FRAMES = 4   // fenêtres consécutives pour confirmer début/fin parole
 
-export function useKWSModel(audioActive, onVadActivity) {
+export function useKWSModel(audioActive, onVadActivity, sharedStreamRef = null) {
   const [lastKeyword, setLastKeyword] = useState(null)
   const [kwsReady,    setKwsReady]    = useState(false)
 
@@ -119,6 +119,8 @@ export function useKWSModel(audioActive, onVadActivity) {
   const vadActiveRef   = useRef(false)
   const vadStartRef    = useRef(0)
   const vadFramesRef   = useRef(0)   // frames consécutives au-dessus du seuil
+  const gestureCleanupRef = useRef(null)  // retire les listeners de reprise audio
+  const ownStreamRef      = useRef(null)  // piste micro que CE hook a ouverte (à fermer)
   // Anti-rebond : évite la ré-émission du même mot sur fenêtres qui se recouvrent
   const lastEmitRef    = useRef({ keyword: null, t: 0 })
 
@@ -128,33 +130,54 @@ export function useKWSModel(audioActive, onVadActivity) {
     if (activeRef.current) return
     activeRef.current = true
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const ctx    = new (window.AudioContext || window.webkitAudioContext)()
+      // 1) Créer + REPRENDRE le contexte AVANT getUserMedia. La demande de
+      //    permission micro peut consommer la fenêtre d'activation du geste ;
+      //    si le contexte est créé après, il reste "suspended" et aucun audio
+      //    n'est traité → aucune commande détectée.
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
       ctxRef.current = ctx
       srRef.current  = ctx.sampleRate
+      try { await ctx.resume() } catch {}
+      // Filet : relance le contexte au prochain geste tant qu'il n'est pas "running"
+      const resumeCtx = () => { ctxRef.current?.resume?.().catch(() => {}) }
+      const evs = ['pointerdown', 'keydown', 'touchstart', 'click']
+      evs.forEach(e => window.addEventListener(e, resumeCtx, { passive: true }))
+      gestureCleanupRef.current = () => evs.forEach(e => window.removeEventListener(e, resumeCtx))
 
+      // 2) Micro — réutilise la piste déjà ouverte par le parent si fournie
+      //    (évite une 2e capture du même micro, qui revient muette sur certains
+      //    navigateurs → rms=0). Sinon, on ouvre notre propre piste.
+      let stream = sharedStreamRef?.current || null
+      const ownStream = !stream
+      if (!stream) {
+        // Réglages PAR DÉFAUT : le modèle KWS a été entraîné sur l'audio traité
+        // (AEC/NS/AGC) du navigateur. Désactiver ces traitements dégrade fortement
+        // la reconnaissance (la voix passe pour du « bruit de fond »).
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      }
+      ownStreamRef.current = ownStream ? stream : null
+      if (!activeRef.current) { if (ownStream) stream.getTracks().forEach(t => t.stop()); return }
       const source = ctx.createMediaStreamSource(stream)
-      const proc   = ctx.createScriptProcessor(4096, 1, 1)
-      procRef.current = proc
-      source.connect(proc)
-      // CRITIQUE : ne pas connecter proc directement à ctx.destination —
-      // cela routerait le micro vers les haut-parleurs et perturberait le TTS d'Alisha.
-      // ScriptProcessorNode a besoin d'être dans le graphe audio pour déclencher
-      // onaudioprocess, donc on utilise un GainNode silencieux.
+
+      // 3) Capture via AudioWorklet (remplace le ScriptProcessorNode déprécié).
+      //    Le worklet tourne sur le thread audio et POSTe des blocs au thread JS.
+      await ctx.audioWorklet.addModule('/kws-worklet.js')
+      const node = new AudioWorkletNode(ctx, 'kws-capture')
+      procRef.current = node
+      source.connect(node)
+      // GainNode silencieux : garde le nœud dans le graphe sans router le micro
+      // vers les haut-parleurs (n'interfère pas avec le TTS d'Alisha).
       const silencer = ctx.createGain()
       silencer.gain.value = 0
-      proc.connect(silencer)
+      node.connect(silencer)
       silencer.connect(ctx.destination)
 
-      // Inférence KWS déclenchée à la FIN d'une parole (VAD) → mot complet & bien aligné.
-      // Repli périodique (HOP_MS) quand AUCUNE parole n'est en cours → capte les mots
-      // très courts qui n'arment pas le VAD, sans inférer sur des mots partiels.
+      // Inférence déclenchée à la FIN d'une parole (VAD) → mot complet & aligné.
+      // Repli périodique (HOP_MS) quand aucune parole n'est en cours.
       const HOP_MS    = 500
       let lastHopTime = 0
       let inferring   = false
 
-      // Anti-rebond : un même mot ne se redéclenche pas tant qu'il persiste
-      // (refractaire ~1.5s). Un mot DIFFÉRENT passe immédiatement.
       const emitDebounced = (result) => {
         const t  = Date.now()
         const le = lastEmitRef.current
@@ -181,17 +204,20 @@ export function useKWSModel(audioActive, onVadActivity) {
         }
       }
 
-      proc.onaudioprocess = (e) => {
+      // Blocs audio reçus du worklet (Float32Array ~2048 échantillons)
+      node.port.onmessage = (e) => {
         if (!activeRef.current) return
-        const chunk = e.inputBuffer.getChannelData(0)
+        const chunk = e.data
         bufferRef.current.push(...chunk)
 
         const needed = Math.ceil(srRef.current * COLLECT_MS / 1000)
         if (bufferRef.current.length > needed * 2)
           bufferRef.current = bufferRef.current.slice(-needed)
 
-        // ── VAD énergie (toujours actif : sert au déclenchement KWS + au log engagement) ──
-        const rms       = Math.sqrt(chunk.reduce((s, v) => s + v * v, 0) / chunk.length)
+        // ── VAD énergie (déclenchement KWS + log engagement) ──
+        let sumSq = 0
+        for (let i = 0; i < chunk.length; i++) sumSq += chunk[i] * chunk[i]
+        const rms       = Math.sqrt(sumSq / chunk.length)
         const isSpeech  = rms > VAD_RMS_THRESHOLD
         let speechEnded = false
 
@@ -214,10 +240,10 @@ export function useKWSModel(audioActive, onVadActivity) {
 
         // ── Déclenchement ──
         if (speechEnded) {
-          runInference()                                   // cas principal : aligné sur la parole
+          runInference()
         } else if (!vadActiveRef.current) {
           const now = Date.now()
-          if (now - lastHopTime >= HOP_MS) {               // repli mots ultra-courts / ambiance
+          if (now - lastHopTime >= HOP_MS) {
             lastHopTime = now
             runInference()
           }
@@ -226,7 +252,8 @@ export function useKWSModel(audioActive, onVadActivity) {
 
       getKWSSession().then(s => setKwsReady(!!s))
     } catch (e) {
-      console.warn('[KWS-V4] Micro non disponible :', e.message)
+      console.warn('[KWS-V4] Audio worklet indisponible :', e.message)
+      activeRef.current = false
     }
   }, [])
 
@@ -239,6 +266,11 @@ export function useKWSModel(audioActive, onVadActivity) {
     vadActiveRef.current = false
     vadFramesRef.current = 0
     activeRef.current = false
+    gestureCleanupRef.current?.()
+    gestureCleanupRef.current = null
+    // Ne ferme QUE la piste que ce hook a ouverte (jamais la piste partagée du parent)
+    ownStreamRef.current?.getTracks().forEach(t => t.stop())
+    ownStreamRef.current = null
     procRef.current?.disconnect()
     ctxRef.current?.close()
     ctxRef.current  = null

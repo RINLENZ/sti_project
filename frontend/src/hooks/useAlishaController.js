@@ -126,7 +126,8 @@ export default function useAlishaController({
 
       // ── Réponse correcte ────────────────────────────────────────
       case 'correct': {
-        const { bkt: bktData, streak: streakNow = 0 } = payload
+        const { bkt: bktData, streak: streakNow = 0, kc } = payload
+        const ctx = kc ? ` · ${kc}` : ''   // A3 — bulle contextualisée par compétence
 
         if (bktData?.niveau === 'maitrise') {
           // Compétence maîtrisée → célébration
@@ -138,33 +139,34 @@ export default function useAlishaController({
           speakAndRevert(text, 'excited', text)
         } else {
           const text = pickResponse('correct', { studentName: name })
-          speakAndRevert(text, 'correct', text)
+          speakAndRevert(text, 'correct', text + ctx)
         }
         break
       }
 
       // ── Réponse incorrecte ──────────────────────────────────────
       case 'wrong': {
-        const { bkt: bktData, hintsUsed = 0 } = payload
+        const { bkt: bktData, hintsUsed = 0, kc } = payload
+        const ctx = kc ? ` · ${kc}` : ''   // A3 — bulle contextualisée par compétence
 
         if (bktData?.niveau === 'a_renforcer') {
           // BKT très bas → encouragement doux + indice implicite
           const text = pickResponse('bkt_low', { studentName: name })
-          speakAndRevert(text, 'confused', text)
+          speakAndRevert(text, 'confused', text + ctx)
         } else if (hintsUsed >= 2) {
           // Déjà beaucoup d'indices → reformuler
           const text = pickResponse('reexplain', { studentName: name })
           speakAndRevert(text, 'hint', text)
         } else {
           const text = pickResponse('wrong', { studentName: name })
-          speakAndRevert(text, 'wrong', text)
+          speakAndRevert(text, 'wrong', text + ctx)
         }
         break
       }
 
-      // ── Indice demandé ──────────────────────────────────────────
+      // ── Indice demandé — A1 : lit le VRAI indice de l'exercice si fourni ──
       case 'hint_requested': {
-        const text = pickResponse('hint', { studentName: name })
+        const text = payload.text || pickResponse('hint', { studentName: name })
         speakAndRevert(text, 'hint', text)
         break
       }

@@ -24,10 +24,14 @@ router = APIRouter(prefix="/api/cours", tags=["cours"])
 
 
 def _normaliser(texte: str) -> str:
-    """Normalise un texte pour comparaison tolérante : minuscules, sans accents, sans espaces superflus."""
+    """Normalise un texte pour comparaison tolérante : minuscules, sans accents,
+    sans espaces superflus, et sans ponctuation en début/fin (virgule, point…)."""
     t = str(texte).strip().lower()
     t = unicodedata.normalize("NFD", t)
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    # Retire la ponctuation de bord (ex. « nom d'utilisateur, » → « nom d'utilisateur »)
+    # sans toucher aux apostrophes internes (d'utilisateur).
+    t = t.strip(" \t\r\n.,;:!?…\"«»()[]")
     return t
 
 

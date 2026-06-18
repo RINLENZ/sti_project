@@ -243,7 +243,9 @@ def _check_erreurs_consecutives(ctx: dict) -> Optional[dict]:
     erreurs_macro_kc = metrics.get("erreurs_consecutives_macro_kc", 0)
     erreurs_session  = metrics.get("erreurs_session", 0)
 
-    if erreurs_macro_kc >= 3 or erreurs_session >= 5:
+    # Seuils abaissés (R2) : déclenche la remédiation + extrait de cours plus tôt,
+    # indépendamment de la caméra (basé uniquement sur les réponses).
+    if erreurs_macro_kc >= 2 or erreurs_session >= 3:
         return {
             "declencheur": "erreurs_consecutives",
             "action":      "modal_remediation",
@@ -346,7 +348,9 @@ def _check_rappel_avant_difficile(ctx: dict) -> Optional[dict]:
 
     p_mastery = preds.get(macro_kc, 0.5)
 
-    if difficulte == 3 and p_mastery < 0.40:
+    # Seuil élargi (R2) : un coup de pouce avant les questions difficiles dès que
+    # la maîtrise prédite est moyenne-basse (sans dépendre de la caméra).
+    if difficulte == 3 and p_mastery < 0.50:
         return {
             "declencheur": "rappel_avant_difficile",
             "action":      "modal_rappel_cours",
